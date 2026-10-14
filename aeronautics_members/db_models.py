@@ -1507,7 +1507,7 @@ class DeviceEvent(db.Model):
     at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
     #: "reported", "refused", "error", "key", "tried", ...
     kind = db.Column(db.String(30), nullable=False)
-    #: For a report: what was reported ("ping", "tap").
+    #: For a report: what was reported ("ping", "card").
     name = db.Column(db.String(40), nullable=True)
     event_id = db.Column(db.String(64), nullable=True)
     detail = db.Column(db.String(255), nullable=True)

@@ -761,17 +761,15 @@ Paying for a drink by tapping a card (docs/cards-plan.md). The code:
 `services/cards.py`, `services/sales_points.py`, `api/cards.py`.
 
 - **A reader at the fridge:** Admin › Settings › Devices › *Add*, type
-  *Sales point*, and its owner. Its owner chooses the **item** a tap sells
-  from their own price list (the association's on Admin › Credit, a team's on
-  its Prices page); the sale counts for the owner. The reader's firmware reports each tap:
-  `POST /api/v1/device/events` with
-  `{"event_id": "...", "kind": "tap", "data": {"card": "04A1B2C3D4E5F6"}}`,
-  and shows the answer: `sold` (item, price, what is left), `linked`, or
-  `refused` with a `reason` (`card_unknown`, `card_disabled`,
-  `card_blocked`, `account_off`, `not_enough`, `item_off`, `credit_off`,
-  `not_set_up`, `too_soon`). `GET /api/v1/device/resources/item` gives the
-  item and its price, for a label. A card is sold to at most once in 5
-  seconds per reader; the same `event_id` again gets the first answer.
+  *Sales point*, and its owner. Its owner chooses up to four **items**, in
+  order, from their own price list (the association's on Admin › Credit, a
+  team's on its Prices page); every item there has an icon, chosen from a
+  fixed list when it is added. The sale counts for the owner. A card tapped
+  is reported as `card` and answered with a menu -- the items, the first
+  name, the balance and a ticket valid for 20 seconds; the item chosen is
+  reported as `buy` with that ticket, which buys once. The messages, every
+  answer and refusal: `docs/device-protocol.md`, section 8.1. Tickets are
+  deleted after a day by the nightly clean-up.
 - **Cards:** members see theirs on My Account › Cards (once a sales point
   exists) and link one by scanning it with an Android phone in Chrome (Web
   NFC). Admins (`cards.manage`) see every card under Admin › Cards and

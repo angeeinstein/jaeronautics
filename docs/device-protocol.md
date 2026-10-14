@@ -165,9 +165,9 @@ always with `If-None-Match` set to the `ETag` of the last `200`.
   "type": "sales_point",
   "owner": "Rocket Team",
   "place": "Workshop, beside the fridge",
-  "settings": {"item": 4},
-  "resources": ["item"],
-  "reports": ["tap"],
+  "settings": {"items": [4, 7, 9, 12]},
+  "resources": ["menu"],
+  "reports": ["card", "buy"],
   "backup_code_hash": "9f86d081884c7d65…",
   "firmware": null,
   "poll_every": 10,
@@ -297,10 +297,10 @@ the firmware.
 
 ### 7.1 Reports
 
-What the device reports -- a tap, a button -- goes to `POST /api/v1/device/events`:
+What the device reports -- a card tapped, an item chosen -- goes to `POST /api/v1/device/events`:
 
 ```json
-{"event_id": "8f2c4e0b9a1d4c7e8b3f6a2d1e0c9b7a", "kind": "tap", "data": {"card": "04A1B2C3D4E5F6"}}
+{"event_id": "8f2c4e0b9a1d4c7e8b3f6a2d1e0c9b7a", "kind": "card", "data": {"card": "04A1B2C3D4E5F6"}}
 ```
 
 It is answered:
@@ -325,7 +325,7 @@ have is answered `404 device_report_unknown`.
 
 ### 7.2 Resources
 
-What a use offers to read -- the item it sells -- is at
+What a use offers to read -- the menu of a sales point -- is at
 `GET /api/v1/device/resources/<name>`, answered `{"resource": "<name>", "data": {…}}`.
 A name the use does not offer is answered `404 device_resource_unknown`.
 
@@ -343,36 +343,7 @@ decide.
 
 The portal's name for each use is what `X-Device-Types` lists and `type` says.
 
-### 8.1 Sales point: `sales_point`
-
-**Built today: one item, sold at a tap.**
-
-- Setting: `"item"`, the id of the item a tap sells, chosen by the device's
-  owner from their price list.
-- Resource `item`: `{"item": "Beer", "price_cents": 150, "seller": "Rocket Team", "on_sale": true}`
-  (`"item": null` while none is chosen).
-- Report `tap` with `{"card": "…"}`. The answer is one of:
-  - `{"result": "sold", "item": "Beer", "price_cents": 150, "balance_cents": 350}`;
-  - `{"result": "linked", "card": "Card"}` -- an admin was waiting at this
-    device for an unknown card, and it is now linked to that person;
-  - `{"result": "refused", "reason": "…", "message": "…"}`, with `reason` one of:
-
-| `reason` | Meaning |
-|---|---|
-| `card_unknown` | No account has this card. |
-| `card_disabled` | Its owner switched the card off. |
-| `card_blocked` | An admin blocked it. |
-| `account_off` | The card's account is switched off. |
-| `not_enough` | Not enough credit; `balance_cents` says what there is. |
-| `item_off` | The item is no longer on sale. |
-| `credit_off` | Credit is switched off in the portal. |
-| `not_set_up` | No item chosen for this device yet. |
-| `too_soon` | Sold to this card on this device less than 5 seconds ago: a double tap. |
-
-Show `message` for a reason the firmware does not know.
-
-**Planned: a menu of items, with the name and the balance.** This replaces
-`tap` and the `item` setting and resource.
+### 8.1 Sales point: `sales_point` (built)
 
 A card tapped opens a menu for a few seconds: up to four items, each with its
 name, price and icon, with "Hi Alex" and the balance. One is chosen and bought.
@@ -396,29 +367,52 @@ Two reports:
    }
    ```
 
-   Or `linked`, or `refused` with the reasons above (`card_*`, `account_off`,
-   `credit_off`, `not_set_up`).
    - The items are in the owner's order: at most four for now, maybe more
      later (paging).
+   - `first_name` can be `null` (an account without a member's details).
    - `affordable: false` items can be shown greyed out.
    - The menu closes after the device's own timeout (about 8 seconds), which
      must be shorter than `expires_in`.
 
+   Or `{"result": "linked", "card": "Card"}` -- an admin was waiting at this
+   device for an unknown card, and it is now linked to that person. Or
+   `refused` (below) with `card_unknown`, `card_disabled`, `card_blocked`,
+   `account_off`, `credit_off` or `not_set_up`.
+
 2. **`buy`**, data `{"ticket": "t_5f2a…", "item": 4}`, sent when an item is
    chosen. The answer:
    - `{"result": "sold", "item": "Coffee", "price_cents": 80, "balance_cents": 1170, "first_name": "Alex"}`;
-   - or `refused` with `ticket_expired` (start again with the card),
-     `ticket_used` (one ticket buys once), `item_off`, `not_enough` (with
-     `balance_cents`), `credit_off`.
+   - or `refused` with `ticket_expired`, `ticket_used`, `item_off`,
+     `not_enough`, `credit_off`, or -- the card changed while the menu was
+     open -- `card_unknown`, `card_disabled`, `card_blocked`, `account_off`.
+
+A refusal is `{"result": "refused", "reason": "…", "message": "…"}`:
+
+| `reason` | Meaning |
+|---|---|
+| `card_unknown` | No account has this card. |
+| `card_disabled` | Its owner switched the card off. |
+| `card_blocked` | An admin blocked it. |
+| `account_off` | The card's account is switched off. |
+| `credit_off` | Credit is switched off in the portal. |
+| `not_set_up` | No items chosen for this device yet. |
+| `ticket_expired` | The ticket is too old, or not this device's: tap the card again. |
+| `ticket_used` | One ticket buys once: tap the card again. |
+| `item_off` | The item is no longer on this device's menu, or no longer on sale. |
+| `not_enough` | Not enough credit; `balance_cents` says what there is. |
+
+Show `message` for a reason the firmware does not know.
 
 - A ticket belongs to the card it was given for, to this device, and to one
   purchase. Without the card being tapped again, nothing more can be bought.
   Repeating a `buy` with the same `event_id` gets the first answer, as every
   report does.
-- Settings: `"items"`, the item ids in order, chosen by the owner.
-- Resource `menu`: the same `items` without `affordable`, for an idle screen
-  ("tap your card"). It changes when the owner changes the items or prices,
-  which the sign of life's `ETag` shows: fetch it again after a `200`.
+- Setting: `"items"`, the item ids in order, chosen by the owner from their
+  own price list.
+- Resource `menu`: `{"items": [{"id", "name", "price_cents", "icon"}, …]}`,
+  the same items without `affordable`, for an idle screen ("tap your card").
+  It changes when the owner changes the items or prices, which the sign of
+  life's `ETag` shows: fetch it again after a `200`.
 
 ### 8.2 Attendance: `attendance` (planned, around January)
 
@@ -468,13 +462,13 @@ Kept in mind, not built. The shape, so nothing gets in its way:
 
 ---
 
-## 10. Icons (planned)
+## 10. Icons (built)
 
 Every item on a price list has an icon, chosen from this list where the item
 is added. The firmware carries one picture per name. For a name it does not
 know, it shows `other`. A new icon is a new name here and a firmware update.
 
-A first list, to be settled with the firmware before it is built:
+The list (`ICONS` in `aeronautics_members/services/credit_sales.py`):
 
 | Name | For |
 |---|---|
@@ -500,3 +494,7 @@ A first list, to be settled with the firmware before it is built:
   the headers, firmware updates, settings by card and backup code, the sales
   point's `tap`, the test use. Planned: the menu (`card`, `buy`, icons), the
   device's own markers, attendance. Later: `config` and `commands`.
+- **2026-10-14:** the sales point's menu built: reports `card` and `buy`,
+  setting `items`, resource `menu`, icons on price-list items. **Replaces**
+  `tap`, the `item` setting and resource, and the `too_soon` refusal; a
+  device on the old firmware needs the update.

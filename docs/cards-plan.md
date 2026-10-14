@@ -84,7 +84,11 @@ account -- ask an admin"). A card scanned with Web NFC is sent by the browser
 and so could be made up; accepted, since a card linked wrongly charges the
 person who linked it.
 
-### The sales point (the first version)
+### The sales point (the first version, replaced by the menu)
+
+*Replaced on 2026-10-14 by a menu of up to four items with icons, the first
+name and the balance (docs/devices-plan.md, "The screens";
+docs/device-protocol.md, section 8.1). Kept as the record of the start.*
 
 A device type, "Sales point", with a **fixed item**: a tap sells that one
 item. "For a starter, I would only begin with a fixed item per reader, and
@@ -114,9 +118,8 @@ later on we can expand this if this works and if this feels right."
   portal so "nobody has to touch the device ever again if it's deployed once":
   - buttons: a button per item, set on the reader's page, pressed before the
     tap (as on the old coffee reader);
-  - a display: the reader fetches its seller's price list and the member
-    chooses before tapping; a marker in the sign of life tells it when the
-    list changed;
+  - a display: built as the menu (2026-10-14) -- the card is tapped first,
+    then one of up to four items chosen on the screen;
   - perhaps only part of a seller's list on a reader. How price lists and
     readers fit together beyond this is "a bit open".
 - **Linking at a reader by its user**, proven by being there: a QR code with a
@@ -137,15 +140,15 @@ later on we can expand this if this works and if this feels right."
   and a backup (which carries `SECRET_KEY`) restores working cards. A check
   value kept at the first link lets System health say when `SECRET_KEY` has
   changed since, which would make every card unknown.
-- **The item is the reader's only setting**; its seller is the item's. The
-  item is chosen from every price list, grouped by seller. An item switched
-  off later stays set, and the reader answers `item_off`.
-- **A card is sold to at most once in 5 seconds per reader**, and taps on
-  one reader are taken one at a time (a row lock on the device), so two
-  copies of one tap are one sale.
+- **The items are the reader's only setting**, from its owner's price list
+  only. An item switched off later stays chosen but leaves the menu.
+- **A card tapped gets a ticket** for one purchase on that reader, for 20
+  seconds; reports on one reader are taken one at a time (a row lock on the
+  device), so two copies of one report are one sale. (The first version's
+  "once in 5 seconds per card" went with the ticket.)
 - **The device's page keeps a tap without the card's ID** (its last four
-  characters only), and says what came of it: "…E5F6 bought Beer, €1.50;
-  €3.50 left", "…E5F6 refused: Sold to this card a moment ago." (asked for
+  characters only), and says what came of it: "…E5F6 opened the menu
+  (€5.00)", "Beer sold, €1.50; €3.50 left". (asked for
   after testing, 2026-10-13). A report type says what of its data is kept
   and how its event reads.
 - **A known card tapped while an admin waits at that reader buys as usual**;

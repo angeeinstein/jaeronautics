@@ -227,9 +227,10 @@ document the firmware is written against.
   and the balance at the top right. Four for now; "maybe in the future I
   will add pagination or a scrollable list of items, but let's keep it at
   four for the moment", so nothing in the portal or the protocol assumes
-  four for ever. The owner chooses the items (in order) instead of the one
-  item a reader sells today.
-- **Icons are chosen in the portal,** from a fixed list (coffee, tea,
+  four for ever. The owner chooses the items (in order). Built 2026-10-14:
+  a card tapped is answered with the menu and a ticket for one purchase,
+  valid for 20 seconds; the item chosen is bought with it.
+- **Icons are chosen in the portal** (built), from a fixed list (coffee, tea,
   beer, ...): whoever adds an item to a price list gives it a name, a price
   and an icon. The firmware carries one picture per name ("I will then
   pre-compile all of those icons ... and put them on the device"); a new
