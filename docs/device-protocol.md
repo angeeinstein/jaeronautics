@@ -338,6 +338,59 @@ same). UIDs of 4, 7 or 10 bytes are accepted (8, 14 or 20 hex characters).
 Report every card. Whether it is known, linked or allowed is the portal's to
 decide.
 
+### 7.4 Linking an unknown card at the reader (planned)
+
+A card nobody has linked can be linked by its owner right at the reader, with
+any phone: the reader shows a QR code, the phone opens it and links the card
+to the account signed in there. The reader is busy with it only briefly.
+
+**1. The refusal carries a link.** A `card` report of an unknown card is
+refused with `card_unknown` and, on a reader that can show it, a `link`:
+
+```json
+{
+  "result": "refused",
+  "reason": "card_unknown",
+  "message": "This card is not linked to an account.",
+  "link": {
+    "id": 17,
+    "url": "https://members.example.org/link/Xk3vQ9…",
+    "show_for": 30,
+    "check_every": 2
+  }
+}
+```
+
+- Show `url` as a QR code (ESP-IDF's `qrcode` component), with a line such
+  as "Not linked yet: scan to link it". The URL is about 60 characters.
+- The QR code never holds the card's ID; nothing about the card is in it.
+- Show it for at most `show_for` seconds. Without `link`, show the message
+  as for any refusal.
+
+**2. Ask about it while it is shown**, every `check_every` seconds:
+`GET /api/v1/device/card-links/<id>`, answered:
+
+| `state` | What the reader does |
+|---|---|
+| `waiting` | Nobody has opened the link yet: keep the QR code. |
+| `opened` | A phone has opened it: take the QR code away **at once**, show "Continue on your phone" for about 3 seconds, then the normal screen. Stop asking. |
+| `linked` | Done already (with `"first_name": "Alex"`, may be `null`): "Linked, hi Alex", then the normal screen. Stop asking. |
+| `expired` | Over (another tap of the same card started a new one, or its time ran out): the normal screen. Stop asking. |
+
+After `show_for` seconds without `opened` or `linked`, go back to the normal
+screen and stop asking. These requests are not listed on the device's page.
+A link of another device is answered `404 card_link_unknown`.
+
+**3. The rest happens between the phone and the portal.** The portal kept
+the card at the tap; the reader takes no part any more. The link works for
+10 minutes, once, and only on the first phone that opened it. Whoever lost
+it simply taps the card again: a new QR code, and the earlier link stops
+working. The next tap after linking is an ordinary one (the menu, at a sales
+point).
+
+While the QR code is shown, a card tapped is reported as usual; it replaces
+the QR code with whatever its answer says.
+
 ---
 
 ## 8. Uses
@@ -499,3 +552,6 @@ The list (`ICONS` in `aeronautics_members/services/credit_sales.py`):
   setting `items`, resource `menu`, icons on price-list items. **Replaces**
   `tap`, the `item` setting and resource, and the `too_soon` refusal; a
   device on the old firmware needs the update.
+- **2026-10-14:** planned: linking an unknown card at the reader with a QR
+  code (section 7.4) -- `link` in the `card_unknown` refusal, and
+  `GET /api/v1/device/card-links/<id>`.
