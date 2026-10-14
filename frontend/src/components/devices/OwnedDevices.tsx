@@ -93,7 +93,11 @@ function DeviceCard({
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            save.mutate({ name, place, description, settings });
+            // Only the settings its owner may change: the rest are an admin's, and refused here.
+            const own = Object.fromEntries(
+              device.fields.map((field) => [field.name, settings[field.name] ?? null]),
+            );
+            save.mutate({ name, place, description, ...(device.fields.length ? { settings: own } : {}) });
           }}
         >
           <Stack gap="sm">

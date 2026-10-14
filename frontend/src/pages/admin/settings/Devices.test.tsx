@@ -520,6 +520,28 @@ describe('one device', () => {
     expect(state).toHaveTextContent('Can beTest');
   });
 
+  it('another owner clears only what depends on the owner', async () => {
+    const { calls } = show(
+      <DeviceDetail />,
+      {
+        [`${API}/3`]: { body: detail },
+        [`PATCH ${API}/3`]: { body: { ...reader, owner: 'rocket', owner_label: 'Rocket' } },
+      },
+      route,
+    );
+
+    const settings = await screen.findByRole('region', { name: 'Settings' });
+    await userEvent.click(within(settings).getByRole('combobox', { name: 'Owner' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Rocket' }));
+    await userEvent.click(within(settings).getByRole('button', { name: 'Save' }));
+
+    await vi.waitFor(() => {
+      expect(calls.some((call) => call.method === 'PATCH')).toBe(true);
+    });
+    const sent = calls.filter((call) => call.method === 'PATCH').at(-1);
+    expect(await sent?.clone().json()).toMatchObject({ owner: 'rocket', settings: { greeting: 'Hello' } });
+  });
+
   it('a sales point sells an item chosen from the price lists, under its seller', async () => {
     const salesPoint: Schemas['DeviceTypeOut'] = {
       slug: 'sales_point',

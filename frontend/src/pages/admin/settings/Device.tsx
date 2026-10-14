@@ -161,8 +161,13 @@ function SettingsForm({
           onChange={(next) => {
             const chosen = next ?? 'association';
             if (chosen !== owner) {
-              // What fitted the old owner (an item of its price list) does not fit the new one.
-              setSettings(Object.fromEntries(Object.keys(settings).map((key) => [key, null])));
+              // What fitted the old owner (an item of its price list) does not fit the new one;
+              // the rest -- a greeting -- stays.
+              const byOwner = (type?.settings ?? []).filter((setting) => setting.kind === 'choice');
+              setSettings({
+                ...settings,
+                ...Object.fromEntries(byOwner.map((setting) => [setting.name, null])),
+              });
             }
             setOwner(chosen);
           }}
