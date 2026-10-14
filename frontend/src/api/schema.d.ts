@@ -769,7 +769,8 @@ export interface paths {
         /** Rename, reprice, switch off or on, or move one place. */
         put: operations["admin_credit_item_change"];
         post?: never;
-        delete?: never;
+        /** Delete an item from the association's price list: what was sold still names it. */
+        delete: operations["admin_credit_item_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3116,7 +3117,8 @@ export interface paths {
         /** Rename, reprice, switch off or on, or move one place. */
         put: operations["team_price_change"];
         post?: never;
-        delete?: never;
+        /** Delete an item from the team's price list: what was sold still names it. */
+        delete: operations["team_price_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -5022,6 +5024,11 @@ export interface components {
             owner: string;
             /** Owner Label */
             owner_label: string;
+            /**
+             * Paired
+             * @default false
+             */
+            paired?: boolean;
             /** Place */
             place: string | null;
             /** Settings */
@@ -6108,6 +6115,10 @@ export interface components {
             earned_30_days: number;
             /** Icon */
             icon: string;
+            /** Item Id */
+            item_id: number | null;
+            /** Listed */
+            listed: boolean;
             /** Name */
             name: string;
             /** Sold */
@@ -11551,6 +11562,64 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_credit_item_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceListOut"];
                 };
             };
             /** @description Not signed in. */
@@ -20222,6 +20291,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_price_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceListOut"];
                 };
             };
             /** @description Not signed in. */

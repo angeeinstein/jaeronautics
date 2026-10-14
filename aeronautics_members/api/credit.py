@@ -413,6 +413,18 @@ def admin_credit_item_change(item_id, body):
     return _change(None, item_id, body)
 
 
+def _delete(team, item_id):
+    credit_sales.delete_item(current_user, credit_sales.item_of(item_id, team))
+    db.session.commit()
+    return _price_list(team)
+
+
+@endpoint("DELETE", "/admin/credit/items/<int:item_id>", response=PriceListOut, permissions=MANAGE, tag=TAG)
+def admin_credit_item_delete(item_id):
+    """Delete an item from the association's price list: what was sold still names it."""
+    return _delete(None, item_id)
+
+
 def _priced_team(slug):
     from ..services import ServiceError
     from ..services import teams as teams_service
@@ -452,10 +464,20 @@ def team_price_change(slug, item_id, body):
     return _change(_priced_team(slug), item_id, body)
 
 
+@endpoint("DELETE", "/teams/<slug>/manage/prices/<int:item_id>", response=PriceListOut, tag=TAG)
+def team_price_delete(slug, item_id):
+    """Delete an item from the team's price list: what was sold still names it."""
+    return _delete(_priced_team(slug), item_id)
+
+
 # --- What was sold, by seller and item (Admin › Sales, a team's Sales page) -------------
 
 
 class ItemSalesOut(Model):
+    #: The item sold; None for a sale of an item from before items were kept.
+    item_id: int | None
+    #: Still on its price list (not deleted).
+    listed: bool
     name: str
     #: The icon it has on a device's screen; "other" for a sale of an item since deleted.
     icon: str
@@ -493,7 +515,8 @@ def _seller_sales(team):
     ever = credit_sales.sales_summary(team)
     recent = credit_sales.sales_summary(team, get_now_utc() - timedelta(days=30))
     lately = {row["key"]: row for row in recent["by_item"]}
-    items = [ItemSalesOut(name=row["name"], icon=row["icon"], sold=row["count"], earned=row["earned"],
+    items = [ItemSalesOut(item_id=row["item_id"], listed=row["listed"], name=row["name"], icon=row["icon"],
+                          sold=row["count"], earned=row["earned"],
                           sold_30_days=lately.get(row["key"], {}).get("count", 0),
                           earned_30_days=lately.get(row["key"], {}).get("earned", 0))
              for row in ever["by_item"]]

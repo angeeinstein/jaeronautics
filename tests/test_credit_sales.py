@@ -261,3 +261,45 @@ class TestWhatWasSold:
     def test_only_for_the_associations_treasurer_and_admins(self, client, credit_on):  # noqa: F811
         signed_in(client, _person("someone@example.com", "Some", "One"))
         assert client.get("/api/v1/admin/sales").status_code == 403
+
+
+class TestDeletingAndNames:
+    def test_a_deleted_item_leaves_the_list_and_menus_but_its_sales_keep_it(self, client, anna, rocket):
+        from aeronautics_members.services import devices
+
+        team, lead = rocket
+        beer = credit_sales.add_item(lead, team=team, name="Beer", price_cents=200, icon="beer")
+        mate = credit_sales.add_item(lead, team=team, name="Mate", price_cents=250, icon="mate")
+        device, _key = devices.add(None, type="sales_point", owner=team, settings={"items": [beer.id, mate.id]})
+        credit_sales.sell(anna, beer)
+        db.session.commit()
+        signed_in(client, lead)
+
+        deleted = send(client, "DELETE", f"/api/v1/teams/{team.slug}/manage/prices/{beer.id}")
+        assert deleted.status_code == 200, deleted.get_json()
+        assert [item["name"] for item in deleted.get_json()["items"]] == ["Mate"]
+        assert device.settings["items"] == [mate.id]
+        # What was sold still names it, with its icon, as no longer listed.
+        sold = client.get(f"/api/v1/teams/{team.slug}/manage/sales").get_json()
+        assert [(item["name"], item["icon"], item["listed"], item["item_id"]) for item in sold["items"]] == [
+            ("Beer", "beer", False, beer.id)]
+        assert send(client, "DELETE", f"/api/v1/teams/{team.slug}/manage/prices/{beer.id}").status_code == 404
+        with pytest.raises(ConflictError):
+            credit_sales.sell(anna, beer)
+
+    def test_names_are_short(self, client, credit_on, rocket):  # noqa: F811
+        team, lead = rocket
+        signed_in(client, lead)
+        path = f"/api/v1/teams/{team.slug}/manage/prices"
+
+        long = send(client, "POST", path, {"name": "A" * 21, "price_cents": 200, "icon": "beer"})
+        assert long.get_json()["error"]["fields"] == {"name": "At most 20 characters."}
+        assert send(client, "POST", path, {"name": "A" * 20, "price_cents": 200, "icon": "beer"}).status_code == 201
+
+    def test_a_longer_name_from_before_stays_until_it_is_changed(self, credit_on):  # noqa: F811
+        item = credit_sales.add_item(None, name="Coffee", price_cents=100, icon="coffee")
+        item.name = "A very long coffee name from before"
+        credit_sales.update_item(None, item, price_cents=120)
+        assert (item.name, item.price_cents) == ("A very long coffee name from before", 120)
+        with pytest.raises(ValidationError):
+            credit_sales.update_item(None, item, name="Another very long coffee name")

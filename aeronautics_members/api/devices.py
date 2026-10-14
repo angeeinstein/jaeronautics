@@ -486,6 +486,8 @@ class DeviceOut(Model):
     firmware_failed_detail: str | None
     #: Its key as it may be shown: "jadev_3f9a1c2b7d10_…AbCd"; none when revoked.
     key_hint: str | None
+    #: Its key came from pairing: nobody saw it, so there is none to rotate or revoke.
+    paired: bool = False
     key_created_at: UtcDateTime
     #: When the present key was last used (its last sign of life since the key was made).
     key_last_used_at: UtcDateTime | None
@@ -674,7 +676,8 @@ def device_out(device):
         firmware_wanted=wanted.version if wanted is not None else None,
         firmware_state=device_firmware.state(device), firmware_release_id=device.firmware_release_id,
         firmware_failed_detail=device.firmware_failed_detail if device_firmware.state(device) == "failed" else None,
-        key_hint=devices_service.key_hint(device), key_created_at=device.key_created_at,
+        key_hint=devices_service.key_hint(device), paired=device.paired_at is not None,
+        key_created_at=device.key_created_at,
         key_last_used_at=devices_service.key_last_used(device), key_revoked_at=device.key_revoked_at,
         created_at=device.created_at,
     )

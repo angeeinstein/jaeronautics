@@ -5360,6 +5360,11 @@
             "title": "Owner Label",
             "type": "string"
           },
+          "paired": {
+            "default": false,
+            "title": "Paired",
+            "type": "boolean"
+          },
           "place": {
             "anyOf": [
               {
@@ -8602,6 +8607,21 @@
             "title": "Icon",
             "type": "string"
           },
+          "item_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Id"
+          },
+          "listed": {
+            "title": "Listed",
+            "type": "boolean"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -8616,6 +8636,8 @@
           }
         },
         "required": [
+          "item_id",
+          "listed",
           "name",
           "icon",
           "sold_30_days",
@@ -20744,6 +20766,78 @@
       }
     },
     "/api/v1/admin/credit/items/{item_id}": {
+      "delete": {
+        "operationId": "admin_credit_item_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceListOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Delete an item from the association's price list: what was sold still names it.",
+        "tags": [
+          "Credit"
+        ],
+        "x-permissions": [
+          "credit.manage"
+        ]
+      },
       "put": {
         "operationId": "admin_credit_item_change",
         "parameters": [
@@ -31922,6 +32016,73 @@
       }
     },
     "/api/v1/teams/{slug}/manage/prices/{item_id}": {
+      "delete": {
+        "operationId": "team_price_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceListOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Delete an item from the team's price list: what was sold still names it.",
+        "tags": [
+          "Credit"
+        ]
+      },
       "put": {
         "operationId": "team_price_change",
         "parameters": [

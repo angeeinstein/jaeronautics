@@ -305,3 +305,27 @@ def test_the_pages_are_the_apps_for_admins_only(app, client, admin):
     g.pop("_login_user", None)  # Flask-Login keeps the first one on the open app context
     other = signed_in(app.test_client(), member.user)
     assert other.get("/admin/settings/devices").status_code in (302, 403)
+
+
+def test_a_devices_name_is_short(app):
+    """30 characters: enough for "Workshop fridge", short for lists and its screen."""
+    import pytest as _pytest
+
+    from aeronautics_members.services import ValidationError
+    from aeronautics_members.services import devices as devices_service
+
+    devices_service.add(None, type="test", name="F" * 30)
+    with _pytest.raises(ValidationError, match="At most 30 characters"):
+        devices_service.add(None, type="test", name="G" * 31)
+
+
+def test_a_paired_devices_key_is_nobodys_to_rotate(app):
+    """Its page shows no key panel: the key came from pairing (devices.give_key)."""
+    from aeronautics_members.services import devices as devices_service
+
+    device, _key = devices_service.add(None, type="test", name="Bench")
+    assert device.paired_at is None
+    devices_service.give_key(device, detail="Key given to the device at pairing")
+    assert device.paired_at is not None
+    devices_service.new_key(None, device)
+    assert device.paired_at is None

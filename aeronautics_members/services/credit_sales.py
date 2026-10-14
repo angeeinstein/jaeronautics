@@ -29,7 +29,8 @@ READER = "reader"
 CHANNELS = (BOOKED, READER)
 
 LEAST_PRICE = 1
-NAME_LENGTH = 60
+#: An item's name: four of them share a small screen on a sales point.
+NAME_LENGTH = 20
 MOST_ITEMS = 50
 
 #: The icons an item can have, shown beside it on a device's screen
@@ -64,7 +65,8 @@ def _refuse(field, message, code="credit_item_invalid"):
 def items(team=None, *, include_inactive=False):
     """A seller's price list in its order: the association's (``team`` None) or a team's."""
     query = db.select(CreditItem).where(
-        CreditItem.team_id.is_(None) if team is None else CreditItem.team_id == team.id
+        CreditItem.team_id.is_(None) if team is None else CreditItem.team_id == team.id,
+        CreditItem.deleted_at.is_(None),
     )
     if not include_inactive:
         query = query.where(CreditItem.active.is_(True))
@@ -74,15 +76,22 @@ def items(team=None, *, include_inactive=False):
 def item_of(item_id, team=None):
     """One item of this seller's list, or NotFoundError."""
     item = db.session.get(CreditItem, item_id)
-    if item is None or item.team_id != (team.id if team is not None else None):
+    if item is None or item.deleted_at is not None or item.team_id != (team.id if team is not None else None):
         raise NotFoundError("No such item.", code="credit_item_not_found")
     return item
 
 
-def _clean(name, price_cents):
-    name = " ".join((name or "").split())[:NAME_LENGTH]
+def _clean_name(name):
+    name = " ".join((name or "").split())
     if not name:
         _refuse("name", "Name it.")
+    if len(name) > NAME_LENGTH:
+        _refuse("name", f"At most {NAME_LENGTH} characters.")
+    return name
+
+
+def _clean(name, price_cents):
+    name = _clean_name(name)
     try:
         price = int(price_cents)
     except (TypeError, ValueError):
@@ -114,8 +123,9 @@ def add_item(actor, *, team=None, name, price_cents, icon="other"):
 
 def update_item(actor, item, *, name=None, price_cents=None, active=None, icon=None):
     """Rename it, change its price or icon, or switch it off and on. Sales made stay at their price."""
-    new_name, new_price = _clean(item.name if name is None else name,
-                                 item.price_cents if price_cents is None else price_cents)
+    # A name longer than the limit, from before it, stays until it is changed.
+    new_name = item.name if name is None else _clean_name(name)
+    _, new_price = _clean("-", item.price_cents if price_cents is None else price_cents)
     before = (item.name, item.price_cents, item.active, item.icon)
     item.name, item.price_cents = new_name, new_price
     if icon is not None:
@@ -142,6 +152,24 @@ def move_item(actor, item, direction):
     return item
 
 
+def delete_item(actor, item):
+    """Off its price list for good: what was sold still names it. A sales
+    point's menu loses it at once."""
+    from ..db_models import Device
+
+    item.deleted_at = get_now_utc()
+    item.active = False
+    devices = db.session.execute(
+        db.select(Device).where(Device.team_id.is_(None) if item.team_id is None else Device.team_id == item.team_id)
+    ).scalars().all()
+    for device in devices:
+        chosen = (device.settings or {}).get("items")
+        if isinstance(chosen, list) and item.id in chosen:
+            device.settings = {**device.settings, "items": [found for found in chosen if found != item.id]}
+    _audit("credit_item_deleted", actor, item)
+    return item
+
+
 def _audit(event, actor, item, **extra):
     log_audit_event("credit", event, actor_user=actor, metadata={
         "item_id": item.id, "team_id": item.team_id, "name": item.name, "price_cents": item.price_cents,
@@ -162,7 +190,7 @@ def sell(user, item, *, by=None, channel=BOOKED, card=None, device=None):
     reader, ``card`` and ``device`` are what it was paid with, and where."""
     if channel not in CHANNELS:
         raise ValidationError("Unknown way of selling.", code="credit_channel_invalid")
-    if not item.active:
+    if not item.active or item.deleted_at is not None:
         raise ConflictError(f"{item.name} is not sold any more.", code="credit_item_inactive")
     if item.team is not None and item.team.status != "active":
         raise ConflictError(f"{item.team.name} is archived.", code="credit_seller_archived")
@@ -236,6 +264,8 @@ def sales_summary(team=None, since=None):
         key = entry.item_id or f"name:{entry.description}"
         row = by_item.setdefault(key, {"key": key, "name": entry.item.name if entry.item else entry.description,
                                        "icon": entry.item.icon if entry.item else "other",
+                                       "item_id": entry.item_id,
+                                       "listed": entry.item is not None and entry.item.deleted_at is None,
                                        "count": 0, "earned": 0})
         # The seller's part: the price, less the association's share where it keeps one,
         # and the top-up fee's share where the teams carry Stripe's fees.

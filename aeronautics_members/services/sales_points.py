@@ -89,7 +89,7 @@ def items_of(device):
     found = []
     for item_id in (device.settings or {}).get("items") or []:
         item = db.session.get(CreditItem, item_id)
-        if item is not None and item.team_id == device.team_id and item.active:
+        if item is not None and item.team_id == device.team_id and item.active and item.deleted_at is None:
             found.append(item)
     return found[:MOST_ITEMS]
 

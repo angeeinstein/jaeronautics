@@ -1164,8 +1164,8 @@ class CreditEntry(db.Model):
 
 class CreditItem(db.Model):
     """Something sold for credit, at its price: the association's own (no
-    team) or a team's. Never deleted once sold -- switched off instead, so
-    the sales still name it.
+    team) or a team's. Deleting one keeps its row (``deleted_at``), off every
+    list and menu, so what was sold still names it and shows its icon.
     """
 
     __tablename__ = "credit_items"
@@ -1180,6 +1180,8 @@ class CreditItem(db.Model):
     position = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+    #: Deleted from its price list: on no list or menu any more.
+    deleted_at = db.Column(db.DateTime, nullable=True)
 
     team = db.relationship("Team")
 
@@ -1446,6 +1448,9 @@ class Device(db.Model):
     key_created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     #: Revoked, and no new one made yet: the device cannot sign in.
     key_revoked_at = db.Column(db.DateTime, nullable=True)
+    #: When its key was last handed to it by pairing: nobody saw that key, so
+    #: its page shows no key to rotate or revoke.
+    paired_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     last_seen_at = db.Column(db.DateTime, nullable=True)

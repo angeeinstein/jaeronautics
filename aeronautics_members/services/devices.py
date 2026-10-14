@@ -38,7 +38,8 @@ SEEN_EVERY = timedelta(seconds=30)
 #: Each device's requests kept, the newest.
 REQUESTS_KEPT = 100
 TAIL = 4
-NAME_MAX = 80
+#: A device's name: short enough for lists and its own screen.
+NAME_MAX = 30
 PLACE_MAX = 120
 DESCRIPTION_MAX = 300
 #: A device's code: no 0/O, 1/I/L, so one read aloud is not misheard.
@@ -302,6 +303,7 @@ def give_key(device, *, detail):
     key, key_id, key_hash, key_tail = _new_key()
     device.key_id, device.key_hash, device.key_tail = key_id, key_hash, key_tail
     device.key_created_at, device.key_revoked_at = get_now_utc(), None
+    device.paired_at = device.key_created_at
     _record(device, "key", detail=detail)
     return key
 
@@ -320,6 +322,7 @@ def new_key(actor, device):
     key, key_id, key_hash, key_tail = _new_key()
     device.key_id, device.key_hash, device.key_tail = key_id, key_hash, key_tail
     device.key_created_at, device.key_revoked_at = get_now_utc(), None
+    device.paired_at = None
     _record(device, "key", detail="New key; the old one no longer works" if replaced else "New key")
     log_audit_event("devices", "device_key_replaced", actor_user=actor, metadata={"device_id": device.id})
     return key
