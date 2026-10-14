@@ -337,7 +337,10 @@ bool readCardId(String& cardId) {
 long showMenu(JsonDocument& menu) { return -1; }
 void showSold(JsonDocument& answer) { /* "Coffee, €0.80 -- €11.70 left" */ }
 void showRefused(JsonDocument& answer) { /* answer["message"] says why */ }
-void showLinked(JsonDocument& answer) { /* "Card linked" */ }
+// An unknown card: answer["link"]["url"] as a QR code, for at most
+// answer["link"]["show_for"] seconds, asking GET /api/v1/device/card-links/<id>
+// every answer["link"]["check_every"] seconds (docs: "Linking an unknown card").
+void showLinkCode(JsonDocument& answer) { showRefused(answer); }
 void showOffline() { /* the portal cannot be reached */ }
 
 unsigned long lastSignOfLife = 0;
@@ -366,8 +369,8 @@ void loop() {
     showOffline();
     return;
   }
-  if (menu["result"] == "linked") {
-    showLinked(menu);
+  if (menu["result"] == "refused" && menu["link"]) {
+    showLinkCode(menu);
     return;
   }
   if (menu["result"] != "menu") {
