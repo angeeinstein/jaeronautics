@@ -80,21 +80,18 @@ maintainer says so).
 ### Cards: linked at a reader with a QR code
 
 - **Added:** 2026-10-14
-- **What:** an unknown card tapped on a reader with a screen shows a QR code;
-  the phone that scans it links the card to the signed-in account; the
-  reader then shows "Linked, hi Alex".
+- **What:** an unknown card tapped on a reader with a screen shows a QR code
+  for 30 seconds at most; the phone that opens it first links the card to
+  its signed-in account within 10 minutes and shows "Linked, hi Alex"; the
+  reader goes back to its normal screen as soon as a phone has opened it.
 - **Where:** `services/cards.py`, `services/sales_points.py` (the
   `card_unknown` refusal), a new link page in the front end, the device API,
   `docs/device-protocol.md`.
 - **Decided:** `docs/cards-plan.md`, "Linking a card at a reader with a QR
-  code": 2 minutes, once, a token rather than the card's ID, any signed-in
-  account.
-- **Also decided:** the reader asks every 2 seconds; the QR code goes as
-  soon as a phone opens the link, replaced by "finish on your phone"; the
-  reader goes back to its normal screen quickly if nobody finishes.
-- **Open:** the times proposed there (30 s for the QR code, 60 s for
-  "finish on your phone"); the first phone keeping the link; whether to
-  build it now.
+  code" (a token, never the card's ID; 10 minutes, once, first phone keeps
+  it; the reader asks every 2 seconds while the code is shown; any signed-in
+  account).
+- **Open:** whether to build it now.
 
 ### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
 

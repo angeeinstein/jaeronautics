@@ -89,50 +89,43 @@ person who linked it.
 The member links their own card at a reader with a screen, with any phone
 (iPhones too), "proven by being there":
 
-1. A card nobody has linked is tapped. The `card_unknown` refusal carries a
-   link (`link_url`), and the reader shows "Not linked yet, scan to link it"
-   with it as a QR code.
-2. The link holds a random token, never the card's ID; the portal keeps which
-   card was tapped at which reader. It lasts **2 minutes** (the maintainer:
-   "two minutes is also right") and works once.
-3. The phone opens the portal (signing in first if needed): "Link the card
+1. A card nobody has linked is tapped. The reader reports it as always
+   (`card`), so the portal has the card at this moment: it keeps it (as the
+   keyed hash and its end, like every card) in a **link** with a random token,
+   and answers `card_unknown` with that link's address (`link_url`). The
+   reader shows "Not linked yet, scan to link it" with it as a QR code.
+2. **The QR code holds the token, never the card's ID** -- the ID is all
+   that proves who pays, and anyone who has it could copy it onto a card
+   with a writable ID; on a screen, in a browser history or a server log it
+   would be out. Discussed and decided against (2026-10-14).
+3. The link lasts **10 minutes** and works once, so nobody is hurried on the
+   phone (signing in, a forgotten password). **The first phone to open it
+   keeps it**; another phone opening it is told it is already being used.
+   (2 minutes was agreed first, while the reader waited for the end; with the
+   reader no longer waiting, the time on the phone is free.)
+4. The phone opens the portal (signing in first if needed): "Link the card
    …A1F3, tapped at Rocket fridge just now?", with a name for it, and
-   *Link*.
-4. The reader learns of it by itself: while it waits, it asks the portal
-   about that link **every 2 seconds** (agreed: "I don't want to wait ten
-   seconds here ... two seconds seems right"), as it does while pairing.
-   Those requests are not listed on the device's page. The answers:
-   - `waiting` -- nobody has opened the link yet: the QR code stays;
-   - `opened` -- a phone has opened it: the QR code goes **at once**, and the
-     reader says to finish on the phone, that it waits for that;
-   - `linked`, with the first name -- "Linked, hi Alex", then the normal
-     screen; the next tap opens the menu;
-   - `expired` -- back to the normal screen.
+   *Link*. The card is linked from what the link kept: **the reader takes no
+   part any more**. The phone shows "Linked, hi Alex"; the next tap at the
+   reader opens the menu.
+5. **The reader moves on at once.** While the QR code is shown -- at most
+   **30 seconds** -- it asks the portal about the link **every 2 seconds**
+   (the maintainer: "I don't want to wait ten seconds here ... two seconds
+   seems right"); those requests are not listed on the device's page. The
+   answer is `waiting` (keep the QR code), `opened` (a phone has it: show
+   "Continue on your phone" for a few seconds, then the normal screen) or
+   `expired`. The maintainer: "if somebody scans the code and then abandons
+   this, I want the device to switch back to the normal default screen
+   rather quickly so that other people could use the terminal". The portal
+   sends the times with the link, so they change without a firmware update.
 
-   **The reader is not held up for long** (the maintainer: "if somebody scans
-   the code and then abandons this, I want the device to switch back to the
-   normal default screen rather quickly so that other people could use the
-   terminal"). Proposed, to be confirmed: the QR code is shown for at most
-   **30 seconds**, the "finish on your phone" screen for at most **60
-   seconds**; then the reader goes back to its normal screen and stops
-   asking. The link itself still works until its 2 minutes are up, so
-   somebody slow can still finish on the phone: the next tap then opens the
-   menu. The portal sends these times with the link, so they can be changed
-   without a firmware update.
-
-- **The first phone to open the link keeps it** (proposed): another phone
-  opening the same link is told it is already being used. That also closes
-  most of the "photographed QR code" case below.
 - **Who may link:** any signed-in account, as with Web NFC today -- not only
   active members. "Just linking a card isn't really any problematic thing";
   paying needs credit, and topping up needs an active membership.
 - **Why it answers the concern above** (a stranger's tap ending up in
   someone's account): the link only exists on the reader's screen, just after
-  that card was tapped, so nobody can start it from afar. Somebody beside the
-  reader could photograph the code and link another's card to their own
-  account; what that card buys is then paid from their own credit, and the
-  card's owner is told "belongs to another account, ask an admin". Two
-  minutes and one use keep that small.
+  that card was tapped, so nobody can start it from afar; and the first phone
+  keeps it, so a photograph of the code taken a moment later is of no use.
 - **Firmware:** draws the QR code from `link_url` (ESP-IDF's `qrcode`
   component) and asks about the link while it is shown;
   `docs/device-protocol.md` gets both once built.
