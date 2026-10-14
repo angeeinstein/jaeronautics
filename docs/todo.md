@@ -75,6 +75,23 @@ same cards comes next, needed around January.
   `claude/device-pairing`); this is the part left for when the firmware
   side is settled. Signing the firmware: not planned.
 
+### Sales point: a menu of four items with icons, the name and the balance
+
+- **Added:** 2026-10-14
+- **What:** a card tapped on a sales point opens a menu: up to four items the
+  owner chose (in order), each with its name, price and icon, with the card
+  holder's first name and balance. The device asks with the card (`card`) and
+  gets a short-lived ticket; the item chosen is bought with it (`buy`).
+  Every price-list item gets an **icon**, chosen from a fixed list where the
+  item is added (team prices, the association's on Admin › Credit).
+- **Where:** `services/sales_points.py` (the `items` setting instead of
+  `item`; the `card` and `buy` reports; the `menu` resource), the price-list
+  item model and its pages (an icon field), `docs/device-protocol.md`.
+- **Why, decided:** `docs/devices-plan.md`, "The screens". The messages are
+  written in `docs/device-protocol.md` (marked *planned*). Open: the icon
+  list's names, to be settled with the firmware before it is built (the
+  protocol document has a first list).
+
 ### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
 
 - **Added:** 2026-10-12

@@ -216,6 +216,47 @@ The firmware can already update itself over the air.
   `services/device_firmware.py`, `_marks`), the device asking for its version,
   downloading it and saying how it went.
 
+## The screens: a menu, icons, attendance (agreed 2026-10-14)
+
+What the maintainer's firmware already shows, and what the portal has to
+send for it. The messages themselves: `docs/device-protocol.md`, the one
+document the firmware is written against.
+
+- **A menu of items.** A card tapped on a sales point opens a menu for about
+  eight seconds: up to **four items** -- name, price, icon -- with "Hi Alex"
+  and the balance at the top right. Four for now; "maybe in the future I
+  will add pagination or a scrollable list of items, but let's keep it at
+  four for the moment", so nothing in the portal or the protocol assumes
+  four for ever. The owner chooses the items (in order) instead of the one
+  item a reader sells today.
+- **Icons are chosen in the portal,** from a fixed list (coffee, tea,
+  beer, ...): whoever adds an item to a price list gives it a name, a price
+  and an icon. The firmware carries one picture per name ("I will then
+  pre-compile all of those icons ... and put them on the device"); a new
+  icon is a new name in the list and a firmware update. The firmware does
+  not guess an icon from the item's name.
+- **First name and balance on the screen:** yes. "Everybody knows each
+  other here."
+- **Attendance** (to be built around January): two buttons, *Check in* and
+  *Check out*, then the card. Check in answers "Welcome Alex" and the time;
+  checking in again while checked in is refused ("check out first"); check
+  out answers "Goodbye Alex", the time and how long, worked out by the
+  portal. What attendance records and who sees it is decided when it is
+  built.
+- **Compatibility is not held on to.** "Please don't try to stick to
+  something that's not as good as it could be just because of backwards
+  compatibility. A small firmware update to all devices that are older is
+  not that much of a problem." The protocol document says what changed, and
+  the portal and the firmware are updated together.
+- **Kept in mind, not built:** settings of the device itself set in the
+  portal (brightness, volume, how long the menu stays) and commands (restart,
+  "show where you are", a message on the screen). The maintainer: possible
+  to expand later, "but you need to keep this in mind when designing the
+  API". Wi-Fi changed from the portal was advised against (a wrong password
+  locks the device out where only someone at the device can fix it, and the
+  portal would hold Wi-Fi passwords -- for enterprise Wi-Fi, a person's
+  university login); not decided.
+
 ## How it works
 
 ### In the portal
