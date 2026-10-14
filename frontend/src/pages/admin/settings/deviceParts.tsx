@@ -9,6 +9,7 @@ import {
   Code,
   CopyButton,
   Group,
+  MultiSelect,
   NumberInput,
   Select,
   Stack,
@@ -109,6 +110,45 @@ export function TypeSettingsFields({
               }}
             />
           );
+        if (setting.kind === 'choices') {
+          // Several, in the order chosen: the order is the device's (its menu's).
+          const choices = (setting.choices ?? []).filter((choice) => choice.owner === owner);
+          const groups = [...new Set(choices.map((choice) => choice.group))];
+          const data = groups.map((group) => ({
+            group: group || setting.label,
+            items: choices
+              .filter((choice) => choice.group === group)
+              .map((choice) => ({ value: JSON.stringify(choice.value), label: choice.label })),
+          }));
+          const known = new Set(choices.map((choice) => JSON.stringify(choice.value)));
+          const chosen = (Array.isArray(value) ? value : []).map((item) => JSON.stringify(item));
+          const gone = chosen.filter((item) => !known.has(item)).length;
+          return (
+            <MultiSelect
+              key={setting.name}
+              label={setting.label}
+              description={setting.help || undefined}
+              placeholder={
+                !choices.length ? 'Nothing to choose yet' : chosen.length ? undefined : 'Choose, in order'
+              }
+              data={data}
+              value={chosen.filter((item) => known.has(item))}
+              maxValues={setting.most ?? undefined}
+              error={
+                error ??
+                (gone ? `${String(gone)} no longer on sale: it is left out until chosen again.` : null)
+              }
+              searchable
+              nothingFoundMessage="Nothing found"
+              onChange={(next) => {
+                onChange(
+                  setting.name,
+                  next.map((item) => JSON.parse(item) as unknown),
+                );
+              }}
+            />
+          );
+        }
         if (setting.kind === 'choice') {
           const choices = (setting.choices ?? []).filter((choice) => choice.owner === owner);
           // Grouped under their heading (an item's seller); the value kept as the server gave it.

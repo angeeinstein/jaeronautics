@@ -542,31 +542,33 @@ describe('one device', () => {
     expect(await sent?.clone().json()).toMatchObject({ owner: 'rocket', settings: { greeting: 'Hello' } });
   });
 
-  it('a sales point sells an item chosen from the price lists, under its seller', async () => {
+  it("a sales point offers items chosen from its owner's price list, in order", async () => {
     const salesPoint: Schemas['DeviceTypeOut'] = {
       slug: 'sales_point',
       label: 'Sales point',
-      description: 'A card reader that sells one item.',
+      description: 'A card reader with a menu of up to four items.',
       settings: [
         {
-          name: 'item',
-          label: 'Item',
-          kind: 'choice',
-          default: null,
+          name: 'items',
+          label: 'Items',
+          kind: 'choices',
+          most: 4,
+          default: [],
           help: '',
           max_length: 200,
           minimum: null,
           maximum: null,
           choices: [
             { value: 4, label: 'Beer, €1.50', group: 'Joanneum Aeronautics', owner: 'association' },
+            { value: 5, label: 'Coffee, €0.80', group: 'Joanneum Aeronautics', owner: 'association' },
             { value: 9, label: 'Club-Mate, €2.00', group: 'Rocket', owner: 'rocket' },
           ],
         },
       ],
       resources: [],
-      reports: [{ name: 'tap', description: 'A card tapped.', tryable: false }],
+      reports: [{ name: 'card', description: 'A card tapped.', tryable: false }],
     };
-    const fridge = { ...reader, type: 'sales_point', type_label: 'Sales point', settings: { item: 4 } };
+    const fridge = { ...reader, type: 'sales_point', type_label: 'Sales point', settings: { items: [5, 4] } };
     show(
       <DeviceDetail />,
       {
@@ -584,8 +586,14 @@ describe('one device', () => {
       route,
     );
 
-    expect(await screen.findByDisplayValue('Beer, €1.50')).toBeInTheDocument();
-    const report = screen.getByRole('group', { name: 'Report “tap”' });
+    // The ones chosen, as pills in the order chosen; the list offers only the owner's.
+    expect(await screen.findByRole('combobox', { name: 'Items' })).toBeInTheDocument();
+    const chosen = screen
+      .getAllByText(/^(Coffee|Beer|Club-Mate), €/)
+      .filter((text) => !text.closest('[role="option"]'));
+    expect(chosen.map((pill) => pill.textContent)).toEqual(['Coffee, €0.80', 'Beer, €1.50']);
+    expect(screen.queryByText('Club-Mate, €2.00')).not.toBeInTheDocument();
+    const report = screen.getByRole('group', { name: 'Report “card”' });
     expect(report).toHaveTextContent('Not sent from here');
   });
 });

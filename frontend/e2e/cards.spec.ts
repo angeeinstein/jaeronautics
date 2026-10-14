@@ -18,8 +18,9 @@ test.describe('cards and sales points', () => {
     await page.getByRole('option', { name: 'Rocket Team' }).click();
     await form.getByRole('combobox', { name: 'Type' }).click();
     await page.getByRole('option', { name: 'Sales point' }).click();
-    await form.getByRole('combobox', { name: 'Item' }).click();
+    await form.getByRole('combobox', { name: 'Items' }).click();
     await page.getByRole('option', { name: 'Mate, €2.50' }).click();
+    await form.getByRole('textbox', { name: /^Name/ }).click();
     await form.getByRole('button', { name: 'Add' }).click();
     const key = (await page.getByTestId('device-key').textContent())?.trim() ?? '';
     expect(key).toMatch(/^jadev_/);
@@ -37,7 +38,7 @@ test.describe('cards and sales points', () => {
     const card = info.project.name === 'phone' ? '04E2E000000001' : '04E2E000000002';
     const tap = await reader.post('/api/v1/device/events', {
       headers: { Authorization: `Bearer ${key}` },
-      data: { event_id: `link-${String(Date.now())}`, kind: 'tap', data: { card } },
+      data: { event_id: `link-${String(Date.now())}`, kind: 'card', data: { card } },
     });
     expect((await tap.json()) as unknown).toMatchObject({ answer: { result: 'linked', card: 'Card' } });
     await reader.dispose();
@@ -71,6 +72,7 @@ test.describe('cards and sales points', () => {
     await page.goto('/teams/rocket-team/manage/devices');
     const fridge = page.getByRole('region', { name: 'Rocket fridge' });
     await expect(fridge).toContainText('Sales point');
-    await expect(fridge.getByRole('combobox', { name: 'Item' })).toHaveValue('Beer, €2.00');
+    await expect(fridge.getByRole('combobox', { name: 'Items' })).toBeVisible();
+    await expect(fridge.getByText('Beer, €2.00', { exact: true })).toBeVisible();
   });
 });

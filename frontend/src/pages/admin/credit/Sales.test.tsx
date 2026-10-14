@@ -21,8 +21,13 @@ const base: Answers = {
 const list: Schemas['PriceListOut'] = {
   enabled: true,
   items: [
-    { id: 1, name: 'Beer', price_cents: 200, active: true },
-    { id: 2, name: 'Mate', price_cents: 250, active: false },
+    { id: 1, name: 'Beer', price_cents: 200, icon: 'beer', active: true },
+    { id: 2, name: 'Mate', price_cents: 250, icon: 'mate', active: false },
+  ],
+  icons: [
+    { value: 'beer', label: 'Beer' },
+    { value: 'energy_drink', label: 'Energy drink' },
+    { value: 'other', label: 'Other' },
   ],
 };
 
@@ -41,12 +46,16 @@ describe('a team’s price list', () => {
     expect(within(table).getByText('€2.00')).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('New item'), 'Red Bull');
     await userEvent.type(screen.getByLabelText('Price'), '2.5');
+    // Not without an icon: it is the picture on a sales point's screen.
+    expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('combobox', { name: 'Icon' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Energy drink' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
     await waitFor(() => {
       expect(calls.some((call) => call.method === 'POST')).toBe(true);
     });
     const sent = calls.find((call) => call.method === 'POST');
-    expect(await sent?.clone().json()).toEqual({ name: 'Red Bull', price_cents: 250 });
+    expect(await sent?.clone().json()).toEqual({ name: 'Red Bull', price_cents: 250, icon: 'energy_drink' });
 
     await userEvent.click(screen.getByRole('switch', { name: 'Sell Beer' }));
     await waitFor(() => {
