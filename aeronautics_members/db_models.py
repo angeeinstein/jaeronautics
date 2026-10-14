@@ -1429,8 +1429,24 @@ class Device(db.Model):
     last_seen_at = db.Column(db.DateTime, nullable=True)
     last_address = db.Column(db.String(45), nullable=True)
     firmware = db.Column(db.String(60), nullable=True)
+    #: The board, as its firmware names it (``X-Device-Board``).
+    board = db.Column(db.String(60), nullable=True)
+    #: The types its firmware can be used as (``X-Device-Types``); none when
+    #: it has not said, and then any type may be chosen.
+    supported_types = db.Column(db.JSON, nullable=True)
+    #: Opens its settings on the device when the portal cannot be reached: six
+    #: digits, shown to admins on its page. The device gets only a hash.
+    backup_code = db.Column(db.String(12), nullable=True)
+    #: The firmware it should run instead of what every device runs; none: the same.
+    firmware_release_id = db.Column(db.Integer, db.ForeignKey("firmware_releases.id", ondelete="SET NULL"),
+                                    nullable=True, index=True)
+    #: The version it last said it could not install, and why: not offered
+    #: again until an admin asks (*Try again*).
+    firmware_failed_version = db.Column(db.String(32), nullable=True)
+    firmware_failed_detail = db.Column(db.String(255), nullable=True)
 
     team = db.relationship("Team")
+    firmware_release = db.relationship("FirmwareRelease")
     events = db.relationship("DeviceEvent", backref="device", cascade="all, delete-orphan",
                              passive_deletes=True, order_by="DeviceEvent.id.desc()", lazy="dynamic")
 
@@ -1475,6 +1491,61 @@ class DeviceEvent(db.Model):
     detail = db.Column(db.String(255), nullable=True)
     data = db.Column(db.JSON, nullable=True)
     answer = db.Column(db.JSON, nullable=True)
+
+
+class DevicePairing(db.Model):
+    """A device asking to be paired (services/device_pairing.py): it shows
+    ``code`` on its screen; an admin enters it and says what the device is; the
+    device, asking with ``secret`` (kept as its hash), then gets its key once.
+    Gone after that, or after ten minutes unanswered."""
+
+    __tablename__ = "device_pairings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    #: For people, shown on the device: "K7Q4X9" (shown as K7Q-4X9).
+    code = db.Column(db.String(6), nullable=False, unique=True)
+    #: The SHA-256 of the long pairing id only the device knows.
+    secret_hash = db.Column(db.String(64), nullable=False, unique=True)
+    hardware_id = db.Column(db.String(17), nullable=True)
+    firmware = db.Column(db.String(60), nullable=True)
+    board = db.Column(db.String(60), nullable=True)
+    supported_types = db.Column(db.JSON, nullable=True)
+    address = db.Column(db.String(45), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    last_poll_at = db.Column(db.DateTime, nullable=True)
+    #: Approved: the device it is now (a new one, or the one it replaces).
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="CASCADE"), nullable=True, index=True)
+    approved_at = db.Column(db.DateTime, nullable=True)
+    approved_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    refused_at = db.Column(db.DateTime, nullable=True)
+
+    device = db.relationship("Device")
+
+
+class FirmwareRelease(db.Model):
+    """A firmware file uploaded for the devices (services/device_firmware.py).
+    What it is was read from the file itself: ESP-IDF's app description. The
+    file is ``storage/firmware/<sha256>.bin``."""
+
+    __tablename__ = "firmware_releases"
+
+    id = db.Column(db.Integer, primary_key=True)
+    version = db.Column(db.String(32), nullable=False, unique=True)
+    project = db.Column(db.String(32), nullable=False)
+    #: When it was built, as the file says: "Oct 14 2026 09:12:44".
+    built = db.Column(db.String(40), nullable=True)
+    idf_version = db.Column(db.String(32), nullable=True)
+    #: The chip it was built for: "esp32s3".
+    chip = db.Column(db.String(20), nullable=True)
+    sha256 = db.Column(db.String(64), nullable=False, unique=True)
+    size = db.Column(db.Integer, nullable=False)
+    file_name = db.Column(db.String(200), nullable=True)
+    notes = db.Column(db.String(300), nullable=True)
+    uploaded_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    uploaded_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    uploaded_by = db.relationship("User")
 
 
 class Card(db.Model):

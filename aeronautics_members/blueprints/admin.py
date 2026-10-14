@@ -225,6 +225,23 @@ def admin_settings_section(section):
     return app_shell()
 
 
+@admin_bp.route("/admin/settings/devices/pair", methods=["GET"])
+@login_required
+@requires(Permission.DEVICES_MANAGE)
+def admin_settings_device_pair():
+    """Pairing a device by the code on its screen (``?code=K7Q-4X9``, the device's
+    QR code): drawn by the new front end (frontend/src/pages/admin/settings/PairDevice.tsx)."""
+    return app_shell()
+
+
+@admin_bp.route("/admin/settings/devices/firmware", methods=["GET"])
+@login_required
+@requires(Permission.DEVICES_MANAGE)
+def admin_settings_device_firmware():
+    """The devices' firmware: drawn by the new front end (frontend/src/pages/admin/settings/Firmware.tsx)."""
+    return app_shell()
+
+
 @admin_bp.route("/admin/settings/devices/<int:device_id>", methods=["GET"])
 @login_required
 @requires(Permission.DEVICES_MANAGE)

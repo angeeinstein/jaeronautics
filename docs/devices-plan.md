@@ -117,6 +117,11 @@ device for everything?" No devices with only a button or an LED.
   This replaces "simple devices driven by the portal" from the Direction
   below; the screen devices' part of it (the portal gives data and results,
   not screens) holds.
+  The cost: about €50 a device instead of €10-15 for an ESP32 and a reader.
+  The maintainer still has to put that to the teams, who may not accept it,
+  "so maybe we have to still allow other devices again in the future, but I
+  will try to keep it like we decided, only one device". So the portal keeps
+  types per device and does not assume a screen.
 - **The device says what it can do, the portal what it is for.** With its
   sign of life the device reports its board, its firmware version and the
   uses its firmware supports. The portal assigns one of them, with its
@@ -193,13 +198,18 @@ The firmware can already update itself over the air.
   the board) both the server and the device can tell this firmware from any
   other. That guards against a wrong file, not against someone who takes over
   an admin account or the server: anyone can copy the marker.
-- **Signing the firmware:** the maintainer is not sure yet. Signed
-  images (ESP-IDF's signature check on updates, the key kept on the
-  maintainer's computer) would guard against that too. It can be switched
-  on later with an ordinary update; the portal only stores and passes on the
+- **Signing the firmware: not planned** (2026-10-14). The maintainer: "I am
+  not really worried about admins uploading malicious firmware, because if
+  they are already an admin, they can do a lot of other malicious stuff."
+  It could still be switched on later with an ordinary update (ESP-IDF's
+  signature check on updates); the portal only stores and passes on the
   file either way.
-- Which part first: pairing and the device reporting its uses, or firmware
-  updates.
+- What else the firmware sends and needs is still being worked out with the
+  firmware. Built first (2026-10-14), as "the parts that are not really
+  dependent on this": pairing, the device reporting what it is and can do,
+  and the base of firmware updates -- uploading a file in the portal, its
+  checks (more to come), the device asking for its version and downloading
+  it.
 
 ## How it works
 

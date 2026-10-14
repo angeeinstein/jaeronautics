@@ -932,6 +932,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/devices/firmware": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The uploaded firmware, which every device runs, and where each device stands. */
+        get: operations["admin_firmware"];
+        put?: never;
+        /** Upload a firmware file (the app's .bin), with ``notes`` as a form field. It */
+        post: operations["admin_firmware_upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/devices/firmware/chosen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Which firmware every device runs (none: no update is offered). */
+        put: operations["admin_firmware_choose"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/devices/firmware/{release_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete an uploaded firmware no device is to run. */
+        delete: operations["admin_firmware_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/devices/pairings/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The device waiting with this code: what it says it is. */
+        get: operations["admin_device_pairing"];
+        put?: never;
+        /** Pair the device waiting with this code: as a new device, or as the one it */
+        post: operations["admin_device_pair"];
+        /** Turn the device waiting with this code away; it is told so. */
+        delete: operations["admin_device_pairing_refuse"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/devices/{device_id}": {
         parameters: {
             query?: never;
@@ -949,6 +1020,57 @@ export interface paths {
         head?: never;
         /** Change a device's owner, name, place, description, settings, or switch it on or off. */
         patch: operations["admin_device_change"];
+        trace?: never;
+    };
+    "/api/v1/admin/devices/{device_id}/backup-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Another backup code: the device gets it with its next sign of life. */
+        post: operations["admin_device_backup_code"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/devices/{device_id}/firmware": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Which firmware this device runs: one of its own -- to try a version on one device first -- or every device's. */
+        put: operations["admin_device_firmware"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/devices/{device_id}/firmware/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Offer the firmware the device could not install once more. */
+        post: operations["admin_device_firmware_retry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/devices/{device_id}/key": {
@@ -1942,7 +2064,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A device's sign of life: who it is, its settings, the time. Bearer key. */
+        /** A device's sign of life: who it is, its settings, firmware to install, the */
         get: operations["device_hello"];
         put?: never;
         post?: never;
@@ -1963,6 +2085,92 @@ export interface paths {
         put?: never;
         /** Something the device reports, answered by its type. Bearer key. */
         post: operations["device_report"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/device/firmware": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The firmware the device should run, and whether to install it now. Bearer key. */
+        get: operations["device_firmware_info"];
+        put?: never;
+        /** How an update goes: started, or failed. Bearer key. */
+        post: operations["device_firmware_report"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/device/firmware/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The firmware file the device should run, to install over the air. Bearer */
+        get: operations["device_firmware_file"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/device/manager": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Whether a card tapped on the device opens its settings there: its holder */
+        post: operations["device_manager"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/device/pair/poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** How the pairing stands; once approved, the device's key, this once. */
+        post: operations["device_pair_poll"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/device/pair/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** An unpaired device asks to be paired. No key: it says what it is with the */
+        post: operations["device_pair_start"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4469,6 +4677,11 @@ export interface components {
             settings?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * Type
+             * @default null
+             */
+            type?: string | null;
         };
         /** DeviceChoiceOut */
         DeviceChoiceOut: {
@@ -4514,18 +4727,76 @@ export interface components {
             /** Name */
             name: string | null;
         };
+        /** DeviceFirmwareChoiceIn */
+        DeviceFirmwareChoiceIn: {
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id?: number | null;
+        };
+        /** DeviceFirmwareFileOut */
+        DeviceFirmwareFileOut: {
+            /** Built */
+            built: string | null;
+            /** Sha256 */
+            sha256: string;
+            /** Size */
+            size: number;
+            /** Url */
+            url: string;
+            /** Version */
+            version: string;
+        };
+        /** DeviceFirmwareOfferOut */
+        DeviceFirmwareOfferOut: {
+            /** Sha256 */
+            sha256: string;
+            /** Size */
+            size: number;
+            /** Version */
+            version: string;
+        };
+        /** DeviceFirmwareOut */
+        DeviceFirmwareOut: {
+            /** Install */
+            install: boolean;
+            /** Running */
+            running: string | null;
+            wanted: components["schemas"]["DeviceFirmwareFileOut"] | null;
+        };
+        /** DeviceFirmwareReportIn */
+        DeviceFirmwareReportIn: {
+            /**
+             * Detail
+             * @default null
+             */
+            detail?: string | null;
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "started" | "failed";
+            /** Version */
+            version: string;
+        };
         /** DeviceHelloOut */
         DeviceHelloOut: {
+            /** Backup Code Hash */
+            backup_code_hash: string | null;
             /** Code */
             code: string;
             /** Device Id */
             device_id: number;
+            firmware: components["schemas"]["DeviceFirmwareOfferOut"] | null;
             /** Name */
             name: string;
             /** Owner */
             owner: string;
             /** Place */
             place: string | null;
+            /** Poll Every */
+            poll_every: number;
             /** Reports */
             reports: string[];
             /** Resources */
@@ -4582,8 +4853,24 @@ export interface components {
             /** Starter Name */
             starter_name: string;
         };
+        /** DeviceManagerIn */
+        DeviceManagerIn: {
+            /** Card */
+            card: string;
+        };
+        /** DeviceManagerOut */
+        DeviceManagerOut: {
+            /** Allowed */
+            allowed: boolean;
+            /** Name */
+            name: string | null;
+        };
         /** DeviceOut */
         DeviceOut: {
+            /** Backup Code */
+            backup_code: string | null;
+            /** Board */
+            board: string | null;
             /** Code */
             code: string;
             /** Created At */
@@ -4594,6 +4881,17 @@ export interface components {
             enabled: boolean;
             /** Firmware */
             firmware: string | null;
+            /** Firmware Failed Detail */
+            firmware_failed_detail: string | null;
+            /** Firmware Release Id */
+            firmware_release_id: number | null;
+            /**
+             * Firmware State
+             * @enum {string}
+             */
+            firmware_state: "none" | "current" | "waiting" | "failed";
+            /** Firmware Wanted */
+            firmware_wanted: string | null;
             /** Hardware Id */
             hardware_id: string | null;
             /** Id */
@@ -4626,6 +4924,8 @@ export interface components {
             settings: {
                 [key: string]: unknown;
             };
+            /** Supported Types */
+            supported_types: string[] | null;
             /** Type */
             type: string;
             /** Type Label */
@@ -4637,6 +4937,105 @@ export interface components {
             label: string;
             /** Value */
             value: string;
+        };
+        /** DevicePairIn */
+        DevicePairIn: {
+            /**
+             * Description
+             * @default null
+             */
+            description?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name?: string | null;
+            /**
+             * Owner
+             * @default association
+             */
+            owner?: string;
+            /**
+             * Place
+             * @default null
+             */
+            place?: string | null;
+            /**
+             * Replaces
+             * @default null
+             */
+            replaces?: number | null;
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Type
+             * @default null
+             */
+            type?: string | null;
+        };
+        /** DevicePairingOut */
+        DevicePairingOut: {
+            /** Address */
+            address: string | null;
+            /** Board */
+            board: string | null;
+            /** Code */
+            code: string;
+            /** Created At */
+            created_at: string;
+            /** Expires At */
+            expires_at: string;
+            /** Firmware */
+            firmware: string | null;
+            /** Hardware Id */
+            hardware_id: string | null;
+            /** Supported Types */
+            supported_types: string[] | null;
+        };
+        /** DevicePairingPollIn */
+        DevicePairingPollIn: {
+            /** Pairing Id */
+            pairing_id: string;
+        };
+        /** DevicePairingPollOut */
+        DevicePairingPollOut: {
+            /** @default null */
+            device?: components["schemas"]["DeviceHelloOut"] | null;
+            /**
+             * Expires In
+             * @default null
+             */
+            expires_in?: number | null;
+            /**
+             * Key
+             * @default null
+             */
+            key?: string | null;
+            /**
+             * Poll Every
+             * @default null
+             */
+            poll_every?: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "waiting" | "refused" | "paired";
+        };
+        /** DevicePairingStartOut */
+        DevicePairingStartOut: {
+            /** Code */
+            code: string;
+            /** Expires In */
+            expires_in: number;
+            /** Pairing Id */
+            pairing_id: string;
+            /** Poll Every */
+            poll_every: number;
+            /** Url */
+            url: string;
         };
         /** DeviceReportIn */
         DeviceReportIn: {
@@ -4777,6 +5176,8 @@ export interface components {
             items: components["schemas"]["DeviceOut"][];
             /** Owners */
             owners: components["schemas"]["DeviceOwnerOut"][];
+            /** Pairings */
+            pairings: components["schemas"]["DevicePairingOut"][];
             /** Server */
             server: string;
             /** Types */
@@ -5012,6 +5413,84 @@ export interface components {
             note: string;
             /** Value */
             value: number;
+        };
+        /** FirmwareChoiceIn */
+        FirmwareChoiceIn: {
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id?: number | null;
+        };
+        /** FirmwareDeviceOut */
+        FirmwareDeviceOut: {
+            /** Code */
+            code: string;
+            /** Failed Detail */
+            failed_detail: string | null;
+            /** Id */
+            id: number;
+            /** Label */
+            label: string;
+            /** Online */
+            online: boolean;
+            /** Own */
+            own: boolean;
+            /** Running */
+            running: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "none" | "current" | "waiting" | "failed";
+            /** Wanted */
+            wanted: string | null;
+        };
+        /** FirmwareOut */
+        FirmwareOut: {
+            /** Chosen Id */
+            chosen_id: number | null;
+            /** Devices */
+            devices: components["schemas"]["FirmwareDeviceOut"][];
+            /** Max Size */
+            max_size: number;
+            /** Project */
+            project: string | null;
+            /** Releases */
+            releases: components["schemas"]["FirmwareReleaseOut"][];
+        };
+        /** FirmwareReleaseOut */
+        FirmwareReleaseOut: {
+            /** Built */
+            built: string | null;
+            /** Chip */
+            chip: string | null;
+            /** Chosen */
+            chosen: boolean;
+            /** Chosen For */
+            chosen_for: number;
+            /** File Name */
+            file_name: string | null;
+            /** Id */
+            id: number;
+            /** Idf Version */
+            idf_version: string | null;
+            /** Notes */
+            notes: string | null;
+            /** Project */
+            project: string;
+            /** Running */
+            running: number;
+            /** Sha256 */
+            sha256: string;
+            /** Size */
+            size: number;
+            /** Uploaded At */
+            uploaded_at: string;
+            /** Uploaded By */
+            uploaded_by: string | null;
+            /** Version */
+            version: string;
         };
         /** FlashedOut */
         FlashedOut: {
@@ -11738,6 +12217,401 @@ export interface operations {
             };
         };
     };
+    admin_firmware: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FirmwareOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_firmware_upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FirmwareOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_firmware_choose: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FirmwareChoiceIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FirmwareOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_firmware_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                release_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FirmwareOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_device_pairing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevicePairingOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_device_pair: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DevicePairIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_device_pairing_refuse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     admin_device: {
         parameters: {
             query?: never;
@@ -11874,6 +12748,193 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_device_backup_code: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_device_firmware: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceFirmwareChoiceIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_device_firmware_retry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceOut"];
                 };
             };
             /** @description Not signed in. */
@@ -15847,6 +16908,201 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    device_firmware_info: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceFirmwareOut"];
+                };
+            };
+        };
+    };
+    device_firmware_report: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceFirmwareReportIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceFirmwareOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    device_firmware_file: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+        };
+    };
+    device_manager: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceManagerIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceManagerOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    device_pair_poll: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DevicePairingPollIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevicePairingPollOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    device_pair_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevicePairingStartOut"];
                 };
             };
             /** @description Not possible in the current state. */

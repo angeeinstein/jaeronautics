@@ -49,6 +49,15 @@ ASSOCIATION = "Joanneum Aeronautics"
 KEEP = object()
 #: A MAC address as a board sends it.
 MAC_PATTERN = re.compile(r"^[0-9A-F]{2}(:[0-9A-F]{2}){5}$")
+#: A type's name as a firmware lists it (``X-Device-Types``).
+TYPE_PATTERN = re.compile(r"^[a-z0-9_]{1,40}$")
+#: At most this many types in ``X-Device-Types``.
+TYPES_MAX = 20
+BACKUP_CODE_LENGTH = 6
+#: How often a device should ask for its sign of life (it is answered "nothing
+#: new", 304, when nothing changed): what is changed in the portal reaches it
+#: within this time.
+POLL_EVERY = 10
 
 
 class DeviceRefused(ServiceError):
@@ -151,6 +160,39 @@ def _record(device, kind, *, name=None, event_id=None, detail=None, data=None, a
     return event
 
 
+#: For the other device services (pairing, firmware): an event on a device's page.
+record_event = _record
+
+
+def _new_backup_code():
+    return "".join(secrets.choice("0123456789") for _ in range(BACKUP_CODE_LENGTH))
+
+
+def backup_code_hash(device):
+    """What the device keeps of its backup code: the SHA-256 of ``"<its code>:<backup code>"``."""
+    if not device.backup_code:
+        return None
+    return hashlib.sha256(f"{device.code}:{device.backup_code}".encode("utf-8")).hexdigest()
+
+
+def supports(device, type):
+    """Whether ``device``'s firmware can be used as ``type``: any type, when it has not said."""
+    return device.supported_types is None or type in device.supported_types
+
+
+def parse_types(value):
+    """The types in an ``X-Device-Types`` header -- "sales_point, test" -- as a
+    list; None when there was no header, so nothing is changed."""
+    if value is None:
+        return None
+    found = []
+    for part in value.split(","):
+        part = part.strip().lower()
+        if TYPE_PATTERN.match(part) and part not in found:
+            found.append(part)
+    return found[:TYPES_MAX]
+
+
 # --- Managing them (Admin › Settings › Devices) ---------------------------------------------
 
 
@@ -181,7 +223,7 @@ def add(actor, *, type, name=None, place=None, description=None, settings=None, 
         description=_clean_description(description),
         settings=device_types.clean_settings(device_type, settings, owner=owner), enabled=True,
         auth_method="key", key_id=key_id, key_hash=key_hash, key_tail=key_tail, key_created_at=now,
-        created_at=now, created_by_user_id=actor.id if actor is not None else None,
+        created_at=now, created_by_user_id=actor.id if actor is not None else None, backup_code=_new_backup_code(),
     )
     db.session.add(device)
     db.session.flush()
@@ -194,16 +236,26 @@ def add(actor, *, type, name=None, place=None, description=None, settings=None, 
 
 def _state(device):
     return {"name": device.name, "place": device.place, "description": device.description,
-            "enabled": device.enabled, "settings": device.settings, "team_id": device.team_id}
+            "enabled": device.enabled, "settings": device.settings, "team_id": device.team_id, "type": device.type}
 
 
 def change(actor, device, *, name=KEEP, place=KEEP, description=KEEP, enabled=None, settings=None, owner=KEEP,
-           by_owner=False):
+           type=None, by_owner=False):
     """What is given changes; the rest stays. ``owner`` (a team, or None for
-    the association) only by admins; ``by_owner``: only what the owner may --
-    its name, place, description, switch, and the settings its type lets the
-    owner choose."""
+    the association) and ``type`` only by admins; ``by_owner``: only what the
+    owner may -- its name, place, description, switch, and the settings its
+    type lets the owner choose."""
     before = _state(device)
+    if type is not None and not by_owner and type != device.type:
+        new_type = _type_of(type)
+        if not supports(device, new_type.slug):
+            message = f"This device's firmware cannot be a {new_type.label.lower()}."
+            raise ValidationError(message, code="device_type_unsupported", details={"fields": {"type": message}})
+        old_label = _type_of(device.type).label
+        device.type = new_type.slug
+        # Another type has other settings: they start afresh.
+        device.settings = device_types.clean_settings(new_type, {}, owner=device.team)
+        _record(device, "type", detail=f"Now a {new_type.label.lower()} (was a {old_label.lower()})")
     device_type = _type_of(device.type)
     if owner is not KEEP and not by_owner and (owner.id if owner else None) != device.team_id:
         device.team = owner
@@ -242,6 +294,24 @@ def recent_reports(device, limit=20):
         db.select(DeviceEvent).filter_by(device_id=device.id, kind="reported")
         .order_by(DeviceEvent.id.desc()).limit(limit)
     ).scalars().all()
+
+
+def give_key(device, *, detail):
+    """A new key handed to the device itself (pairing): no one else sees it.
+    The old one stops working at once. Returns the key."""
+    key, key_id, key_hash, key_tail = _new_key()
+    device.key_id, device.key_hash, device.key_tail = key_id, key_hash, key_tail
+    device.key_created_at, device.key_revoked_at = get_now_utc(), None
+    _record(device, "key", detail=detail)
+    return key
+
+
+def new_backup_code(actor, device):
+    """Another backup code; the device gets it with its next sign of life. Returns it."""
+    device.backup_code = _new_backup_code()
+    _record(device, "backup_code", detail="New backup code")
+    log_audit_event("devices", "device_backup_code_replaced", actor_user=actor, metadata={"device_id": device.id})
+    return device.backup_code
 
 
 def new_key(actor, device):
@@ -285,6 +355,9 @@ def remove(actor, device):
     db.session.execute(db.delete(DeviceEvent).where(DeviceEvent.device_id == device.id))
     db.session.execute(db.delete(DeviceRequest).where(DeviceRequest.device_id == device.id))
     db.session.execute(db.delete(CardLinkWait).where(CardLinkWait.device_id == device.id))
+    from ..db_models import DevicePairing
+
+    db.session.execute(db.delete(DevicePairing).where(DevicePairing.device_id == device.id))
     db.session.execute(db.update(CreditEntry).where(CreditEntry.device_id == device.id).values(device_id=None))
     db.session.execute(db.update(Card).where(Card.last_used_device_id == device.id).values(last_used_device_id=None))
     db.session.delete(device)
@@ -384,15 +457,29 @@ def normalize_mac(value):
     return ":".join(digits[i:i + 2] for i in range(0, 12, 2))
 
 
-def seen(device, *, address=None, firmware=None, hardware=None, now=None):
+def seen(device, *, address=None, firmware=None, hardware=None, board=None, types=None, now=None):
     """The device spoke: when, from where, with which firmware, on which board
-    (its MAC address). Written at most every half minute, unless something
-    changed. Another board with the same key is said as an event."""
+    (its MAC address, and what the firmware calls the board), and what its
+    firmware can be used as (``types``, a list; None: not said). Written at
+    most every half minute, unless something changed. Another board with the
+    same key is said as an event."""
+    from . import device_firmware
+
     now = now or get_now_utc()
     firmware = (firmware or "").strip()[:60] or None
     address = (address or "")[:45] or None
     hardware = normalize_mac(hardware)
+    board = (board or "").strip()[:60] or None
     last = _aware(device.last_seen_at)
+    if board and board != device.board:
+        _record(device, "board", detail=f"Board: {board}")
+        device.board = board
+    if types is not None and types != device.supported_types:
+        labels = [(device_types.get(slug).label if device_types.get(slug) else slug) for slug in types]
+        _record(device, "types", detail="Can be: " + (", ".join(labels) if labels else "nothing the portal knows"))
+        device.supported_types = types
+    if firmware:
+        device_firmware.ran(device, firmware)
     if hardware and hardware != device.hardware_id:
         _record(device, "hardware", detail=(f"Board {hardware}, was {device.hardware_id}: the key is on another board"
                                             if device.hardware_id else f"Board {hardware}"))
@@ -408,15 +495,51 @@ def seen(device, *, address=None, firmware=None, hardware=None, now=None):
 
 
 def hello(device, now=None):
-    """The answer to a sign of life: who it is, its settings, the time."""
+    """The answer to a sign of life: who it is, what it is used as and its
+    settings, the hash of its backup code, the firmware it should install if
+    any, and the time."""
+    from . import device_firmware
+
     device_type = _type_of(device.type)
+    release = device_firmware.offer(device)
     return {
         "device_id": device.id, "code": device.code, "name": label(device), "type": device.type,
         "owner": owner_name(device), "place": device.place,
         "settings": device_types.clean_settings(device_type, {}, current=device.settings, owner=device.team),
         "resources": sorted(device_type.resources), "reports": sorted(device_type.reports),
+        "backup_code_hash": backup_code_hash(device),
+        "firmware": ({"version": release.version, "size": release.size, "sha256": release.sha256}
+                     if release is not None else None),
+        "poll_every": POLL_EVERY,
         "server_time": (now or get_now_utc()).astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
+
+
+def hello_tag(answer):
+    """An ETag for a sign of life's answer: changes when anything in it but the time does."""
+    body = {key: value for key, value in answer.items() if key != "server_time"}
+    digest = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+    return f'"{digest[:32]}"'
+
+
+def manager(device, card_id):
+    """Whether the holder of a card tapped on ``device`` may open its settings
+    there: an active card of an account that manages devices (admins). The
+    roles are asked each time, so a change in the portal counts at once.
+    ``{"allowed": bool, "name": first name or None}``."""
+    from ..permissions import Permission
+    from . import cards
+
+    card = cards.find(card_id)
+    user = card.user if card is not None else None
+    allowed = (card is not None and cards.state(card) == cards.ACTIVE and user is not None
+               and user.disabled_at is None and user.deleted_at is None and user.can(Permission.DEVICES_MANAGE))
+    name = user.member.first_name if allowed and user.member is not None else None
+    if allowed:
+        _record(device, "settings", detail=f"Settings opened with {name or user.email}'s card")
+    else:
+        _record(device, "settings", detail="A card that may not open the settings")
+    return {"allowed": allowed, "name": name}
 
 
 def resource(device, name):
@@ -505,5 +628,8 @@ def try_out(actor, device, *, what, name=None, data=None):
 
 def forget_old(now=None):
     """Events older than 90 days deleted (the nightly clean-up). Returns how many."""
+    from . import device_pairing
+
+    device_pairing.forget_expired(now)
     cutoff = (now or get_now_utc()) - EVENTS_KEPT
     return db.session.query(DeviceEvent).filter(DeviceEvent.at < cutoff).delete(synchronize_session=False)

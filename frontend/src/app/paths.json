@@ -77,6 +77,8 @@
     "/admin/settings/mail",
     "/admin/settings/test-email",
     "/admin/settings/devices",
+    "/admin/settings/devices/pair",
+    "/admin/settings/devices/firmware",
     "/admin/settings/devices/:deviceId",
     "/admin/settings/health",
     "/admin/settings/updates",

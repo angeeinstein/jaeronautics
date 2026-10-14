@@ -90,6 +90,7 @@ def app(tmp_path):
             # Never the repository's own storage/backups or storage/legal_pdf.
             "BACKUP_DIR": str(tmp_path / "backups"),
             "LEGAL_PDF_DIR": str(tmp_path / "legal_pdf"),
+            "FIRMWARE_DIR": str(tmp_path / "firmware"),
             "FRONTEND_DIST_DIR": str(frontend),
             # The Stripe check reaches back as far as a test asks (live: 01.10.2026).
             "MONEY_RECORDS_SINCE": None,
