@@ -82,6 +82,10 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/public/Contact')).Contact }),
           },
           {
+            path: '/link/:token',
+            lazy: async () => ({ Component: (await import('../pages/public/LinkCard')).LinkCard }),
+          },
+          {
             path: '/unsubscribe/:token',
             lazy: async () => ({ Component: (await import('../pages/public/Unsubscribe')).Unsubscribe }),
           },

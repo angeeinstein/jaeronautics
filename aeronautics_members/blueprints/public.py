@@ -91,6 +91,15 @@ def unsubscribe(token):
     return app_shell()
 
 
+@public_bp.route("/link/<token>", methods=["GET"])
+def link_card(token):
+    """Where a reader's QR code leads: linking the card just tapped there to
+    one's account (frontend/src/pages/public/LinkCard.tsx). Open without
+    signing in -- the page opens the link first, so the reader moves on, and
+    asks to sign in after."""
+    return app_shell()
+
+
 @public_bp.route("/__health", methods=["GET"])
 def health_check():
     checks = {"app": "ok", "database": "ok"}

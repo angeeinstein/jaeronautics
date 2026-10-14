@@ -6,6 +6,7 @@
     "/cancel",
     "/contact",
     "/unsubscribe/:token",
+    "/link/:token",
     "/account",
     "/account/profile",
     "/account/membership",

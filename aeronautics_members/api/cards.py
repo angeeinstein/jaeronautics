@@ -11,11 +11,11 @@ from flask_login import current_user
 from pydantic import Field
 
 from ..app import limiter, rate_limit_person
-from ..config import RATELIMIT_CARD_LINK
+from ..config import RATELIMIT_CARD_LINK, RATELIMIT_CARD_QR
 from ..db_models import Device, User, db
 from ..permissions import Permission
 from ..services import NotFoundError
-from ..services import cards, devices
+from ..services import card_links, cards, devices
 from ..services.pictures import picture_url
 from ._core import Model, UtcDateTime, endpoint
 
@@ -78,6 +78,60 @@ def my_cards_link(body):
     cards.link(current_user, body.card_id, name=body.name, by=current_user, how=cards.BY_PHONE)
     db.session.commit()
     return _mine()
+
+
+# --- Linked with a reader's QR code (services/card_links.py) ------------------------
+
+
+class CardLinkOpenIn(Model):
+    #: What this phone was given when it first opened the link; none the first time.
+    claim: str | None = Field(default=None, max_length=40)
+
+
+class CardLinkOut(Model):
+    #: To send again: only the phone that opened the link first can use it.
+    claim: str
+    #: The card's last characters: "…E5F6".
+    card: str
+    #: The reader it was tapped on, and where that is.
+    reader: str
+    place: str | None
+    tapped_at: UtcDateTime
+    expires_at: UtcDateTime
+    #: Whether somebody is signed in, to link it; else the page asks to sign in first.
+    signed_in: bool
+
+
+@endpoint("POST", "/card-links/<token>/open", response=CardLinkOut, body=CardLinkOpenIn, public=True, tag=TAG)
+@limiter.limit(RATELIMIT_CARD_QR, key_func=rate_limit_person)
+def card_link_open(token, body):
+    """A reader's QR code opened on a phone: the card tapped there and the
+    reader. The first phone keeps the link; signing in may come after."""
+    link, claim = card_links.open_link(token, body.claim)
+    db.session.commit()
+    return CardLinkOut(claim=claim, card=f"…{link.card_tail}", reader=devices.label(link.device),
+                       place=link.device.place, tapped_at=link.created_at, expires_at=link.expires_at,
+                       signed_in=bool(current_user.is_authenticated))
+
+
+class CardLinkUseIn(Model):
+    claim: str = Field(max_length=40)
+    name: str | None = Field(default=None, max_length=80)
+
+
+class CardLinkedOut(Model):
+    card: CardOut
+    first_name: str | None
+
+
+@endpoint("POST", "/card-links/<token>", response=CardLinkedOut, body=CardLinkUseIn, status=201, tag=TAG)
+@limiter.limit(RATELIMIT_CARD_LINK, key_func=rate_limit_person)
+def card_link_use(token, body):
+    """Link the card of a reader's QR code to one's account, from the phone that opened it."""
+    card = card_links.use(current_user, token, body.claim, name=body.name)
+    db.session.commit()
+    member = getattr(current_user, "member", None)
+    return CardLinkedOut(card=_card(card), first_name=member.first_name if member is not None else None)
 
 
 class CardChangeIn(Model):

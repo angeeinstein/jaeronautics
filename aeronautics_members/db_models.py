@@ -1613,6 +1613,36 @@ class Card(db.Model):
     last_used_device = db.relationship("Device")
 
 
+class CardLink(db.Model):
+    """An unknown card tapped on a reader, offered to be linked by its owner's
+    phone through a QR code (services/card_links.py, docs/cards-plan.md). It
+    keeps the card as cards do -- its keyed hash and end, never its ID -- and
+    a random ``token``, which the QR code's address holds. The first phone to
+    open it keeps it (``claim``); it works once, for a few minutes. Deleted
+    the next day."""
+
+    __tablename__ = "card_links"
+
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(40), nullable=False, unique=True)
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    card_hash = db.Column(db.String(64), nullable=False, index=True)
+    card_tail = db.Column(db.String(8), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    #: When a phone first opened it, and that phone's secret.
+    opened_at = db.Column(db.DateTime, nullable=True)
+    claim = db.Column(db.String(40), nullable=True)
+    #: Over before its time: the same card tapped again started a new one.
+    ended_at = db.Column(db.DateTime, nullable=True)
+    #: Used: the card it linked.
+    linked_at = db.Column(db.DateTime, nullable=True)
+    card_id = db.Column(db.Integer, db.ForeignKey("cards.id", ondelete="SET NULL"), nullable=True)
+
+    device = db.relationship("Device")
+    card = db.relationship("Card")
+
+
 class CardLinkWait(db.Model):
     """An admin waiting at a reader for the next unknown card, to link it to
     someone (services/cards.py). One per reader; it ends after a minute, or

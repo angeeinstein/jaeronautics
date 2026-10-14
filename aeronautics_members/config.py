@@ -124,6 +124,9 @@ RATELIMIT_PRESENCE = os.getenv("RATELIMIT_PRESENCE", "600 per 10 minute")
 # Linking a card by scanning it (docs/cards-plan.md), per account: a few
 # cards a year, so this only stops somebody trying IDs.
 RATELIMIT_CARD_LINK = os.getenv("RATELIMIT_CARD_LINK", "20 per hour")
+# Opening a reader's QR code for a card: per account, else per network -- a
+# campus behind one address links many cards in its first week.
+RATELIMIT_CARD_QR = os.getenv("RATELIMIT_CARD_QR", "60 per hour")
 # Devices (docs/devices-plan.md): per device, by its key, and a looser cap per
 # network address, where the workshop's devices share one.
 RATELIMIT_DEVICE = os.getenv("RATELIMIT_DEVICE", "120 per minute")

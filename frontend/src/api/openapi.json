@@ -2409,6 +2409,130 @@
         "title": "CardLinkIn",
         "type": "object"
       },
+      "CardLinkOpenIn": {
+        "additionalProperties": false,
+        "properties": {
+          "claim": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Claim"
+          }
+        },
+        "title": "CardLinkOpenIn",
+        "type": "object"
+      },
+      "CardLinkOut": {
+        "additionalProperties": false,
+        "properties": {
+          "card": {
+            "title": "Card",
+            "type": "string"
+          },
+          "claim": {
+            "title": "Claim",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place"
+          },
+          "reader": {
+            "title": "Reader",
+            "type": "string"
+          },
+          "signed_in": {
+            "title": "Signed In",
+            "type": "boolean"
+          },
+          "tapped_at": {
+            "title": "Tapped At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim",
+          "card",
+          "reader",
+          "place",
+          "tapped_at",
+          "expires_at",
+          "signed_in"
+        ],
+        "title": "CardLinkOut",
+        "type": "object"
+      },
+      "CardLinkUseIn": {
+        "additionalProperties": false,
+        "properties": {
+          "claim": {
+            "maxLength": 40,
+            "title": "Claim",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          }
+        },
+        "required": [
+          "claim"
+        ],
+        "title": "CardLinkUseIn",
+        "type": "object"
+      },
+      "CardLinkedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/CardOut"
+          },
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          }
+        },
+        "required": [
+          "card",
+          "first_name"
+        ],
+        "title": "CardLinkedOut",
+        "type": "object"
+      },
       "CardOut": {
         "additionalProperties": false,
         "properties": {
@@ -4452,6 +4576,38 @@
           "cohort"
         ],
         "title": "DetailsOut",
+        "type": "object"
+      },
+      "DeviceCardLinkOut": {
+        "additionalProperties": false,
+        "properties": {
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "First Name"
+          },
+          "state": {
+            "enum": [
+              "waiting",
+              "opened",
+              "linked",
+              "expired"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "DeviceCardLinkOut",
         "type": "object"
       },
       "DeviceChangeIn": {
@@ -27616,6 +27772,158 @@
         ]
       }
     },
+    "/api/v1/card-links/{token}": {
+      "post": {
+        "operationId": "card_link_use",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardLinkUseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardLinkedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Link the card of a reader's QR code to one's account, from the phone that opened it.",
+        "tags": [
+          "Cards"
+        ]
+      }
+    },
+    "/api/v1/card-links/{token}/open": {
+      "post": {
+        "operationId": "card_link_open",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardLinkOpenIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardLinkOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "A reader's QR code opened on a phone: the card tapped there and the",
+        "tags": [
+          "Cards"
+        ]
+      }
+    },
     "/api/v1/contact": {
       "get": {
         "operationId": "contact_form",
@@ -27702,6 +28010,47 @@
           }
         },
         "summary": "A device's sign of life: who it is, its settings, firmware to install, the",
+        "tags": [
+          "Device"
+        ]
+      }
+    },
+    "/api/v1/device/card-links/{link_id}": {
+      "get": {
+        "operationId": "device_card_link",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceCardLinkOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "Where the link of a QR code the device shows stands: asked every few",
         "tags": [
           "Device"
         ]

@@ -21,7 +21,7 @@ from ..db_models import Team, db
 from ..permissions import Permission
 from ..security_utils import build_public_url
 from ..services import NotFoundError, ServiceError, ValidationError, credit_sales, device_firmware, device_pairing
-from ..services import device_starter, device_types
+from ..services import card_links, device_starter, device_types
 from ..services import devices as devices_service
 from ._core import Model, UtcDateTime, endpoint
 
@@ -38,10 +38,11 @@ def device_rate_key():
     return f"device-unknown:{rate_limit_network()}"
 
 
-def _as_device(answer):
+def _as_device(answer, *, listed=True):
     """Sign the request's device in, answer it with ``answer(device)``, and
     record the request and its answer on the device -- a refusal too, when
-    the key named a device -- for watching it from its page."""
+    the key named a device -- for watching it from its page. ``listed=False``:
+    a question it asks every few seconds is listed only when refused."""
     device = None
     try:
         device = devices_service.authenticate(request.headers.get("Authorization"))
@@ -54,7 +55,7 @@ def _as_device(answer):
         status = result.status_code if isinstance(result, Response) else 200
         # "Nothing new" to a device asking every few seconds is not listed: its
         # last sign of life says it is there, and the list keeps what happened.
-        if status != 304:
+        if status != 304 and listed:
             _record_request(device, status)
         db.session.commit()
         return result
@@ -193,6 +194,23 @@ def device_hello():
 def device_resource(name):
     """Something the device's type offers it, such as a dispenser's items. Bearer key."""
     return _as_device(lambda device: DeviceResourceOut(resource=name, data=devices_service.resource(device, name)))
+
+
+class DeviceCardLinkOut(Model):
+    #: "waiting" (keep the QR code), "opened" (a phone has it), "linked", "expired".
+    state: Literal["waiting", "opened", "linked", "expired"]
+    #: Once linked: whom to greet. May be null.
+    first_name: str | None = None
+
+
+@endpoint("GET", "/device/card-links/<int:link_id>", response=DeviceCardLinkOut, public=True, tag="Device")
+@_limited
+def device_card_link(link_id):
+    """Where the link of a QR code the device shows stands: asked every few
+    seconds while it shows it (services/card_links.py). Bearer key; not
+    listed on the device's page unless refused."""
+    return _as_device(lambda device: DeviceCardLinkOut(**card_links.state_for_device(device, link_id)),
+                      listed=False)
 
 
 @endpoint("POST", "/device/events", response=DeviceReportOut, body=DeviceReportIn, public=True, tag="Device")
@@ -371,7 +389,7 @@ def device_pair_poll(body):
 
 #: The device API's views, exempt from CSRF in app.py: devices have no session.
 DEVICE_VIEWS = (device_hello, device_resource, device_report, device_firmware_info, device_firmware_file,
-                device_firmware_report, device_manager, device_pair_start, device_pair_poll)
+                device_firmware_report, device_manager, device_pair_start, device_pair_poll, device_card_link)
 DEVICE_ENDPOINTS = frozenset(f"api.{view.__name__}" for view in DEVICE_VIEWS)
 
 

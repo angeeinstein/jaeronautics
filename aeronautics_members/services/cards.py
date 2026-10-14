@@ -17,14 +17,16 @@ switch it on again; an admin *blocks* it, and only an admin lifts that.
 **Removing** it keeps the row -- what was paid with it still names it -- and
 frees its ID to be linked again.
 
-**Linking** a card (the first version, "enough for the first tests"):
+**Linking** a card:
 - its owner scans it with their phone on My Account › Cards (Web NFC);
+- its owner taps it on a reader with a screen and opens the QR code shown
+  there with their phone (services/card_links.py);
 - an admin scans it the same way for them, or waits at a reader for the next
   unknown card (:func:`wait_at_reader`), with the person beside them.
 
-There is no linking a member can start at a reader from the portal alone:
-anybody, anywhere, could start it, and a stranger's first tap would end up
-in their account.
+There is no linking a member can start from the portal alone: anybody,
+anywhere, could start it, and a stranger's first tap would end up in their
+account. The QR code only exists on the reader, just after the card's tap.
 """
 
 import hashlib
@@ -35,7 +37,7 @@ from datetime import timedelta, timezone
 from flask import current_app
 from sqlalchemy.exc import IntegrityError
 
-from ..db_models import Card, CardLinkWait, Device, User, db
+from ..db_models import Card, CardLink, CardLinkWait, Device, User, db
 from . import ConflictError, NotFoundError, ValidationError
 from .audit import log_audit_event
 from .clock import get_now_utc
@@ -57,10 +59,12 @@ KEY_CHECK_SETTING = "cards_key_check"
 BY_PHONE = "phone"
 BY_ADMIN_PHONE = "admin_phone"
 BY_READER = "reader"
+BY_QR = "qr"
 LINKED_HOW = {
     BY_PHONE: "Scanned by its owner",
     BY_ADMIN_PHONE: "Scanned by an admin",
     BY_READER: "Tapped on a reader, with an admin",
+    BY_QR: "Tapped on a reader, linked by its owner",
 }
 
 # A card's state, as shown.
@@ -184,7 +188,11 @@ def link(user, card_id, *, name=None, by, how):
     """Link the card with this ID to ``user``. Refused when it is linked to
     somebody already, or ``user`` has as many cards as anyone may."""
     card_id = normalize(card_id)
-    hashed = id_hash(card_id)
+    return link_hashed(user, id_hash(card_id), card_id[-TAIL:], name=name, by=by, how=how)
+
+
+def link_hashed(user, hashed, id_tail, *, name=None, by, how):
+    """:func:`link`, for a card known by its hash and end only (a QR code's link)."""
     existing = db.session.execute(db.select(Card).filter_by(linked_hash=hashed)).scalar_one_or_none()
     if existing is not None:
         if existing.user_id == user.id:
@@ -195,7 +203,7 @@ def link(user, card_id, *, name=None, by, how):
         raise ConflictError(f"At most {MOST_CARDS} cards per person.", code="card_too_many")
     now = get_now_utc()
     card = Card(user_id=user.id, name=_clean_name(name), id_hash=hashed, linked_hash=hashed,
-                id_tail=card_id[-TAIL:], linked_how=how, linked_at=now,
+                id_tail=id_tail, linked_how=how, linked_at=now,
                 linked_by_user_id=by.id if by is not None else None)
     try:
         with db.session.begin_nested():
@@ -262,7 +270,10 @@ def forget_for_erasure(user, actor=None):
     """At erasure: every card of the person removed, and its hash gone too.
     Returns how many."""
     count = 0
-    for card in cards_of(user, include_removed=True):
+    owned = cards_of(user, include_removed=True)
+    # The QR codes' links that linked them keep the card's hash: gone too.
+    card_ids = [card.id for card in owned]
+    for card in owned:
         if card.removed_at is None:
             card.removed_at = get_now_utc()
             card.removed_by_user_id = actor.id if actor is not None else None
@@ -271,6 +282,8 @@ def forget_for_erasure(user, actor=None):
         card.name = DEFAULT_NAME
         count += 1
     db.session.execute(db.delete(CardLinkWait).where(CardLinkWait.user_id == user.id))
+    if card_ids:
+        db.session.execute(db.delete(CardLink).where(CardLink.card_id.in_(card_ids)))
     return count
 
 

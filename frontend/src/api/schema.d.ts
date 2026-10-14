@@ -2056,6 +2056,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/card-links/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Link the card of a reader's QR code to one's account, from the phone that opened it. */
+        post: operations["card_link_use"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/card-links/{token}/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A reader's QR code opened on a phone: the card tapped there and the */
+        post: operations["card_link_open"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/contact": {
         parameters: {
             query?: never;
@@ -2083,6 +2117,23 @@ export interface paths {
         };
         /** A device's sign of life: who it is, its settings, firmware to install, the */
         get: operations["device_hello"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/device/card-links/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Where the link of a QR code the device shows stands: asked every few */
+        get: operations["device_card_link"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4017,6 +4068,47 @@ export interface components {
              */
             name?: string | null;
         };
+        /** CardLinkOpenIn */
+        CardLinkOpenIn: {
+            /**
+             * Claim
+             * @default null
+             */
+            claim?: string | null;
+        };
+        /** CardLinkOut */
+        CardLinkOut: {
+            /** Card */
+            card: string;
+            /** Claim */
+            claim: string;
+            /** Expires At */
+            expires_at: string;
+            /** Place */
+            place: string | null;
+            /** Reader */
+            reader: string;
+            /** Signed In */
+            signed_in: boolean;
+            /** Tapped At */
+            tapped_at: string;
+        };
+        /** CardLinkUseIn */
+        CardLinkUseIn: {
+            /** Claim */
+            claim: string;
+            /**
+             * Name
+             * @default null
+             */
+            name?: string | null;
+        };
+        /** CardLinkedOut */
+        CardLinkedOut: {
+            card: components["schemas"]["CardOut"];
+            /** First Name */
+            first_name: string | null;
+        };
         /** CardOut */
         CardOut: {
             /** Id */
@@ -4659,6 +4751,19 @@ export interface components {
             private_email: string | null;
             /** University Email */
             university_email: string | null;
+        };
+        /** DeviceCardLinkOut */
+        DeviceCardLinkOut: {
+            /**
+             * First Name
+             * @default null
+             */
+            first_name?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "waiting" | "opened" | "linked" | "expired";
         };
         /** DeviceChangeIn */
         DeviceChangeIn: {
@@ -16875,6 +16980,121 @@ export interface operations {
             };
         };
     };
+    card_link_use: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardLinkUseIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardLinkedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    card_link_open: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardLinkOpenIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardLinkOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     contact_form: {
         parameters: {
             query?: never;
@@ -16953,6 +17173,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeviceHelloOut"];
+                };
+            };
+        };
+    };
+    device_card_link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceCardLinkOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };

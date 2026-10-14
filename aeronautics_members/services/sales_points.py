@@ -10,7 +10,9 @@ and icons, "Hi Alex" and the balance -- and one is bought:
 1. ``card`` (data ``{"card": "04A1B2C3D4E5F6"}``): the card is checked, and
    answered ``{"result": "menu", "ticket", "expires_in", "first_name",
    "balance_cents", "items"}``; or ``linked`` (an admin was waiting at this
-   reader for an unknown card, services/cards.py); or ``refused``.
+   reader for an unknown card, services/cards.py); or ``refused`` -- an
+   unknown card's with a ``link`` for the QR code its owner links it with
+   (services/card_links.py).
 2. ``buy`` (data ``{"ticket", "item"}``): the item is sold with the ticket,
    answered ``{"result": "sold", "item", "price_cents", "balance_cents",
    "first_name"}``, or ``refused``.
@@ -32,7 +34,7 @@ from datetime import timedelta, timezone
 
 from ..db_models import CreditItem, Device, SaleTicket, db
 from . import ConflictError, ValidationError
-from . import cards, credit, credit_sales, device_types
+from . import card_links, cards, credit, credit_sales, device_types
 from .clock import get_now_utc
 from .locking import locked
 
@@ -163,6 +165,9 @@ def _card(device, data, event_id):
     tap = cards.tapped(device, card_id)
     if tap.linked is not None:
         return {"result": "linked", "card": tap.linked.name}
+    if tap.refused == cards.CARD_UNKNOWN:
+        # Its owner links it with the QR code the reader shows (services/card_links.py).
+        return _refused(tap.refused, link=card_links.for_device(card_links.offer(device, card_id)))
     if tap.refused is not None:
         return _refused(tap.refused)
     if not credit.enabled():
@@ -270,6 +275,11 @@ portal's to decide. The `answer` is one of:
   and it is now linked to somebody.
 - `{"result": "refused", "reason": "...", "message": "..."}` -- `reason` one of `card_unknown`,
   `card_disabled`, `card_blocked`, `account_off`, `credit_off`, `not_set_up` (no items chosen yet).
+  `card_unknown` comes with `"link": {"id": 17, "url": "https://…/link/…", "show_for": 30,
+  "check_every": 2}`: show `url` as a QR code for at most `show_for` seconds, and meanwhile ask
+  `GET /api/v1/device/card-links/<id>` every `check_every` seconds. Its `state`: `waiting` (keep
+  the code), `opened` (a phone has it: "Continue on your phone" for a few seconds, then the normal
+  screen), `linked` (with `first_name`: "Linked, hi Alex"), `expired` (the normal screen).
 
 **An item chosen:** report `buy` with `"data": {"ticket": "t_…", "item": 4}`. The answer:
 
