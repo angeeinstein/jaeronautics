@@ -275,6 +275,12 @@ class TestPairing:
                        {"type": "sales_point", "owner": "association"})
         assert refused.get_json()["error"]["code"] == "device_type_unsupported"
 
+    def test_a_type_must_be_chosen(self, app, client, admin):
+        started = _start(app.test_client())
+        signed_in(client, admin)
+        refused = send(client, "POST", f"/api/v1/admin/devices/pairings/{started['code']}", {"owner": "association"})
+        assert refused.get_json()["error"]["fields"] == {"type": "Choose a type."}
+
     def test_a_new_board_replacing_one(self, app, client, admin):
         old_key, old = _paired(app, client, admin, name="Fridge")
         device_client = app.test_client()

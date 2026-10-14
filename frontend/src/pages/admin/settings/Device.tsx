@@ -114,7 +114,10 @@ function SettingsForm({
   const [owner, setOwner] = useState(device.owner);
   const [typeSlug, setTypeSlug] = useState(device.type);
   const type = types.find((item) => item.slug === typeSlug);
-  const choosable = typesFor(types, device.supported_types);
+  // What its firmware can be -- and what it is now, should its firmware no longer say so.
+  const choosable = types.filter(
+    (item) => item.slug === device.type || typesFor(types, device.supported_types).includes(item),
+  );
   const [name, setName] = useState(device.name ?? '');
   const [place, setPlace] = useState(device.place ?? '');
   const [description, setDescription] = useState(device.description ?? '');

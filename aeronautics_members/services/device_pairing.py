@@ -122,6 +122,9 @@ def start(*, hardware=None, firmware=None, board=None, types=None, address=None,
 
 
 def _check_type(pairing, type):
+    if not type:
+        raise ValidationError("Choose a type.", code="device_type_unknown",
+                              details={"fields": {"type": "Choose a type."}})
     if pairing.supported_types is not None and type not in pairing.supported_types:
         device_type = device_types.get(type)
         label = device_type.label if device_type is not None else type
