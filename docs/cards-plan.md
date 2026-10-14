@@ -63,7 +63,16 @@ type, not by the card.
   - admins: a Cards section on each account's admin page, and a list of all
     cards.
 
-### Linking a card (the first version)
+### Linking a card (the first version, removed 2026-10-14)
+
+*Removed once linking with a reader's QR code worked (below): it is the one
+way now. The maintainer: "Since the card linking via the QR code works so
+perfectly ... I don't want to keep features that are not really necessary
+and may only confuse people", and "I don't think there is a single student
+who doesn't have a smartphone". Web NFC worked only in Chrome on Android;
+the admin's ways were a stand-in for whoever could not use it. Quickly
+brought back from git history if a reader without a screen ever needs them.
+Kept as the record of the start.*
 
 "Enough for the first tests"; more ways later.
 
