@@ -89,8 +89,12 @@ maintainer says so).
 - **Decided:** `docs/cards-plan.md`, "Linking a card at a reader with a QR
   code": 2 minutes, once, a token rather than the card's ID, any signed-in
   account.
-- **Open:** how the reader hears of the link (proposed there: asking every 2
-  seconds while the code is shown); whether to build it now.
+- **Also decided:** the reader asks every 2 seconds; the QR code goes as
+  soon as a phone opens the link, replaced by "finish on your phone"; the
+  reader goes back to its normal screen quickly if nobody finishes.
+- **Open:** the times proposed there (30 s for the QR code, 60 s for
+  "finish on your phone"); the first phone keeping the link; whether to
+  build it now.
 
 ### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
 

@@ -98,12 +98,31 @@ The member links their own card at a reader with a screen, with any phone
 3. The phone opens the portal (signing in first if needed): "Link the card
    …A1F3, tapped at Rocket fridge just now?", with a name for it, and
    *Link*.
-4. The reader learns of it by itself and shows "Linked, hi Alex"; the next
-   tap opens the menu. How it learns (proposed, to be confirmed): while the
-   QR code is shown, it asks the portal every 2 seconds about that link, as
-   it does while pairing (`waiting`, `linked` with the first name,
-   `expired`); those requests are not listed on the device's page.
+4. The reader learns of it by itself: while it waits, it asks the portal
+   about that link **every 2 seconds** (agreed: "I don't want to wait ten
+   seconds here ... two seconds seems right"), as it does while pairing.
+   Those requests are not listed on the device's page. The answers:
+   - `waiting` -- nobody has opened the link yet: the QR code stays;
+   - `opened` -- a phone has opened it: the QR code goes **at once**, and the
+     reader says to finish on the phone, that it waits for that;
+   - `linked`, with the first name -- "Linked, hi Alex", then the normal
+     screen; the next tap opens the menu;
+   - `expired` -- back to the normal screen.
 
+   **The reader is not held up for long** (the maintainer: "if somebody scans
+   the code and then abandons this, I want the device to switch back to the
+   normal default screen rather quickly so that other people could use the
+   terminal"). Proposed, to be confirmed: the QR code is shown for at most
+   **30 seconds**, the "finish on your phone" screen for at most **60
+   seconds**; then the reader goes back to its normal screen and stops
+   asking. The link itself still works until its 2 minutes are up, so
+   somebody slow can still finish on the phone: the next tap then opens the
+   menu. The portal sends these times with the link, so they can be changed
+   without a firmware update.
+
+- **The first phone to open the link keeps it** (proposed): another phone
+  opening the same link is told it is already being used. That also closes
+  most of the "photographed QR code" case below.
 - **Who may link:** any signed-in account, as with Web NFC today -- not only
   active members. "Just linking a card isn't really any problematic thing";
   paying needs credit, and topping up needs an active membership.
