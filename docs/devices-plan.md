@@ -49,10 +49,12 @@ association the admins or leaders can use their device however they like."
   **owner**: the association or one team -- and keep what is technical: the
   key, the request log, removing it, linking cards at a reader.
 - **The owner** -- a team's leads and team treasurer on the team's
-  management page; for the association, admins and the treasurer on
-  Admin › Credit -- gets a *Devices* section: each of their devices, online
+  management page -- gets a *Devices* section: each of their devices, online
   or not, the recent taps in plain words ("so that they can actually see
-  that this is working"), and freely its name, place, item and on/off.
+  that this is working"), and freely its name, place and on/off. What a
+  sales point sells is chosen on the owner's *Sales* page, with the price
+  list (2026-10-14: "this devices page should only be about technical
+  stuff"); the association's on Admin › Sales.
 - **A reader sells only its owner's items**, so every sale counts for the
   owner (before, an admin could set a team's reader to an item of another
   seller). Given to another owner, a reader's item is cleared.

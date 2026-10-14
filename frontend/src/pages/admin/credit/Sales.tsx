@@ -1,5 +1,5 @@
 /**
- * Admin › Sales (docs/todo.md, "Credit, sales and devices"): what is sold for
+ * Admin › Sales (docs/credit-plan.md, "Where it is shown"): what is sold for
  * credit -- by seller (the association and each team), and by item, how many
  * and what each made -- the association's own price list, and its sales
  * points' menus. For admins and the association's treasurer (credit.manage).

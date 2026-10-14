@@ -1,6 +1,6 @@
 /**
- * A team's Sales page (docs/credit-plan.md, "Selling"; docs/todo.md, "Credit,
- * sales and devices"): what it sold for credit, by item -- how many and what
+ * A team's Sales page (docs/credit-plan.md, "Selling", "Where it is shown"):
+ * what it sold for credit, by item -- how many and what
  * each made -- its price list, and its sales points' menus, chosen from that
  * list. For its leads and treasurer. What it sold counts towards what the
  * team is owed (its Money page); a device's name and switch are on Devices.

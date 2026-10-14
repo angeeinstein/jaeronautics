@@ -46,7 +46,7 @@ test.describe('credit', () => {
 
   test('a lead keeps the team’s prices, and its money shows what it sold', async ({ page }) => {
     await signIn(page, 'active@example.org');
-    await page.goto('/teams/rocket-team/manage/prices');
+    await page.goto('/teams/rocket-team/manage/sales');
 
     const list = page.getByRole('table', { name: 'Price list' });
     await expect(list.getByRole('row', { name: /Beer/ })).toContainText('€2.00');

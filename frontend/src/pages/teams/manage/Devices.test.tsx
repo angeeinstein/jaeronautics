@@ -32,6 +32,7 @@ function fridge(overrides: Partial<Schemas['OwnedDeviceOut']> = {}): Schemas['Ow
         label: 'Items',
         kind: 'choices',
         most: 4,
+        with_prices: true,
         default: [],
         help: "What its menu offers, in this order: at most 4, from the owner's price list.",
         max_length: 200,
@@ -72,7 +73,7 @@ describe("a team's devices", () => {
     );
   });
 
-  it("is named and given items from the team's own price list, in order", async () => {
+  it('is named; its menu is chosen on the Sales page, not here', async () => {
     const { calls } = show({
       [`PATCH ${API}/7`]: {
         body: {
@@ -83,9 +84,7 @@ describe("a team's devices", () => {
 
     const card = await screen.findByRole('region', { name: 'K7MQ-2X9A' });
     await userEvent.type(within(card).getByRole('textbox', { name: /^Name/ }), 'Rocket fridge');
-    await userEvent.click(within(card).getByRole('combobox', { name: 'Items' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'Coffee, €0.80' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'Mate, €2.50' }));
+    expect(within(card).queryByRole('combobox', { name: 'Items' })).not.toBeInTheDocument();
     await userEvent.click(within(card).getByRole('button', { name: 'Save' }));
 
     expect(await screen.findByRole('region', { name: 'Rocket fridge' })).toBeInTheDocument();
@@ -94,7 +93,6 @@ describe("a team's devices", () => {
       name: 'Rocket fridge',
       place: '',
       description: '',
-      settings: { items: [11, 9] },
     });
   });
 

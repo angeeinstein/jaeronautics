@@ -1,6 +1,6 @@
 /**
- * What a seller sold for credit, by item (docs/todo.md, "Credit, sales and
- * devices"): how many of each and what each made, the last 30 days and ever
+ * What a seller sold for credit, by item (docs/credit-plan.md, "Where it is
+ * shown"): how many of each and what each made, the last 30 days and ever
  * -- "to see what beverages are liked by the members and how much money they
  * made with each item". A sale taken back counts for neither. Data: a
  * SellerSalesOut (api/credit.py).

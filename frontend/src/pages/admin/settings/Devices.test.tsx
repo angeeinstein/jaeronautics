@@ -550,7 +550,7 @@ describe('one device', () => {
     expect(await sent?.clone().json()).toMatchObject({ owner: 'rocket', settings: { greeting: 'Hello' } });
   });
 
-  it("a sales point offers items chosen from its owner's price list, in order", async () => {
+  it("a sales point's menu is not on its page: it is chosen on its owner's Sales page", async () => {
     const salesPoint: Schemas['DeviceTypeOut'] = {
       slug: 'sales_point',
       label: 'Sales point',
@@ -561,6 +561,7 @@ describe('one device', () => {
           label: 'Items',
           kind: 'choices',
           most: 4,
+          with_prices: true,
           default: [],
           help: '',
           max_length: 200,
@@ -594,13 +595,8 @@ describe('one device', () => {
       route,
     );
 
-    // The ones chosen, as pills in the order chosen; the list offers only the owner's.
-    expect(await screen.findByRole('combobox', { name: 'Items' })).toBeInTheDocument();
-    const chosen = screen
-      .getAllByText(/^(Coffee|Beer|Club-Mate), €/)
-      .filter((text) => !text.closest('[role="option"]'));
-    expect(chosen.map((pill) => pill.textContent)).toEqual(['Coffee, €0.80', 'Beer, €1.50']);
-    expect(screen.queryByText('Club-Mate, €2.00')).not.toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Sales page' })).toHaveAttribute('href', '/admin/sales');
+    expect(screen.queryByRole('combobox', { name: 'Items' })).not.toBeInTheDocument();
     const report = screen.getByRole('group', { name: 'Report “card”' });
     expect(report).toHaveTextContent('Not sent from here');
   });

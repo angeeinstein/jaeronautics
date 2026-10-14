@@ -81,39 +81,6 @@ maintainer says so).
   `claude/device-pairing`); this is the part left for when the firmware
   side is settled. Signing the firmware: not planned.
 
-### Credit, sales and devices: each in its own place
-
-- **Added:** 2026-10-14
-- **What:** the admin Credit page holds too much -- the summary tiles, *Sold*,
-  the association's price list, the association's devices, *Balances*,
-  *Latest* -- "this is all a bit mixed up. I think we should separate all of
-  those things and make it clear what is about a device, what is about some
-  history or some logs, and where do they belong. Maybe even split it and
-  not put everything in the same credit submenu." The team pages to be
-  looked at the same way.
-- **And the device page:** an admin changing a device's owner from the
-  association to a team without a price list could not save: the form sent
-  the old owner's items with it (the server clears them itself on an owner
-  change). The maintainer: "Maybe we should remove this items input in the
-  devices page completely, because this should be done in another menu where
-  we manage the price list ... this devices page should only be about
-  technical stuff and things like the ownership and the name and place and
-  description".
-- **Agreed (2026-10-14)**, "I will judge this when I see it":
-  - Admin **Credit**: members' money only -- the tiles, *Balances*, *Latest*.
-  - Admin **Sales** (new): *Sold* per seller (the association and each
-    team), the association's price list, its sales points' menus.
-  - **Settings › Devices**: technical only -- owner, type, name, place,
-    description, on/off, key, firmware, its log; no items. A sales point's
-    menu is chosen on its owner's *Sales* page.
-  - The sidebar: a **Money** group with *Money*, *Credit*, *Sales*.
-  - Teams: *Prices* becomes **Sales** (price list, then the sales points'
-    menus); *Devices* keeps name, place, on/off and the log, no items.
-  - **Per item:** how many were sold and what each made, for the association
-    and every team, the last 30 days and ever -- "interesting to see what
-    beverages ... are liked by the members and how much money they made with
-    each item".
-
 ### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
 
 - **Added:** 2026-10-12

@@ -1,6 +1,6 @@
 /**
- * An owner's sales points and what each sells (docs/todo.md, "Credit, sales
- * and devices"): on the owner's Sales page, under the price list the items
+ * An owner's sales points and what each sells (docs/credit-plan.md, "Where it
+ * is shown"): on the owner's Sales page, under the price list the items
  * come from -- the association's on Admin › Sales, a team's on its Sales
  * page. Only the settings chosen from the price list (a sales point's menu,
  * up to four items in order); a device's name, place and switch are on its

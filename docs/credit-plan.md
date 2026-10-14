@@ -152,6 +152,27 @@ What the maintainer asked for (2026-10-09):
 - **The association's sales** stay with it. Admin › Credit › *Sold* shows
   each seller's last 30 days and total.
 
+## Where it is shown (agreed and built 2026-10-14)
+
+The maintainer, of Admin › Credit holding tiles, *Sold*, the price list, the
+devices, balances and the latest entries: "this is all a bit mixed up ...
+make it clear what is about a device, what is about some history or some
+logs, and where do they belong". Now:
+
+- **Admin › Credit:** members' money only -- the totals, *Balances*, *Latest*.
+- **Admin › Sales:** what was sold, by seller (the association and each
+  team) and by item -- how many and what each made, the last 30 days and
+  ever, "to see what beverages ... are liked by the members and how much
+  money they made with each item" -- the association's price list, and its
+  sales points' menus.
+- **A team's Sales page** (was *Prices*): the same for the team.
+- **Device pages** (Settings › Devices, a team's *Devices*): technical only.
+  What a sales point sells is a setting marked `with_prices`
+  (`services/device_types.py`), shown and saved only on the Sales pages --
+  before, an owner change could not be saved while the form still sent the
+  old owner's items.
+- The admin sidebar has a *Money* group: *Money*, *Credit*, *Sales*.
+
 ## Who carries Stripe's fees (built 2026-10-09, changed 2026-10-11)
 
 The board had not decided ("they were not fully convinced that … the

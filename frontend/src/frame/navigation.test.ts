@@ -36,7 +36,8 @@ describe('the admin sidebar', () => {
     expect(labels()).toEqual([
       ['Overview', ['Dashboard']],
       ['People', ['Accounts', 'Reviews', 'Cards']],
-      ['Teams', ['Teams', 'Money']],
+      ['Money', ['Money']],
+      ['Teams', ['Teams']],
       ['System', ['Logs', 'Legal texts', 'Settings']],
     ]);
   });
@@ -45,7 +46,7 @@ describe('the admin sidebar', () => {
     const treasurer = makeMe({ permissions: ['admin.access', 'teams.money'] });
     expect(labels(treasurer)).toEqual([
       ['Overview', ['Dashboard']],
-      ['Teams', ['Money']],
+      ['Money', ['Money']],
     ]);
   });
 
@@ -86,7 +87,7 @@ describe('the admin sidebar', () => {
   it('teams under the name they have here, and the count of reviews waiting', () => {
     const me = makeMe({ team_labels: { singular: 'Crew', plural: 'Crews' }, counts: { reviews_waiting: 3 } });
     const groups = adminSidebar(me).groups;
-    expect(groups[2]?.label).toBe('Crews');
+    expect(groups[3]?.label).toBe('Crews');
     expect(groups[1]?.items.find((item) => item.label === 'Reviews')?.count).toBe(3);
   });
 });

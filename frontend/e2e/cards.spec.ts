@@ -18,9 +18,8 @@ test.describe('cards and sales points', () => {
     await page.getByRole('option', { name: 'Rocket Team' }).click();
     await form.getByRole('combobox', { name: 'Type' }).click();
     await page.getByRole('option', { name: 'Sales point' }).click();
-    await form.getByRole('combobox', { name: 'Items' }).click();
-    await page.getByRole('option', { name: 'Mate, €2.50' }).click();
-    await form.getByRole('textbox', { name: /^Name/ }).click();
+    // What it sells is not chosen here: on the owner's Sales page.
+    await expect(form.getByRole('combobox', { name: 'Items' })).toHaveCount(0);
     await form.getByRole('button', { name: 'Add' }).click();
     const key = (await page.getByTestId('device-key').textContent())?.trim() ?? '';
     expect(key).toMatch(/^jadev_/);
@@ -67,13 +66,20 @@ test.describe('cards and sales points', () => {
     await expect(page.getByText(/This browser cannot read cards/)).toBeVisible();
   });
 
-  test("a lead runs the team's reader on the team's page", async ({ page }) => {
+  test("a lead chooses the team's sales point's menu on the Sales page", async ({ page }) => {
     await signIn(page, 'active@example.org');
     await page.goto('/teams/rocket-team/manage/devices');
-    const fridge = page.getByRole('region', { name: 'Rocket fridge' });
-    await expect(fridge).toContainText('Sales point');
-    await expect(fridge.getByRole('combobox', { name: 'Items' })).toBeVisible();
-    await expect(fridge.getByText('Beer, €2.00', { exact: true })).toBeVisible();
+    const device = page.getByRole('region', { name: 'Rocket fridge' });
+    await expect(device).toContainText('Sales point');
+    await expect(device.getByRole('combobox', { name: 'Items' })).toHaveCount(0);
+
+    await page.goto('/teams/rocket-team/manage/sales');
+    const menu = page.getByRole('region', { name: 'Rocket fridge' });
+    await expect(menu.getByRole('combobox', { name: 'Items' })).toBeVisible();
+    await expect(menu.getByText('Beer, €2.00', { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('table', { name: 'Sold by item' }).getByRole('row', { name: /Beer/ }),
+    ).toBeVisible();
   });
 
   test('an unknown card tapped on a reader is linked with its QR code, on the phone', async ({

@@ -85,9 +85,11 @@ export function menuFields(settings: SettingField[]): SettingField[] {
   return settings.filter((setting) => setting.with_prices);
 }
 
-/** Only these settings' values: what a form sends is what it shows. */
+/** Only these settings' values, those given: what a form sends is what it shows. */
 export function valuesOf(values: Settings, fields: SettingField[]): Settings {
-  return Object.fromEntries(fields.map((field) => [field.name, values[field.name] ?? null]));
+  return Object.fromEntries(
+    fields.filter((field) => field.name in values).map((field) => [field.name, values[field.name]]),
+  );
 }
 
 /** Where an owner ("association" or a team's slug) chooses its devices' menus. */

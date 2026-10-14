@@ -655,13 +655,16 @@ a reason) and refunds. Admin › Settings › Credit is `settings.general`.
   books nothing more. A refund made in Stripe's dashboard comes off the
   credit through the webhook.
 
-**Selling.** The association's price list is on Admin › Credit; each team's
-on its *Prices* page (leads and team treasurer). A sale is booked by hand on
+**Selling.** Admin › **Sales** (admins and the treasurer) shows what was
+sold, by seller and by item -- how many and what each made, the last 30 days
+and ever -- the association's price list and its sales points' menus; each
+team has the same for itself on its *Sales* page (leads and team treasurer).
+Admin › Credit keeps to members' money: the totals, balances, the latest
+entries. A sale is booked by hand on
 a person's credit page (Admin › Credit › the person › *Book by hand* ›
 *Sale*) and taken back from its row. What a team sells counts in its money
 like its fees and is transferred with the next payout; the association's
-own sales stay with it. Card readers are designed in `docs/credit-plan.md`,
-not built.
+own sales stay with it. Card readers: "Cards and sales points" below.
 
 **Switching it off** hides credit from members and stops top-ups. Balances
 and history stay, Admin › Credit stays while anybody still has some, and a
@@ -685,12 +688,12 @@ Devices (admins: `devices.manage`). The plan, and what is decided:
 
 - **Adding one:** its type and its **owner** -- the association or a team --
   and, if wanted, a name (its random code, such as `K7MQ-2X9A`, stands in for
-  one). The owner runs it from then on: a team's leads and treasurer on the
-  team's page, *Devices*; the association's admins and treasurer on Admin ›
-  Credit. They name it, place it, describe it, choose what it does within its
-  type (a reader's item, from their own price list) and switch it off or on,
-  and see what it reported lately. The key, the type, the owner and removing
-  it stay with admins.
+  one). A team's leads and treasurer run the team's from its *Devices* page:
+  name, place, description, on or off, what it reported lately. **What a
+  sales point sells** is chosen with the price list, on the owner's *Sales*
+  page (Admin › Sales for the association's) -- never on a device's page, so
+  changing a device's owner always saves and its menu starts empty. The key,
+  the type, the owner and removing it stay with admins.
 - **Its key is shown once,** with *Copy key*, *Download configuration* (a
   JSON file: the portal's address, the device's code, its type, the key) and
   *Download starter*: a Markdown file with everything firmware for it needs
@@ -765,8 +768,8 @@ Paying for a drink by tapping a card (docs/cards-plan.md). The code:
 
 - **A reader at the fridge:** Admin › Settings › Devices › *Add*, type
   *Sales point*, and its owner. Its owner chooses up to four **items**, in
-  order, from their own price list (the association's on Admin › Credit, a
-  team's on its Prices page); every item there has an icon, chosen from a
+  order, from their own price list, both on their *Sales* page (Admin › Sales
+  for the association's); every item there has an icon, chosen from a
   fixed list when it is added. The sale counts for the owner. A card tapped
   is reported as `card` and answered with a menu -- the items, the first
   name, the balance and a ticket valid for 20 seconds; the item chosen is
