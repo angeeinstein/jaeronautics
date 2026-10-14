@@ -8,7 +8,6 @@ A device is driven here the way its ESP32 drives it: plain HTTP, its key as a
 bearer token once it has one, the usual headers saying what it is.
 """
 import hashlib
-import struct
 from datetime import timedelta
 from pathlib import Path
 
@@ -27,23 +26,8 @@ BOARD = {"X-Device-Hardware": "98:a3:16:e5:06:3c", "X-Device-Firmware": "0.2.0",
 
 
 def _image(version="0.3.0", project="jae-terminal", payload=b"\x5a" * 300):
-    """An ESP-IDF app image as the build writes it (the layout esptool reads;
-    tests/fixtures holds one esptool wrote): header, one segment opening with
-    the app description, the checksum ending a 16-byte block, the SHA-256."""
-    desc = struct.pack("<IIII", firmware_image.APP_DESC_MAGIC, 0, 0, 0)
-    desc += version.encode().ljust(32, b"\0") + project.encode().ljust(32, b"\0")
-    desc += b"09:12:44".ljust(16, b"\0") + b"Oct 14 2026".ljust(16, b"\0") + b"v5.3.1".ljust(32, b"\0")
-    segment = desc.ljust(firmware_image.APP_DESC_SIZE, b"\0") + payload
-    header = bytearray(24)
-    header[0], header[1] = firmware_image.IMAGE_MAGIC, 1
-    struct.pack_into("<H", header, 12, 0x0009)
-    header[23] = 1
-    data = bytes(header) + struct.pack("<II", 0x3C000020, len(segment)) + segment
-    checksum = firmware_image.CHECKSUM_SEED
-    for byte in segment:
-        checksum ^= byte
-    data += b"\0" * (15 - len(data) % 16) + bytes([checksum])
-    return data + hashlib.sha256(data).digest()
+    """An app image as ESP-IDF lays it out (checked against one esptool wrote, below)."""
+    return firmware_image.example(version, project, payload)
 
 
 @pytest.fixture

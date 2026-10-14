@@ -7,6 +7,8 @@ import { makeMe } from '../../../test/fixtures';
 import { type Answers, mockFetch, renderPage } from '../../../test/render';
 import { DeviceDetail } from './Device';
 import { Devices } from './Devices';
+import { Firmware } from './Firmware';
+import { PairDevice } from './PairDevice';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -60,6 +62,13 @@ const reader: Schemas['DeviceOut'] = {
   last_seen_at: '2026-10-12T07:00:00Z',
   last_address: '10.0.0.5',
   firmware: '0.1.0',
+  board: 'jae-terminal-s3',
+  supported_types: null,
+  backup_code: '482913',
+  firmware_wanted: null,
+  firmware_state: 'none',
+  firmware_release_id: null,
+  firmware_failed_detail: null,
   key_hint: 'jadev_3f9a1c2b7d10_…AbCd',
   key_last_used_at: '2026-10-12T07:00:00Z',
   key_revoked_at: null,
@@ -67,11 +76,61 @@ const reader: Schemas['DeviceOut'] = {
   created_at: '2026-10-12T06:00:00Z',
 };
 
+const release: Schemas['FirmwareReleaseOut'] = {
+  id: 7,
+  version: '0.3.0',
+  project: 'jae-terminal',
+  built: 'Oct 14 2026 09:12:44',
+  idf_version: 'v5.3.1',
+  chip: 'esp32s3',
+  sha256: 'ab'.repeat(32),
+  size: 1_468_006,
+  file_name: 'jae-terminal.bin',
+  notes: 'Faster taps',
+  uploaded_at: '2026-10-14T08:00:00Z',
+  uploaded_by: 'admin@example.org',
+  chosen: false,
+  chosen_for: 0,
+  running: 0,
+};
+
+const firmware: Schemas['FirmwareOut'] = {
+  releases: [release],
+  chosen_id: null,
+  project: 'jae-terminal',
+  max_size: 16 * 1024 * 1024,
+  devices: [
+    {
+      id: 3,
+      code: 'K7MQ-2X9A',
+      label: 'Fridge reader',
+      online: true,
+      running: '0.2.0',
+      wanted: '0.3.0',
+      own: false,
+      state: 'failed',
+      failed_detail: 'Image invalid',
+    },
+  ],
+};
+
+const pairing: Schemas['DevicePairingOut'] = {
+  code: 'K7Q-4X9',
+  hardware_id: '98:A3:16:E5:06:3C',
+  firmware: '0.2.0',
+  board: 'jae-terminal-s3',
+  supported_types: ['test'],
+  address: '10.0.0.9',
+  created_at: '2026-10-14T08:00:00Z',
+  expires_at: '2026-10-14T08:10:00Z',
+};
+
 function show(element: React.ReactNode, answers: Answers, route?: { route: string; path: string }) {
   const fetched = mockFetch({
     '/api/v1/session': { body: { signed_in: true, csrf_token: 'token' } },
     '/api/v1/me': { body: makeMe() },
-    [API]: { body: { items: [reader], types: [testType], owners: OWNERS, server: SERVER } },
+    [API]: { body: { items: [reader], pairings: [], types: [testType], owners: OWNERS, server: SERVER } },
+    [`${API}/firmware`]: { body: firmware },
     ...answers,
   });
   renderPage(element, route);
@@ -132,6 +191,174 @@ describe('devices', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Done' }));
     expect(screen.queryByTestId('device-key')).not.toBeInTheDocument();
+  });
+});
+
+describe('pairing', () => {
+  it('a device waiting is listed, a click from its approval page', async () => {
+    show(<Devices />, {
+      [API]: {
+        body: { items: [reader], pairings: [pairing], types: [testType], owners: OWNERS, server: SERVER },
+      },
+    });
+
+    const waiting = await screen.findByRole('table', { name: 'Waiting to be paired' });
+    expect(within(waiting).getAllByRole('row')[1]).toHaveTextContent('K7Q-4X9');
+    expect(within(waiting).getAllByRole('row')[1]).toHaveTextContent('jae-terminal-s3 · 98:A3:16:E5:06:3C');
+    expect(within(waiting).getByRole('link', { name: 'Pair' })).toHaveAttribute(
+      'href',
+      '/admin/settings/devices/pair?code=K7Q-4X9',
+    );
+    expect(screen.getByRole('link', { name: 'Pair a device' })).toHaveAttribute(
+      'href',
+      '/admin/settings/devices/pair',
+    );
+  });
+
+  const pairRoute = {
+    route: '/admin/settings/devices/pair?code=K7Q-4X9',
+    path: '/admin/settings/devices/pair',
+  };
+
+  it('approved as a new device: only a type its firmware can be', async () => {
+    const salesPoint = { ...testType, slug: 'sales_point', label: 'Sales point', settings: [] };
+    const { calls } = show(
+      <PairDevice />,
+      {
+        [API]: {
+          body: {
+            items: [reader],
+            pairings: [pairing],
+            types: [testType, salesPoint],
+            owners: OWNERS,
+            server: SERVER,
+          },
+        },
+        [`${API}/pairings/K7Q-4X9`]: { body: pairing },
+        [`POST ${API}/pairings/K7Q-4X9`]: { status: 201, body: { ...reader, id: 8, label: 'Office' } },
+        [`${API}/8`]: { body: { device: { ...reader, id: 8 }, events: [], requests: [], server: SERVER } },
+      },
+      pairRoute,
+    );
+
+    const found = await screen.findByRole('region', { name: 'Device K7Q-4X9' });
+    expect(found).toHaveTextContent('Can beTest');
+    // Its firmware can only be a test device: the only type, chosen.
+    expect(screen.getByRole('combobox', { name: 'Type' })).toHaveValue('Test');
+    await userEvent.type(screen.getByRole('textbox', { name: /^Name/ }), 'Office');
+    await userEvent.click(screen.getByRole('button', { name: 'Pair' }));
+
+    await vi.waitFor(() => {
+      expect(calls.some((call) => call.method === 'POST')).toBe(true);
+    });
+    const sent = calls.filter((call) => call.method === 'POST').at(-1);
+    expect(await sent?.clone().json()).toEqual({
+      type: 'test',
+      owner: 'association',
+      name: 'Office',
+      place: '',
+      settings: {},
+    });
+  });
+
+  it('as the new board of a device', async () => {
+    const { calls } = show(
+      <PairDevice />,
+      {
+        [`${API}/pairings/K7Q-4X9`]: { body: pairing },
+        [`POST ${API}/pairings/K7Q-4X9`]: { status: 201, body: reader },
+        [`${API}/3`]: { body: { device: reader, events: [], requests: [], server: SERVER } },
+      },
+      pairRoute,
+    );
+
+    await userEvent.click(await screen.findByRole('radio', { name: 'The board of a device' }));
+    await userEvent.click(screen.getByRole('combobox', { name: 'Device' }));
+    await userEvent.click(await screen.findByRole('option', { name: /Fridge reader/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Pair' }));
+
+    await vi.waitFor(() => {
+      expect(calls.some((call) => call.method === 'POST')).toBe(true);
+    });
+    const sent = calls.filter((call) => call.method === 'POST').at(-1);
+    expect(await sent?.clone().json()).toEqual({ replaces: 3 });
+  });
+
+  it('a code no device waits with', async () => {
+    show(
+      <PairDevice />,
+      {
+        [`${API}/pairings/K7Q-4X9`]: {
+          status: 404,
+          body: { error: { code: 'pairing_unknown', message: 'No device is waiting with this code.' } },
+        },
+      },
+      pairRoute,
+    );
+
+    expect(await screen.findByText(/No device is waiting with this code/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Enter another code' }));
+    expect(await screen.findByRole('textbox', { name: 'Code' })).toBeInTheDocument();
+  });
+});
+
+describe('firmware', () => {
+  it('each version, read from its file, and where each device stands', async () => {
+    show(<Firmware />, {});
+
+    const table = await screen.findByRole('table', { name: 'Firmware' });
+    const row = within(table).getAllByRole('row')[1];
+    expect(row).toHaveTextContent('0.3.0');
+    expect(row).toHaveTextContent('Faster taps');
+    expect(row).toHaveTextContent('esp32s3 · v5.3.1 · 1.4 MB');
+    const devices = screen.getByRole('table', { name: "Devices' firmware" });
+    expect(within(devices).getAllByRole('row')[1]).toHaveTextContent(
+      'Fridge reader0.2.00.3.0Update failedImage invalid',
+    );
+    expect(screen.getByText(/of “jae-terminal”/)).toBeInTheDocument();
+  });
+
+  it('installed on every device', async () => {
+    const { calls } = show(<Firmware />, {
+      [`PUT ${API}/firmware/chosen`]: {
+        body: { ...firmware, chosen_id: 7, releases: [{ ...release, chosen: true }] },
+      },
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Install on every device' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Yes, install 0.3.0' }));
+
+    expect(await screen.findByText('Every device')).toBeInTheDocument();
+    const sent = calls.filter((call) => call.method === 'PUT').at(-1);
+    expect(await sent?.clone().json()).toEqual({ release_id: 7 });
+  });
+
+  it('a file uploaded, and what is wrong with one said under the field', async () => {
+    const { calls } = show(<Firmware />, {
+      [`POST ${API}/firmware`]: {
+        status: 400,
+        body: {
+          error: {
+            code: 'firmware_invalid',
+            message: 'This firmware file is damaged: its checksum does not match.',
+            fields: { file: 'This firmware file is damaged: its checksum does not match.' },
+          },
+        },
+      },
+    });
+
+    await screen.findByRole('button', { name: 'Firmware file' });
+    // The field is a button; the file goes to the input beside it.
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    await userEvent.upload(input ?? document.body, new File([new Uint8Array([0xe9, 1, 2])], 'app.bin'));
+    await userEvent.click(screen.getByRole('button', { name: 'Upload' }));
+
+    expect(
+      await screen.findByText('This firmware file is damaged: its checksum does not match.'),
+    ).toBeInTheDocument();
+    const sent = calls.filter((call) => call.method === 'POST').at(-1);
+    const file = (await sent?.clone().formData())?.get('file');
+    expect(typeof file === 'string' ? null : file?.size).toBe(3);
   });
 });
 
@@ -252,6 +479,46 @@ describe('one device', () => {
     ).toBeInTheDocument();
   });
 
+  it('its firmware: failed, tried again, or one of its own', async () => {
+    const failed = {
+      ...reader,
+      firmware_wanted: '0.3.0',
+      firmware_state: 'failed' as const,
+      firmware_failed_detail: 'Image invalid',
+    };
+    const { calls } = show(
+      <DeviceDetail />,
+      {
+        [`${API}/3`]: { body: { ...detail, device: failed } },
+        [`POST ${API}/3/firmware/retry`]: { body: { ...failed, firmware_state: 'waiting' } },
+      },
+      route,
+    );
+
+    const card = await screen.findByRole('region', { name: 'Firmware' });
+    expect(card).toHaveTextContent('Update failed');
+    expect(card).toHaveTextContent('Runs 0.1.0; should run 0.3.0.');
+    expect(card).toHaveTextContent('Image invalid');
+    await userEvent.click(within(card).getByRole('button', { name: 'Try again' }));
+    await vi.waitFor(() => {
+      expect(calls.some((call) => call.method === 'POST' && call.url.endsWith('/firmware/retry'))).toBe(true);
+    });
+  });
+
+  it('its backup code, and what it can be', async () => {
+    show(
+      <DeviceDetail />,
+      { [`${API}/3`]: { body: { ...detail, device: { ...reader, supported_types: ['test'] } } } },
+      route,
+    );
+
+    const backup = await screen.findByRole('region', { name: 'Backup code' });
+    expect(within(backup).getByLabelText('Backup code')).toHaveTextContent('482913');
+    const state = screen.getByRole('region', { name: 'State' });
+    expect(state).toHaveTextContent('jae-terminal-s3 · 24:6F:28:AA:BB:CC');
+    expect(state).toHaveTextContent('Can beTest');
+  });
+
   it('a sales point sells an item chosen from the price lists, under its seller', async () => {
     const salesPoint: Schemas['DeviceTypeOut'] = {
       slug: 'sales_point',
@@ -280,7 +547,15 @@ describe('one device', () => {
     show(
       <DeviceDetail />,
       {
-        [API]: { body: { items: [fridge], types: [testType, salesPoint], owners: OWNERS, server: SERVER } },
+        [API]: {
+          body: {
+            items: [fridge],
+            pairings: [],
+            types: [testType, salesPoint],
+            owners: OWNERS,
+            server: SERVER,
+          },
+        },
         [`${API}/3`]: { body: { ...detail, device: fridge } },
       },
       route,

@@ -66,6 +66,7 @@ def build_app(db_path):
         "PUBLIC_BASE_URL": BASE,
         # Beside the throwaway database, never the repository's storage.
         "TEAM_LOGO_DIR": str(Path(db_path).parent / "team_logos"),
+        "FIRMWARE_DIR": str(Path(db_path).parent / "firmware"),
         "BACKUP_STORAGE_DIR": str(Path(db_path).parent / "storage"),
         # In this process, against the throwaway database -- not a second one.
         "BACKUP_RUN_INLINE": True,
@@ -518,6 +519,24 @@ def seed(app, app_module, subscriptions):
     for card in (student_card, carlas):
         card.last_used_at, card.last_used_device_id = now, sales_point.id
 
+    # One device for everything (docs/devices-plan.md): what the boards say they
+    # are, a firmware version tried on the fridge first -- the Fridge reader
+    # could not install it -- and a device waiting to be paired.
+    from aeronautics_members.services import device_firmware, device_pairing, firmware_image
+
+    devices_service.seen(sales_point, board="jae-terminal-s3", types=["sales_point", "test"], now=now)
+    devices_service.seen(fridge, board="jae-terminal-s3", types=["sales_point", "test"],
+                         hardware="98:A3:16:E5:06:3C", now=now)
+    release = device_firmware.upload(admin_user, firmware_image.example("1.1.0"), file_name="jae-terminal.bin",
+                                     notes="Shows the balance after each sale")
+    device_firmware.choose_for_device(admin_user, sales_point, release)
+    device_firmware.choose_for_device(admin_user, fridge, release)
+    device_firmware.reported(fridge, result="failed", version="1.1.0", detail="Not enough space for the update")
+    pairing, _secret = device_pairing.start(hardware="24:6F:28:12:34:56", firmware="1.0.0", board="jae-terminal-s3",
+                                            types=["sales_point", "test"], address="10.0.0.40", now=now)
+    # Waiting all day: the screenshots of its page come later than ten minutes.
+    pairing.expires_at = now + timedelta(days=1)
+
     reset_token = build_password_reset_token(new.user)
     delete_token = build_account_deletion_token(active.user)
     db.session.commit()
@@ -620,6 +639,9 @@ def seed(app, app_module, subscriptions):
          "path": f"/admin/settings/devices/{fridge.id}"},
         {"name": "admin--settings-sales-point", "user": "admin@example.org",
          "path": f"/admin/settings/devices/{sales_point.id}"},
+        {"name": "admin--settings-device-pair", "user": "admin@example.org",
+         "path": f"/admin/settings/devices/pair?code={device_pairing.shown(pairing.code)}"},
+        {"name": "admin--settings-firmware", "user": "admin@example.org", "path": "/admin/settings/devices/firmware"},
         {"name": "admin--cards", "user": "admin@example.org", "path": "/admin/cards"},
         {"name": "teams--devices", "user": "active@example.org", "path": "/teams/rocket-team/manage/devices"},
         {"name": "admin--account-cards", "user": "admin@example.org",

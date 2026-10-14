@@ -29,6 +29,36 @@ export type DeviceKey = Schemas['DeviceKeyOut'];
 export type Settings = Record<string, unknown>;
 
 export const devicesKey = ['admin', 'devices'] as const;
+export const firmwareKey = ['admin', 'devices', 'firmware'] as const;
+
+export type Pairing = Schemas['DevicePairingOut'];
+export type FirmwareState = Device['firmware_state'];
+
+/** The types a device's firmware can be; every type when it has not said. */
+export function typesFor(types: DeviceType[], supported: string[] | null | undefined) {
+  return supported ? types.filter((type) => supported.includes(type.slug)) : types;
+}
+
+/** What a firmware can be used as, in words. */
+export function canBe(types: DeviceType[], supported: string[] | null | undefined) {
+  if (!supported) return 'Not said: any type';
+  if (!supported.length) return 'Nothing this portal knows';
+  return supported.map((slug) => types.find((type) => type.slug === slug)?.label ?? slug).join(', ');
+}
+
+/** How a device's firmware stands, in a word. */
+export const FIRMWARE_STATE: Record<FirmwareState, { tone: Tone; label: string }> = {
+  none: { tone: 'neutral', label: 'No update chosen' },
+  current: { tone: 'active', label: 'Up to date' },
+  waiting: { tone: 'pending', label: 'Update waiting' },
+  failed: { tone: 'failed', label: 'Update failed' },
+};
+
+/** A size in bytes, for people: "1.4 MB". */
+export function formatSize(bytes: number) {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${String(Math.max(1, Math.round(bytes / 1024)))} KB`;
+}
 
 /** Off, online (spoke in the last five minutes), seen before, or never. */
 export function statusOf(device: Device): { tone: Tone; label: string; detail: string } {

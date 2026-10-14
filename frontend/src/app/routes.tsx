@@ -350,6 +350,16 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/admin/settings/Devices')).Devices }),
           },
           {
+            path: 'settings/devices/pair',
+            lazy: async () => ({
+              Component: (await import('../pages/admin/settings/PairDevice')).PairDevice,
+            }),
+          },
+          {
+            path: 'settings/devices/firmware',
+            lazy: async () => ({ Component: (await import('../pages/admin/settings/Firmware')).Firmware }),
+          },
+          {
             path: 'settings/devices/:deviceId',
             lazy: async () => ({
               Component: (await import('../pages/admin/settings/Device')).DeviceDetail,

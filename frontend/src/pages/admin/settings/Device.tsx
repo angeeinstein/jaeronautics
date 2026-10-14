@@ -1,10 +1,12 @@
 /**
- * Settings -> Devices -> one device (docs/devices-plan.md): its state; its
- * name, place and settings; switching it off; its key on one line (rotate,
- * revoke); every request a device of its type can send -- described, as a
- * command, and sent from here to see the answer; its recent requests and
- * events, refreshed every few seconds while the page is open; removing it.
- * Data: /api/v1/admin/devices/<id> (aeronautics_members/api/devices.py).
+ * Settings -> Devices -> one device (docs/devices-plan.md): its state, its
+ * board and what its firmware can be; its name, place, type and settings;
+ * switching it off; the firmware it runs and should run (one of its own, to
+ * try a version on one device first); its backup code; its key on one line
+ * (rotate, revoke); every request a device of its type can send --
+ * described, as a command, and sent from here to see the answer; its recent
+ * requests and events, refreshed every few seconds while the page is open;
+ * removing it. Data: /api/v1/admin/devices/<id> (aeronautics_members/api/devices.py).
  */
 import {
   Button,
@@ -34,14 +36,18 @@ import { formatDateTime } from '../../../lib/format';
 import { EVERY_5_SECONDS, useLiveRefresh } from '../../../lib/live';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
 import {
+  canBe,
   type Device,
   type DeviceKey,
   devicesKey,
   type DeviceType,
+  FIRMWARE_STATE,
+  firmwareKey,
   KeyReveal,
   type Settings,
   statusOf,
   TypeSettingsFields,
+  typesFor,
 } from './deviceParts';
 
 type Detail = Schemas['DeviceDetailOut'];
@@ -55,9 +61,17 @@ const EVENT_LABELS: Record<string, string> = {
   refused: 'Refused',
   reported: 'Reported',
   tried: 'Tried',
+  paired: 'Paired',
+  hardware: 'Board',
+  board: 'Board',
+  types: 'Can be',
+  type: 'Type',
+  owner: 'Owner',
+  settings: 'Settings',
+  backup_code: 'Backup code',
 };
 
-function State({ device }: { device: Device }) {
+function State({ device, types }: { device: Device; types: DeviceType[] }) {
   const status = statusOf(device);
   return (
     <Panel title="State">
@@ -77,7 +91,8 @@ function State({ device }: { device: Device }) {
           ['Owner', device.owner_label],
           ['Last seen', device.last_seen_at ? formatDateTime(device.last_seen_at) : 'Never'],
           ['From', device.last_address ?? '–'],
-          ['Board', device.hardware_id ?? '–'],
+          ['Board', [device.board, device.hardware_id].filter(Boolean).join(' · ') || '–'],
+          ['Can be', canBe(types, device.supported_types)],
           ['Firmware', device.firmware ?? '–'],
           ['Added', formatDateTime(device.created_at)],
         ]}
@@ -88,15 +103,18 @@ function State({ device }: { device: Device }) {
 
 function SettingsForm({
   device,
-  type,
+  types,
   owners,
 }: {
   device: Device;
-  type: DeviceType | undefined;
+  types: DeviceType[];
   owners: Schemas['DeviceOwnerOut'][];
 }) {
   const client = useQueryClient();
   const [owner, setOwner] = useState(device.owner);
+  const [typeSlug, setTypeSlug] = useState(device.type);
+  const type = types.find((item) => item.slug === typeSlug);
+  const choosable = typesFor(types, device.supported_types);
   const [name, setName] = useState(device.name ?? '');
   const [place, setPlace] = useState(device.place ?? '');
   const [description, setDescription] = useState(device.description ?? '');
@@ -146,6 +164,18 @@ function SettingsForm({
             setOwner(chosen);
           }}
         />
+        <Select
+          label="Type"
+          description="What it is used as: only what its firmware can be. Another type starts its settings afresh."
+          data={choosable.map((item) => ({ value: item.slug, label: item.label }))}
+          value={typeSlug}
+          error={errors.type ?? null}
+          allowDeselect={false}
+          onChange={(next) => {
+            setTypeSlug(next ?? device.type);
+            setSettings({});
+          }}
+        />
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
           <TextInput
             label="Name (optional)"
@@ -191,7 +221,14 @@ function SettingsForm({
           <Button
             loading={save.isPending}
             onClick={() => {
-              save.mutate({ owner, name, place, description, settings });
+              save.mutate({
+                owner,
+                name,
+                place,
+                description,
+                settings,
+                ...(typeSlug !== device.type ? { type: typeSlug } : {}),
+              });
             }}
           >
             Save
@@ -212,21 +249,70 @@ interface DeviceRequest {
   curl: string;
   /** What the page sends to try it; none: not sent from here. */
   tryBody: ((data: Record<string, unknown>) => Schemas['DeviceTryIn']) | null;
+  /** Why it is not sent from here, when it is not. */
+  untried?: string;
   /** A report: it carries data. */
   report: boolean;
 }
 
 function requestsOf(server: string, type: DeviceType | undefined): DeviceRequest[] {
   const bearer = `-H "Authorization: Bearer <key>"`;
+  const json = `-H "Content-Type: application/json"`;
+  const byDevice = 'Sent by the device itself.';
   return [
     {
       id: 'hello',
       method: 'GET',
       path: '/device',
       title: 'Sign of life',
-      description: 'Who the device is, its settings and the time. Sent at start and every few minutes.',
-      curl: `curl ${bearer} -H "X-Device-Firmware: 1.0.0" ${server}`,
+      description:
+        'Who the device is, its settings, firmware to install, the hash of its backup code and the time. Asked every 10 seconds with If-None-Match: 304 when nothing changed.',
+      curl: `curl ${bearer} -H "X-Device-Firmware: 1.0.0" -H "X-Device-Types: sales_point" ${server}`,
       tryBody: () => ({ what: 'hello' }),
+      report: false,
+    },
+    {
+      id: 'firmware',
+      method: 'GET',
+      path: '/device/firmware',
+      title: 'Firmware',
+      description: 'The firmware it should run, and whether to install it now.',
+      curl: `curl ${bearer} ${server}/firmware`,
+      tryBody: null,
+      untried: byDevice,
+      report: false,
+    },
+    {
+      id: 'firmware-file',
+      method: 'GET',
+      path: '/device/firmware/file',
+      title: 'Download the firmware',
+      description: 'The file to install over the air; a Range request resumes a download.',
+      curl: `curl ${bearer} -o firmware.bin ${server}/firmware/file`,
+      tryBody: null,
+      untried: byDevice,
+      report: false,
+    },
+    {
+      id: 'firmware-report',
+      method: 'POST',
+      path: '/device/firmware',
+      title: 'How an update goes',
+      description: 'Started, or failed: then that version is not offered again until an admin asks.',
+      curl: `curl ${bearer} ${json} \\\n     -d '{"version": "1.1.0", "result": "failed", "detail": "Image invalid"}' ${server}/firmware`,
+      tryBody: null,
+      untried: 'Not sent from here: it would really happen.',
+      report: false,
+    },
+    {
+      id: 'manager',
+      method: 'POST',
+      path: '/device/manager',
+      title: 'May this card open the settings?',
+      description: 'A card tapped to open the settings on the device: allowed for admins, asked each time.',
+      curl: `curl ${bearer} ${json} -d '{"card": "04A1B2C3D4E5F6"}' ${server}/manager`,
+      tryBody: null,
+      untried: byDevice,
       report: false,
     },
     ...(type?.resources ?? []).map((resource): DeviceRequest => ({
@@ -338,7 +424,7 @@ function DeviceApi({
                 ) : null}
                 {request.tryBody ? null : (
                   <Text size="sm" c="dimmed">
-                    Not sent from here: it would really happen.
+                    {request.untried ?? 'Not sent from here: it would really happen.'}
                   </Text>
                 )}
               </Stack>
@@ -381,8 +467,10 @@ function DeviceApi({
           </Stack>
         ))}
         <Text size="sm" c="dimmed" p="md" style={{ borderTop: '1px solid var(--ja-border)' }}>
-          HTTPS only, with the key as a bearer token: no session, no cookies. Refused: 401 for an unknown or
-          revoked key, 403 when switched off, 404 for what its type does not offer, 429 when too often.
+          HTTPS only, with the key as a bearer token: no session, no cookies. Every request says what the
+          device is: X-Device-Firmware, X-Device-Hardware (its MAC address), X-Device-Board, X-Device-Types.
+          Refused: 401 for an unknown or revoked key, 403 when switched off, 404 for what its type does not
+          offer, 429 when too often.
         </Text>
       </Stack>
     </Panel>
@@ -423,6 +511,128 @@ function Events({ events }: { events: Detail['events'] }) {
           <EmptyState>Nothing yet.</EmptyState>
         </Stack>
       )}
+    </Panel>
+  );
+}
+
+/** The firmware it runs and should run -- every device's, or one of its own -- and how that stands. */
+function FirmwareCard({ device }: { device: Device }) {
+  const client = useQueryClient();
+  const firmware = useQuery({
+    queryKey: firmwareKey,
+    queryFn: () => call(api.GET('/api/v1/admin/devices/firmware')),
+  });
+  const path = { params: { path: { device_id: device.id } } };
+  const done = async (message: string) => {
+    notifyDone(message);
+    await client.invalidateQueries({ queryKey: devicesKey });
+  };
+  const choose = useMutation({
+    mutationFn: (releaseId: number | null) =>
+      call(
+        api.PUT('/api/v1/admin/devices/{device_id}/firmware', { ...path, body: { release_id: releaseId } }),
+      ),
+    onSuccess: async (saved) => {
+      await done(saved.firmware_wanted ? `It installs ${saved.firmware_wanted}.` : 'Saved.');
+    },
+    onError: notifyFailed,
+  });
+  const retry = useMutation({
+    mutationFn: () => call(api.POST('/api/v1/admin/devices/{device_id}/firmware/retry', path)),
+    onSuccess: async () => {
+      await done('Offered again.');
+    },
+    onError: notifyFailed,
+  });
+  const state = FIRMWARE_STATE[device.firmware_state];
+  const releases = firmware.data?.releases ?? [];
+  const everyDevice = releases.find((release) => release.chosen);
+  return (
+    <Panel title="Firmware">
+      <Stack gap="md">
+        <Group gap="xs">
+          <Pill tone={state.tone}>{state.label}</Pill>
+          <Text size="sm" c="dimmed">
+            {`Runs ${device.firmware ?? 'an unknown version'}${device.firmware_wanted ? `; should run ${device.firmware_wanted}` : ''}.`}
+          </Text>
+        </Group>
+        {device.firmware_state === 'failed' ? (
+          <Group justify="space-between" gap="md">
+            <Text size="sm">{device.firmware_failed_detail ?? 'It could not install it.'}</Text>
+            <Button
+              variant="default"
+              loading={retry.isPending}
+              onClick={() => {
+                retry.mutate();
+              }}
+            >
+              Try again
+            </Button>
+          </Group>
+        ) : null}
+        <Select
+          label="Runs"
+          description="Another version for this device alone: to try it here first."
+          data={[
+            {
+              value: '',
+              label: everyDevice
+                ? `What every device runs (${everyDevice.version})`
+                : 'What every device runs',
+            },
+            ...releases.map((release) => ({ value: String(release.id), label: release.version })),
+          ]}
+          value={device.firmware_release_id ? String(device.firmware_release_id) : ''}
+          allowDeselect={false}
+          disabled={choose.isPending}
+          onChange={(next) => {
+            choose.mutate(next ? Number(next) : null);
+          }}
+        />
+      </Stack>
+    </Panel>
+  );
+}
+
+/** The code that opens its settings on the device when the portal cannot be reached. */
+function BackupCode({ device }: { device: Device }) {
+  const client = useQueryClient();
+  const renew = useMutation({
+    mutationFn: () =>
+      call(
+        api.POST('/api/v1/admin/devices/{device_id}/backup-code', {
+          params: { path: { device_id: device.id } },
+        }),
+      ),
+    onSuccess: async () => {
+      notifyDone('New backup code: the device gets it with its next sign of life.');
+      await client.invalidateQueries({ queryKey: devicesKey });
+    },
+    onError: notifyFailed,
+  });
+  return (
+    <Panel title="Backup code">
+      <Stack gap="sm">
+        <Group justify="space-between" gap="md" align="center">
+          <Code fz="lg" aria-label="Backup code">
+            {device.backup_code ?? '–'}
+          </Code>
+          <ConfirmButton
+            variant="default"
+            confirmLabel="Yes, a new one"
+            loading={renew.isPending}
+            onConfirm={() => {
+              renew.mutate();
+            }}
+          >
+            New code
+          </ConfirmButton>
+        </Group>
+        <Text size="sm" c="dimmed">
+          Opens its settings on the device when the portal cannot be reached. Otherwise an admin&apos;s card
+          opens them.
+        </Text>
+      </Stack>
     </Panel>
   );
 }
@@ -573,7 +783,7 @@ function RemoveDevice({ device }: { device: Device }) {
     mutationFn: () =>
       call(api.DELETE('/api/v1/admin/devices/{device_id}', { params: { path: { device_id: device.id } } })),
     onSuccess: async () => {
-      notifyDone(`${device.name} removed.`);
+      notifyDone(`${device.label} removed.`);
       await navigate('/admin/settings/devices');
       // The list only: this device's own data, asked for again, would be "not found".
       await client.invalidateQueries({ queryKey: devicesKey, exact: true });
@@ -614,14 +824,25 @@ function DevicePage({
   return (
     <Stack gap="lg">
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
-        <State device={device} />
+        <State device={device} types={types} />
         {/* Keyed by what was saved, so it starts afresh after a save, not after every refresh. */}
         <SettingsForm
-          key={JSON.stringify([device.owner, device.name, device.place, device.description, device.settings])}
+          key={JSON.stringify([
+            device.owner,
+            device.type,
+            device.name,
+            device.place,
+            device.description,
+            device.settings,
+          ])}
           device={device}
-          type={type}
+          types={types}
           owners={owners}
         />
+      </SimpleGrid>
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
+        <FirmwareCard device={device} />
+        <BackupCode device={device} />
       </SimpleGrid>
       <KeyCard device={device} />
       <DeviceApi device={device} server={detail.server} type={type} />
