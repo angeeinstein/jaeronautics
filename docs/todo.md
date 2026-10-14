@@ -99,8 +99,20 @@ maintainer says so).
   we manage the price list ... this devices page should only be about
   technical stuff and things like the ownership and the name and place and
   description".
-- **Open:** the new layout, proposed in the conversation of 2026-10-14 and
-  to be agreed before it is built.
+- **Agreed (2026-10-14)**, "I will judge this when I see it":
+  - Admin **Credit**: members' money only -- the tiles, *Balances*, *Latest*.
+  - Admin **Sales** (new): *Sold* per seller (the association and each
+    team), the association's price list, its sales points' menus.
+  - **Settings › Devices**: technical only -- owner, type, name, place,
+    description, on/off, key, firmware, its log; no items. A sales point's
+    menu is chosen on its owner's *Sales* page.
+  - The sidebar: a **Money** group with *Money*, *Credit*, *Sales*.
+  - Teams: *Prices* becomes **Sales** (price list, then the sales points'
+    menus); *Devices* keeps name, place, on/off and the log, no items.
+  - **Per item:** how many were sold and what each made, for the association
+    and every team, the last 30 days and ever -- "interesting to see what
+    beverages ... are liked by the members and how much money they made with
+    each item".
 
 ### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
 
