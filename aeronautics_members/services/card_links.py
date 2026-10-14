@@ -16,7 +16,7 @@ section 7.4).
    kept: the reader takes no part any more. A link works once, for
    ``LASTS``.
 
-Any signed-in account may link a card this way, as with Web NFC: paying needs
+Any signed-in account may link a card this way, not only members: paying needs
 credit, and topping up needs an active membership.
 """
 

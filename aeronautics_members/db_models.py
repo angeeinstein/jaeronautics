@@ -1642,20 +1642,3 @@ class CardLink(db.Model):
     device = db.relationship("Device")
     card = db.relationship("Card")
 
-
-class CardLinkWait(db.Model):
-    """An admin waiting at a reader for the next unknown card, to link it to
-    someone (services/cards.py). One per reader; it ends after a minute, or
-    with the card it linked."""
-
-    __tablename__ = "card_link_waits"
-
-    id = db.Column(db.Integer, primary_key=True)
-    device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, unique=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    requested_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
-    expires_at = db.Column(db.DateTime, nullable=False)
-
-    device = db.relationship("Device")
-    user = db.relationship("User", foreign_keys=[user_id])

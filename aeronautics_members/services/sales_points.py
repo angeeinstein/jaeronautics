@@ -9,10 +9,8 @@ and icons, "Hi Alex" and the balance -- and one is bought:
 
 1. ``card`` (data ``{"card": "04A1B2C3D4E5F6"}``): the card is checked, and
    answered ``{"result": "menu", "ticket", "expires_in", "first_name",
-   "balance_cents", "items"}``; or ``linked`` (an admin was waiting at this
-   reader for an unknown card, services/cards.py); or ``refused`` -- an
-   unknown card's with a ``link`` for the QR code its owner links it with
-   (services/card_links.py).
+   "balance_cents", "items"}``, or ``refused`` -- an unknown card's with a
+   ``link`` for the QR code its owner links it with (services/card_links.py).
 2. ``buy`` (data ``{"ticket", "item"}``): the item is sold with the ticket,
    answered ``{"result": "sold", "item", "price_cents", "balance_cents",
    "first_name"}``, or ``refused``.
@@ -131,8 +129,6 @@ def _summary_card(kept, answer):
     result = answer.get("result")
     if result == "menu":
         return f"{card} opened the menu ({credit._euros(answer.get('balance_cents') or 0)})"
-    if result == "linked":
-        return f"{card} linked"
     return f"{card} refused: {answer.get('message') or answer.get('reason')}"
 
 
@@ -163,8 +159,6 @@ def _card(device, data, event_id):
         return earlier
 
     tap = cards.tapped(device, card_id)
-    if tap.linked is not None:
-        return {"result": "linked", "card": tap.linked.name}
     if tap.refused == cards.CARD_UNKNOWN:
         # Its owner links it with the QR code the reader shows (services/card_links.py).
         return _refused(tap.refused, link=card_links.for_device(card_links.offer(device, card_id)))
@@ -271,8 +265,6 @@ portal's to decide. The `answer` is one of:
   -- show the menu: up to four items in this order, "Hi Alex" (`first_name` may be null) and the
   balance. Grey out items not `affordable`. Close the menu after your own timeout (about 8 seconds),
   shorter than `expires_in`.
-- `{"result": "linked", "card": "Card"}` -- an admin was waiting at this device for an unknown card,
-  and it is now linked to somebody.
 - `{"result": "refused", "reason": "...", "message": "..."}` -- `reason` one of `card_unknown`,
   `card_disabled`, `card_blocked`, `account_off`, `credit_off`, `not_set_up` (no items chosen yet).
   `card_unknown` comes with `"link": {"id": 17, "url": "https://…/link/…", "show_for": 30,

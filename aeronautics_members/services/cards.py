@@ -17,31 +17,27 @@ switch it on again; an admin *blocks* it, and only an admin lifts that.
 **Removing** it keeps the row -- what was paid with it still names it -- and
 frees its ID to be linked again.
 
-**Linking** a card:
-- its owner scans it with their phone on My Account › Cards (Web NFC);
-- its owner taps it on a reader with a screen and opens the QR code shown
-  there with their phone (services/card_links.py);
-- an admin scans it the same way for them, or waits at a reader for the next
-  unknown card (:func:`wait_at_reader`), with the person beside them.
-
-There is no linking a member can start from the portal alone: anybody,
-anywhere, could start it, and a stranger's first tap would end up in their
-account. The QR code only exists on the reader, just after the card's tap.
+**Linking** a card: its owner taps it on a reader with a screen and opens
+the QR code shown there with their phone (services/card_links.py). There
+is no linking anybody can start from the portal alone: anybody, anywhere,
+could start it, and a stranger's first tap would end up in their account.
+The QR code only exists on the reader, just after the card's tap. (Web NFC
+and an admin linking a card were the first ways, removed 2026-10-14:
+docs/cards-plan.md.)
 """
 
 import hashlib
 import hmac
 import re
-from datetime import timedelta, timezone
+from datetime import timezone
 
 from flask import current_app
 from sqlalchemy.exc import IntegrityError
 
-from ..db_models import Card, CardLink, CardLinkWait, Device, User, db
+from ..db_models import Card, CardLink, Device, db
 from . import ConflictError, NotFoundError, ValidationError
 from .audit import log_audit_event
 from .clock import get_now_utc
-from .locking import locked
 
 #: The ID read off a card, written as hex: 4, 7 or 10 bytes.
 ID_PATTERN = re.compile(r"^(?:[0-9A-F]{8}|[0-9A-F]{14}|[0-9A-F]{20})$")
@@ -50,12 +46,11 @@ NAME_MAX = 40
 DEFAULT_NAME = "Card"
 #: Cards one person may have linked at once.
 MOST_CARDS = 10
-#: How long an admin waits at a reader for the card to be tapped.
-WAIT = timedelta(seconds=60)
 #: The setting that holds the check value of the key cards are hashed with.
 KEY_CHECK_SETTING = "cards_key_check"
 
-# How a card was linked.
+# How a card was linked: "qr" now; the others were the first ways, kept for
+# the cards linked so.
 BY_PHONE = "phone"
 BY_ADMIN_PHONE = "admin_phone"
 BY_READER = "reader"
@@ -281,7 +276,6 @@ def forget_for_erasure(user, actor=None):
         card.id_hash = None
         card.name = DEFAULT_NAME
         count += 1
-    db.session.execute(db.delete(CardLinkWait).where(CardLinkWait.user_id == user.id))
     if card_ids:
         db.session.execute(db.delete(CardLink).where(CardLink.card_id.in_(card_ids)))
     return count
@@ -319,35 +313,6 @@ def in_use():
     ).first() is not None
 
 
-def wait_at_reader(actor, user, device, now=None):
-    """The next unknown card tapped on ``device`` within a minute is linked to
-    ``user``. Started by an admin, with the person at the reader. Replaces
-    whatever wait that reader had."""
-    if not reads_cards(device):
-        raise ValidationError("This device does not read cards.", code="card_reader_invalid")
-    if not device.enabled:
-        raise ConflictError("This reader is switched off.", code="card_reader_off")
-    now = now or get_now_utc()
-    db.session.execute(db.delete(CardLinkWait).where(CardLinkWait.device_id == device.id))
-    wait = CardLinkWait(device_id=device.id, user_id=user.id, requested_by_user_id=actor.id if actor else None,
-                        created_at=now, expires_at=now + WAIT)
-    db.session.add(wait)
-    log_audit_event("cards", "card_wait_started", actor_user=actor, target_user=user,
-                    metadata={"device_id": device.id, "device": device.code})
-    return wait
-
-
-def waiting_for(user, now=None):
-    """The waits for ``user`` not over yet."""
-    now = now or get_now_utc()
-    waits = db.session.execute(db.select(CardLinkWait).filter_by(user_id=user.id)).scalars().all()
-    return [wait for wait in waits if _aware(wait.expires_at) > now]
-
-
-def stop_waiting(user):
-    db.session.execute(db.delete(CardLinkWait).where(CardLinkWait.user_id == user.id))
-
-
 # --- At a reader ----------------------------------------------------------------------
 
 #: Why a card is refused at a reader, as the device is told.
@@ -366,29 +331,20 @@ REFUSALS = {
 
 class Tap:
     """What a tap on a reader came to, as far as the card goes: ``card`` the
-    card to go on with, ``linked`` a card just linked, ``refused`` why not."""
+    card to go on with, or ``refused`` why not."""
 
-    def __init__(self, card=None, linked=None, refused=None):
-        self.card, self.linked, self.refused = card, linked, refused
+    def __init__(self, card=None, refused=None):
+        self.card, self.refused = card, refused
 
 
 def tapped(device, card_id, now=None):
-    """A card tapped on ``device``: the card when it may go on; just linked when
-    an admin was waiting there for an unknown card; else why it is refused.
-    Marks the card as used here."""
+    """A card tapped on ``device``: the card when it may go on, else why it is
+    refused. Marks the card as used here."""
     now = now or get_now_utc()
     card_id = normalize(card_id)
     card = db.session.execute(db.select(Card).filter_by(linked_hash=id_hash(card_id))).scalar_one_or_none()
     if card is None:
-        wait = db.session.execute(locked(db.select(CardLinkWait).filter_by(device_id=device.id))).scalar_one_or_none()
-        if wait is None or _aware(wait.expires_at) <= now:
-            return Tap(refused=CARD_UNKNOWN)
-        user = db.session.get(User, wait.user_id)
-        requested_by = db.session.get(User, wait.requested_by_user_id) if wait.requested_by_user_id else None
-        db.session.delete(wait)
-        linked = link(user, card_id, by=requested_by, how=BY_READER)
-        linked.last_used_at, linked.last_used_device_id = now, device.id
-        return Tap(linked=linked)
+        return Tap(refused=CARD_UNKNOWN)
     card.last_used_at, card.last_used_device_id = now, device.id
     if card.blocked_at is not None:
         return Tap(refused=CARD_BLOCKED)

@@ -777,22 +777,22 @@ Paying for a drink by tapping a card (docs/cards-plan.md). The code:
   answer and refusal: `docs/device-protocol.md`, section 8.1. Tickets are
   deleted after a day by the nightly clean-up.
 - **Cards:** members see theirs on My Account › Cards (once a sales point
-  exists) and link one by scanning it with an Android phone in Chrome (Web
-  NFC), or by tapping it on a sales point: an unknown card gets a QR code on
-  the reader's screen, and the phone that opens it links the card to the
-  account signed in there (`services/card_links.py`; the link works once,
-  for 10 minutes, on the first phone that opened it). Admins (`cards.manage`) see every card under Admin › Cards and
-  manage a person's on their account page, tab *Cards*: block and unblock,
-  remove, and link one -- scanned with their own phone, its ID typed in, or
-  *Wait for a tap* on a reader, which links the next unknown card tapped
-  there within a minute.
+  exists) and link one by tapping it on a sales point: an unknown card gets
+  a QR code on the reader's screen, and the phone that opens it links the
+  card to the account signed in there (`services/card_links.py`; the link
+  works once, for 10 minutes, on the first phone that opened it). That is
+  the only way: Web NFC and the admins' ways were removed on 2026-10-14
+  (`docs/cards-plan.md`). Admins (`cards.manage`) see every card under
+  Admin › Cards and manage a person's on their account page, tab *Cards*:
+  block and unblock, remove.
 - **The card IDs are not kept:** only an HMAC of each, under a key made
   from `SECRET_KEY`, and its last four characters. **Changing `SECRET_KEY`
   makes every card unknown** (System health says so); keep it, or have the
   cards linked again. A backup carries it, so a restored portal knows the
   cards.
-- **Rate limit:** `RATELIMIT_CARD_LINK` (20 an hour per account) for
-  linking by scanning.
+- **Rate limits:** `RATELIMIT_CARD_LINK` (20 an hour per account) for
+  linking a card with a reader's QR code, `RATELIMIT_CARD_QR` (60 an hour
+  per account, else per network) for opening one.
 
 ## Stripe's fees
 

@@ -430,10 +430,9 @@ Two reports:
    - The menu closes after the device's own timeout (about 8 seconds), which
      must be shorter than `expires_in`.
 
-   Or `{"result": "linked", "card": "Card"}` -- an admin was waiting at this
-   device for an unknown card, and it is now linked to that person. Or
-   `refused` (below) with `card_unknown`, `card_disabled`, `card_blocked`,
-   `account_off`, `credit_off` or `not_set_up`.
+   Or `refused` (below) with `card_unknown` (with the QR code's `link`,
+   section 7.4), `card_disabled`, `card_blocked`, `account_off`, `credit_off`
+   or `not_set_up`.
 
 2. **`buy`**, data `{"ticket": "t_5f2a…", "item": 4}`, sent when an item is
    chosen. The answer:
@@ -557,3 +556,6 @@ The list (`ICONS` in `aeronautics_members/services/credit_sales.py`):
 - **2026-10-14:** linking an unknown card at the reader with a QR code
   (section 7.4) -- `link` in the `card_unknown` refusal, and
   `GET /api/v1/device/card-links/<id>`. Built as first written down.
+- **2026-10-14:** the `card` report's `linked` answer is gone (it came only
+  while an admin waited at a reader, which was removed). Firmware that still
+  handles it is harmless: it never comes.

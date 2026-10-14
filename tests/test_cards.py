@@ -429,33 +429,12 @@ class TestOwners:
 
 
 class TestLinkingAtAReader:
-    def test_the_next_unknown_card_is_linked_while_an_admin_waits(self, app, anna, reader):
-        device, key = reader
-        cards.wait_at_reader(None, anna, device)
-        db.session.commit()
-
-        assert _card(app, key) == {"result": "linked", "card": "Card"}
-        [card] = cards.cards_of(anna)
-        assert card.linked_how == cards.BY_READER and cards.waiting_for(anna) == []
-        # The wait is over: the next tap opens the menu.
-        assert _card(app, key, event_id="next")["result"] == "menu"
-
-    def test_a_known_card_buys_while_waiting(self, app, anna, reader):
-        device, key = reader
-        cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
-        other = _person("ben@example.com")
-        cards.wait_at_reader(None, other, device)
-        db.session.commit()
-
-        assert _card(app, key)["result"] == "menu"
-        assert cards.waiting_for(other) != []
-
-    def test_the_wait_ends_after_a_minute(self, app, anna, reader):
-        device, key = reader
-        cards.wait_at_reader(None, anna, device, now=get_now_utc() - timedelta(minutes=2))
-        db.session.commit()
-
-        assert _card(app, key)["reason"] == "card_unknown" and cards.cards_of(anna) == []
+    def test_an_unknown_card_is_only_offered_the_qr_code(self, app, anna, reader):
+        """The only way to link a card now (services/card_links.py): no admin waits at a reader."""
+        _device, key = reader
+        answer = _card(app, key)
+        assert answer["result"] == "refused" and answer["reason"] == "card_unknown" and "link" in answer
+        assert cards.cards_of(anna) == []
 
 
 class TestPages:
@@ -465,17 +444,20 @@ class TestPages:
 
         return _staff("admin@example.org", "admin")
 
-    def test_my_cards_scanned_renamed_switched_off_and_removed(self, client, anna, reader):
+    def test_my_cards_renamed_switched_off_and_removed(self, client, anna, reader):
         from api_helpers import send, signed_in
 
+        cards.link(anna, "04:a1:b2:c3:d4:e5:f6", name="Fob", by=anna, how=cards.BY_QR)
+        db.session.commit()
         signed_in(client, anna)
         assert client.get("/api/v1/me").get_json()["cards_area"] is True
 
-        linked = send(client, "POST", "/api/v1/account/cards", {"card_id": "04:a1:b2:c3:d4:e5:f6", "name": "Fob"})
-        assert linked.status_code == 201
-        [card] = linked.get_json()["items"]
+        mine = client.get("/api/v1/account/cards").get_json()
+        [card] = mine["items"]
         assert (card["name"], card["tail"], card["state"]) == ("Fob", "…E5F6", "active")
-        assert "04A1" not in str(linked.get_json())
+        assert "04A1" not in str(mine)
+        # Linked only at a reader, with its QR code: not by sending an ID from the browser.
+        assert send(client, "POST", "/api/v1/account/cards", {"card_id": OTHER_CARD}).status_code == 405
 
         changed = send(client, "PATCH", f"/api/v1/account/cards/{card['id']}", {"name": "Key fob", "enabled": False})
         assert changed.get_json()["items"][0]["state"] == "disabled"
@@ -490,8 +472,6 @@ class TestPages:
         signed_in(client, _person("ben@example.com"))
 
         assert send(client, "DELETE", f"/api/v1/account/cards/{card.id}").status_code == 404
-        assert send(client, "POST", "/api/v1/account/cards", {"card_id": CARD}).get_json()["error"]["code"] == \
-            "card_linked_elsewhere"
 
     def test_no_cards_page_before_a_reader_exists(self, client, anna):
         from api_helpers import signed_in
@@ -499,10 +479,9 @@ class TestPages:
         signed_in(client, anna)
         assert client.get("/api/v1/me").get_json()["cards_area"] is False
 
-    def test_admins_block_link_and_wait_at_a_reader(self, client, admin, anna, reader):
+    def test_admins_see_block_and_remove_but_do_not_link(self, client, admin, anna, reader):
         from api_helpers import send, signed_in
 
-        device, _key = reader
         card = cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
         db.session.commit()
         signed_in(client, admin)
@@ -513,12 +492,10 @@ class TestPages:
         assert blocked["state"] == "blocked"
 
         url = f"/api/v1/admin/accounts/{anna.id}/cards"
-        person = send(client, "POST", url, {"card_id": OTHER_CARD, "name": "Spare"}).get_json()
-        assert [item["name"] for item in person["items"]] == ["Card", "Spare"]
-        assert person["readers"] == [{"id": device.id, "name": "Fridge reader", "place": None}]
-        waiting = send(client, "POST", f"{url}/wait", {"device_id": device.id}).get_json()
-        assert waiting["waiting"]["reader"]["name"] == "Fridge reader"
-        assert send(client, "DELETE", f"{url}/wait").get_json()["waiting"] is None
+        person = client.get(url).get_json()
+        assert set(person) == {"user_id", "items"} and person["items"][0]["state"] == "blocked"
+        assert send(client, "POST", url, {"card_id": OTHER_CARD}).status_code == 405
+        assert send(client, "POST", f"{url}/wait", {"device_id": 1}).status_code == 404
         assert send(client, "DELETE", f"/api/v1/admin/cards/{card.id}").get_json()["state"] == "removed"
 
     def test_members_may_not_manage_others_cards(self, client, anna):

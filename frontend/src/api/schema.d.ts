@@ -48,8 +48,7 @@ export interface paths {
         /** One's cards: their names, states and last use. */
         get: operations["my_cards"];
         put?: never;
-        /** Link a card one has just scanned with one's phone (Web NFC). */
-        post: operations["my_cards_link"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -406,30 +405,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A person's cards, and the readers one could be linked on. */
+        /** A person's cards; its owner links one at a reader, with the QR code shown there. */
         get: operations["admin_person_cards"];
         put?: never;
-        /** Link a card to this person: scanned with the admin's phone, or its ID typed in. */
-        post: operations["admin_person_cards_link"];
+        post?: never;
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/accounts/{user_id}/cards/wait": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Link the next unknown card tapped on this reader, within a minute, to this person. */
-        post: operations["admin_person_cards_wait"];
-        /** Stop waiting for this person's card. */
-        delete: operations["admin_person_cards_stop_waiting"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4092,16 +4072,6 @@ export interface components {
              */
             name?: string | null;
         };
-        /** CardLinkIn */
-        CardLinkIn: {
-            /** Card Id */
-            card_id: string;
-            /**
-             * Name
-             * @default null
-             */
-            name?: string | null;
-        };
         /** CardLinkOpenIn */
         CardLinkOpenIn: {
             /**
@@ -4175,26 +4145,6 @@ export interface components {
             picture_url: string | null;
             /** User Id */
             user_id: number;
-        };
-        /** CardReaderOut */
-        CardReaderOut: {
-            /** Id */
-            id: number;
-            /** Name */
-            name: string;
-            /** Place */
-            place: string | null;
-        };
-        /** CardWaitIn */
-        CardWaitIn: {
-            /** Device Id */
-            device_id: number;
-        };
-        /** CardWaitOut */
-        CardWaitOut: {
-            /** Expires At */
-            expires_at: string;
-            reader: components["schemas"]["CardReaderOut"];
         };
         /** CashIn */
         CashIn: {
@@ -7436,13 +7386,8 @@ export interface components {
         PersonCardsOut: {
             /** Items */
             items: components["schemas"]["CardOut"][];
-            /** Most */
-            most: number;
-            /** Readers */
-            readers: components["schemas"]["CardReaderOut"][];
             /** User Id */
             user_id: number;
-            waiting: components["schemas"]["CardWaitOut"] | null;
         };
         /** PhotoOut */
         PhotoOut: {
@@ -9117,57 +9062,6 @@ export interface operations {
             };
         };
     };
-    my_cards_link: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CardLinkIn"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MyCardsOut"];
-                };
-            };
-            /** @description The input is not valid (see error.fields). */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Not signed in. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Not possible in the current state. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-        };
-    };
     my_cards_remove: {
         parameters: {
             query?: never;
@@ -10287,206 +10181,6 @@ export interface operations {
             };
             /** @description Not found. */
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-        };
-    };
-    admin_person_cards_link: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CardLinkIn"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PersonCardsOut"];
-                };
-            };
-            /** @description The input is not valid (see error.fields). */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Not signed in. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Signed in, without the permission. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Not possible in the current state. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-        };
-    };
-    admin_person_cards_wait: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CardWaitIn"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PersonCardsOut"];
-                };
-            };
-            /** @description The input is not valid (see error.fields). */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Not signed in. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Signed in, without the permission. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Not possible in the current state. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-        };
-    };
-    admin_person_cards_stop_waiting: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PersonCardsOut"];
-                };
-            };
-            /** @description Not signed in. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Signed in, without the permission. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Not possible in the current state. */
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -134,9 +134,9 @@ The member links their own card at a reader with a screen, with any phone
   locked) taps the card again and starts over "like it never happened
   before" (the maintainer). Only one link per card is ever open, and only
   someone holding the card can start one.
-- **A card linked meanwhile** another way (Web NFC, an admin): the link is
+- **A card linked meanwhile** another way (another QR code): the link is
   refused with "This card is already linked", and the phone says so.
-- **Who may link:** any signed-in account, as with Web NFC today -- not only
+- **Who may link:** any signed-in account, as with Web NFC then -- not only
   active members. "Just linking a card isn't really any problematic thing";
   paying needs credit, and topping up needs an active membership.
 - **Why it answers the concern above** (a stranger's tap ending up in

@@ -350,11 +350,10 @@ def remove(actor, device):
     # By hand, as the database would: SQLite, which the tests use, does not
     # cascade. Its events, requests and waits go; sales made on it and cards
     # last used on it stay, without it.
-    from ..db_models import Card, CardLinkWait, CreditEntry
+    from ..db_models import Card, CreditEntry
 
     db.session.execute(db.delete(DeviceEvent).where(DeviceEvent.device_id == device.id))
     db.session.execute(db.delete(DeviceRequest).where(DeviceRequest.device_id == device.id))
-    db.session.execute(db.delete(CardLinkWait).where(CardLinkWait.device_id == device.id))
     from ..db_models import CardLink, DevicePairing, SaleTicket
 
     db.session.execute(db.delete(DevicePairing).where(DevicePairing.device_id == device.id))
