@@ -5,7 +5,8 @@
  * project as before -- choose which version every device runs, and see where
  * each device stands, refreshed while the page is open. One device can run
  * another version: chosen on its page. Data: /api/v1/admin/devices/firmware
- * (aeronautics_members/api/device_firmware.py).
+ * (aeronautics_members/api/device_firmware.py). *Device protocol* downloads
+ * docs/device-protocol.md, what the firmware has to do, for whoever writes it.
  */
 import { Button, FileInput, Group, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -319,6 +320,12 @@ export function Firmware() {
           { label: 'Devices', to: '/admin/settings/devices' },
           { label: 'Firmware' },
         ]}
+        actions={
+          // A download from Flask, with this portal's address in it; not a page of the app.
+          <Button component="a" href="/api/v1/admin/devices/protocol" download variant="default">
+            Device protocol
+          </Button>
+        }
       />
       {loaded.isPending ? (
         <LoadingState />

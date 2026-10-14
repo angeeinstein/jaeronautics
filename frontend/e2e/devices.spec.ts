@@ -153,6 +153,21 @@ test.describe('devices', () => {
     await expect(page).toHaveURL(/\/admin\/settings\/devices$/);
   });
 
+  test('the device protocol is downloaded from the firmware page, with this portal in it', async ({
+    page,
+  }) => {
+    await page.goto('/admin/settings/devices/firmware');
+    const waiting = page.waitForEvent('download');
+    await page.getByRole('link', { name: 'Device protocol' }).click();
+    const download = await waiting;
+    expect(download.suggestedFilename()).toBe('device-protocol.md');
+    const path = await download.path();
+    const { readFile } = await import('node:fs/promises');
+    const text = await readFile(path, 'utf-8');
+    expect(text).toMatch(/^# Device protocol\n\n> Downloaded from http/);
+    expect(text).toContain('### 8.1 Sales point');
+  });
+
   test('a key it does not know is refused', async ({ playwright, baseURL }) => {
     const device = await playwright.request.newContext({ baseURL });
     const answer = await device.get('/api/v1/device', {

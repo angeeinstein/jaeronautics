@@ -5,14 +5,17 @@ What a device asks and downloads is in api/devices.py with the rest of the
 device API; choosing a version for one device is on its page.
 """
 
+from pathlib import Path
 from typing import Literal
 
-from flask import request
+from flask import Response, current_app, request
 from flask_login import current_user
 
 from ..db_models import db
 from ..services import device_firmware
 from ..services import devices as devices_service
+from ..security_utils import build_public_url, get_public_base_url
+from ..services.clock import get_now_utc
 from ._core import Model, UtcDateTime, endpoint
 from .devices import MANAGE
 
@@ -104,6 +107,20 @@ def _out():
 def admin_firmware():
     """The uploaded firmware, which every device runs, and where each device stands."""
     return _out()
+
+
+@endpoint("GET", "/admin/devices/protocol", permissions=MANAGE, tag="Admin", produces="text/markdown")
+def admin_device_protocol():
+    """The device protocol (docs/device-protocol.md), everything firmware needs
+    to know, as Markdown: with this portal's address, for whoever writes it."""
+    text = (Path(current_app.root_path).parent / "docs" / "device-protocol.md").read_text(encoding="utf-8")
+    title, _, rest = text.partition("\n")
+    note = (f"> Downloaded from {get_public_base_url()} on "
+            f"{get_now_utc():%d.%m.%Y}. This portal's device API: `{build_public_url('api.device_hello')}`.")
+    response = Response(f"{title}\n\n{note}\n{rest}", mimetype="text/markdown")
+    response.headers["Content-Disposition"] = 'attachment; filename="device-protocol.md"'
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @endpoint("POST", "/admin/devices/firmware", response=FirmwareOut, permissions=MANAGE, status=201, tag="Admin",

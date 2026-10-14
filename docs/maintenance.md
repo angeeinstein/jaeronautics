@@ -754,6 +754,9 @@ Devices (admins: `devices.manage`). The plan, and what is decided:
   until *Try again*. A version a device is to run cannot be deleted.
   Uploading a version again, or another file with a version already there,
   is refused: build it with a new version.
+- **What the firmware has to do:** `docs/device-protocol.md`. The Firmware
+  page's *Device protocol* button downloads it with the portal's address
+  filled in, to hand to whoever writes the firmware.
 
 ## Cards and sales points
 

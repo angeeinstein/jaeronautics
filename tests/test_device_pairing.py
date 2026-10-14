@@ -19,6 +19,7 @@ from aeronautics_members.db_models import Device, DevicePairing, DeviceRequest, 
 from aeronautics_members.services import cards, device_firmware, device_pairing, devices, firmware_image
 from aeronautics_members.services.clock import get_now_utc
 from test_admin_reviews import _staff
+from test_teams_flow import _person
 
 ESPTOOL_IMAGE = Path(__file__).parent / "fixtures" / "firmware-esptool-esp32s3.bin"
 BOARD = {"X-Device-Hardware": "98:a3:16:e5:06:3c", "X-Device-Firmware": "0.2.0",
@@ -204,6 +205,26 @@ class TestFirmware:
         file = app.test_client().get("/api/v1/device/firmware/file", headers={"Authorization": f"Bearer {key}"})
         assert file.status_code == 404 and file.get_json()["error"]["code"] == "firmware_none"
         assert app.test_client().get("/api/v1/device/firmware/file").status_code == 401
+
+
+class TestProtocolDocument:
+    def test_admins_download_it_with_this_portals_address(self, app, client, admin):
+        signed_in(client, admin)
+        response = client.get("/api/v1/admin/devices/protocol")
+
+        assert response.status_code == 200 and response.mimetype == "text/markdown"
+        assert response.headers["Content-Disposition"] == 'attachment; filename="device-protocol.md"'
+        text = response.get_data(as_text=True)
+        assert text.startswith("# Device protocol\n\n> Downloaded from https://members.test on ")
+        assert "This portal's device API: `https://members.test/api/v1/device`." in text
+        assert "## 8. Uses" in text
+
+    def test_only_for_those_who_manage_devices(self, app, client):
+        signed_in(client, _person())
+        assert client.get("/api/v1/admin/devices/protocol").status_code == 403
+
+    def test_not_signed_in(self, app, client):
+        assert client.get("/api/v1/admin/devices/protocol").status_code == 401
 
 
 class TestPairing:

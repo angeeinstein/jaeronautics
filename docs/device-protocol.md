@@ -2,12 +2,13 @@
 
 How a device talks to the members' portal: everything its firmware needs to
 know, in one place. Written for whoever writes the firmware (a person or a
-coding agent). The decisions behind it are in `docs/devices-plan.md`.
+coding agent). The decisions behind it are in `docs/devices-plan.md`. Admins
+download this document, with their portal's address, on Admin › Settings ›
+Devices › Firmware.
 
 Each section says where it stands:
 
-- **Built** -- the portal answers exactly this today (branch
-  `claude/device-pairing` until it is merged).
+- **Built** -- the portal answers exactly this today.
 - **Planned** -- agreed, and written here so the firmware can be built
   against it; the portal does not answer it yet.
 - **Later** -- the direction; the details are settled when it is built.

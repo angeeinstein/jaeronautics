@@ -22218,6 +22218,51 @@
         ]
       }
     },
+    "/api/v1/admin/devices/protocol": {
+      "get": {
+        "operationId": "admin_device_protocol",
+        "responses": {
+          "200": {
+            "content": {
+              "text/markdown": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The file"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "The device protocol (docs/device-protocol.md), everything firmware needs",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "devices.manage"
+        ]
+      }
+    },
     "/api/v1/admin/devices/{device_id}": {
       "delete": {
         "operationId": "admin_device_remove",

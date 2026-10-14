@@ -318,6 +318,14 @@ describe('firmware', () => {
     expect(screen.getByText(/of “jae-terminal”/)).toBeInTheDocument();
   });
 
+  it('the device protocol, for whoever writes the firmware, is downloaded from here', async () => {
+    show(<Firmware />, {});
+
+    const link = await screen.findByRole('link', { name: 'Device protocol' });
+    expect(link).toHaveAttribute('href', '/api/v1/admin/devices/protocol');
+    expect(link).toHaveAttribute('download');
+  });
+
   it('installed on every device', async () => {
     const { calls } = show(<Firmware />, {
       [`PUT ${API}/firmware/chosen`]: {
