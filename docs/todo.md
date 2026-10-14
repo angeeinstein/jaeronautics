@@ -81,6 +81,27 @@ maintainer says so).
   `claude/device-pairing`); this is the part left for when the firmware
   side is settled. Signing the firmware: not planned.
 
+### Credit, sales and devices: each in its own place
+
+- **Added:** 2026-10-14
+- **What:** the admin Credit page holds too much -- the summary tiles, *Sold*,
+  the association's price list, the association's devices, *Balances*,
+  *Latest* -- "this is all a bit mixed up. I think we should separate all of
+  those things and make it clear what is about a device, what is about some
+  history or some logs, and where do they belong. Maybe even split it and
+  not put everything in the same credit submenu." The team pages to be
+  looked at the same way.
+- **And the device page:** an admin changing a device's owner from the
+  association to a team without a price list could not save: the form sent
+  the old owner's items with it (the server clears them itself on an owner
+  change). The maintainer: "Maybe we should remove this items input in the
+  devices page completely, because this should be done in another menu where
+  we manage the price list ... this devices page should only be about
+  technical stuff and things like the ownership and the name and place and
+  description".
+- **Open:** the new layout, proposed in the conversation of 2026-10-14 and
+  to be agreed before it is built.
+
 ### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
 
 - **Added:** 2026-10-12
