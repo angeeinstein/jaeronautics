@@ -84,6 +84,40 @@ account -- ask an admin"). A card scanned with Web NFC is sent by the browser
 and so could be made up; accepted, since a card linked wrongly charges the
 person who linked it.
 
+### Linking a card at a reader with a QR code (agreed 2026-10-14, not built)
+
+The member links their own card at a reader with a screen, with any phone
+(iPhones too), "proven by being there":
+
+1. A card nobody has linked is tapped. The `card_unknown` refusal carries a
+   link (`link_url`), and the reader shows "Not linked yet, scan to link it"
+   with it as a QR code.
+2. The link holds a random token, never the card's ID; the portal keeps which
+   card was tapped at which reader. It lasts **2 minutes** (the maintainer:
+   "two minutes is also right") and works once.
+3. The phone opens the portal (signing in first if needed): "Link the card
+   …A1F3, tapped at Rocket fridge just now?", with a name for it, and
+   *Link*.
+4. The reader learns of it by itself and shows "Linked, hi Alex"; the next
+   tap opens the menu. How it learns (proposed, to be confirmed): while the
+   QR code is shown, it asks the portal every 2 seconds about that link, as
+   it does while pairing (`waiting`, `linked` with the first name,
+   `expired`); those requests are not listed on the device's page.
+
+- **Who may link:** any signed-in account, as with Web NFC today -- not only
+  active members. "Just linking a card isn't really any problematic thing";
+  paying needs credit, and topping up needs an active membership.
+- **Why it answers the concern above** (a stranger's tap ending up in
+  someone's account): the link only exists on the reader's screen, just after
+  that card was tapped, so nobody can start it from afar. Somebody beside the
+  reader could photograph the code and link another's card to their own
+  account; what that card buys is then paid from their own credit, and the
+  card's owner is told "belongs to another account, ask an admin". Two
+  minutes and one use keep that small.
+- **Firmware:** draws the QR code from `link_url` (ESP-IDF's `qrcode`
+  component) and asks about the link while it is shown;
+  `docs/device-protocol.md` gets both once built.
+
 ### The sales point (the first version, replaced by the menu)
 
 *Replaced on 2026-10-14 by a menu of up to four items with icons, the first

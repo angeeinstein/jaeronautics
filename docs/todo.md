@@ -77,6 +77,21 @@ maintainer says so).
   `claude/device-pairing`); this is the part left for when the firmware
   side is settled. Signing the firmware: not planned.
 
+### Cards: linked at a reader with a QR code
+
+- **Added:** 2026-10-14
+- **What:** an unknown card tapped on a reader with a screen shows a QR code;
+  the phone that scans it links the card to the signed-in account; the
+  reader then shows "Linked, hi Alex".
+- **Where:** `services/cards.py`, `services/sales_points.py` (the
+  `card_unknown` refusal), a new link page in the front end, the device API,
+  `docs/device-protocol.md`.
+- **Decided:** `docs/cards-plan.md`, "Linking a card at a reader with a QR
+  code": 2 minutes, once, a token rather than the card's ID, any signed-in
+  account.
+- **Open:** how the reader hears of the link (proposed there: asking every 2
+  seconds while the code is shown); whether to build it now.
+
 ### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
 
 - **Added:** 2026-10-12
