@@ -101,6 +101,25 @@ maintainer says so).
      an item, 80 for a device).
 - **Open:** the proposals of the conversation of 2026-10-14, to be agreed.
 
+### A device's page: "What the device can send" folded away; the key panel
+
+- **Added:** 2026-10-14
+- **Where:** Admin › Settings › Devices › a device
+  (`frontend/src/pages/admin/settings/Device.tsx`).
+- **What:**
+  1. *What the device can send* (every request with its curl command and
+     *Send*) takes a lot of room and is rarely needed once the firmware is
+     done: "we could make it either a separate page or pop-up or just
+     collapse it."
+  2. The *Key* panel (the key's start and end, *Rotate*, *Revoke*): "I can't
+     really do anything with this key anyways ... I can only provision a
+     device through the normal pairing step". A key is shown only when a
+     device is added by hand (*Add a device*, for development) or rotated;
+     *Revoke* does what switching the device off does; a paired device that
+     needs a new key is paired again ("replaces").
+- **Open:** whether the key panel goes, and whether adding by hand goes with
+  it (then pairing is the only way to a key).
+
 ### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
 
 - **Added:** 2026-10-12
