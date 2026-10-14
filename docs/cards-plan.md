@@ -119,6 +119,14 @@ The member links their own card at a reader with a screen, with any phone
    rather quickly so that other people could use the terminal". The portal
    sends the times with the link, so they change without a firmware update.
 
+- **The same card tapped again** gets a new link and a new QR code, and every
+  earlier link of that card stops working -- **also one a phone has already
+  opened**. Whoever opened a link and lost it (closed the browser, the phone
+  locked) taps the card again and starts over "like it never happened
+  before" (the maintainer). Only one link per card is ever open, and only
+  someone holding the card can start one.
+- **A card linked meanwhile** another way (Web NFC, an admin): the link is
+  refused with "This card is already linked", and the phone says so.
 - **Who may link:** any signed-in account, as with Web NFC today -- not only
   active members. "Just linking a card isn't really any problematic thing";
   paying needs credit, and topping up needs an active membership.

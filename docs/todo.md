@@ -90,7 +90,10 @@ maintainer says so).
 - **Decided:** `docs/cards-plan.md`, "Linking a card at a reader with a QR
   code" (a token, never the card's ID; 10 minutes, once, first phone keeps
   it; the reader asks every 2 seconds while the code is shown; any signed-in
-  account).
+  account). A new tap of the same card starts over with a new link and ends
+  the earlier one, even if a phone had opened it ("he just taps the card
+  again ... like it never happened before"); a card linked meanwhile another
+  way refuses the link.
 - **Open:** whether to build it now.
 
 ### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
