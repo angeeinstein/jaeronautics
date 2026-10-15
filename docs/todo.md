@@ -110,7 +110,8 @@ checked by its chip), attendance with the same cards
 
 ### Settings › Email: one page with tabs for everything about sending email
 
-- **Added:** 2026-10-16 -- **proposal, waiting for the maintainer's yes**.
+- **Added:** 2026-10-16; **agreed as proposed** the same day ("I like this
+  proposal as is"): General keeps its name.
 - **What the maintainer asked:** "we could merge all of those mailing
   settings … at least … which sender account something is sent from. So the
   notification emails, the mailings, and the replies … and the welcome
@@ -136,8 +137,6 @@ checked by its chip), attendance with the same cards
   address), not how email is sent. General then holds *Signing up* (paying
   by invoice) and *University email domains* (its attendance switch goes to
   Admin › Attendance, the item above).
-- **Open:** the maintainer's yes, or changes; whether General should be
-  renamed (e.g. *Joining*) once it holds only those two.
 
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
