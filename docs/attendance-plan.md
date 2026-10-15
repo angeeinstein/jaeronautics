@@ -43,9 +43,20 @@ team's members earn ECTS and must be there for a number of hours.
   in their data export and go with an erasure. The privacy policy needs a
   sentence on it, with the drafts waiting for the board.
 
-## Open
-
-- **A member asking for a correction:** proposed (2026-10-15) -- corrections
-  only by the team, and on My Account a stay "not checked out" gets *Ask for a
-  correction*, which opens the existing *Message the leads* form filled in
-  with the stay. A request-and-approve step only if this becomes frequent.
+- **A member asking for a correction** (agreed 2026-10-15): corrections only
+  by the team; on My Account a stay "not checked out" has *Ask for a
+  correction*, which opens the existing *Message the leads* form (for the
+  association's readers: the contact form) filled in with the stay. A
+  request-and-approve step only if this becomes frequent.
+- **Switched on per team, and for the association** (2026-10-15): "if only
+  one team needs attendance tracking, they can switch it on, or an admin can".
+  A team's leads or an admin switch the team's; admins the association's.
+  Off: its readers refuse check-ins ("Attendance is switched off"), the team
+  has no *Attendance* page, and its members see nothing of it.
+- **In a member's account** only while it matters to them: attendance on for
+  a team (or the association) they are an active member of. **Kept once there
+  is data**: "even if this feature is switched off or they are not a member
+  anymore ... this feature stays in their account with their data in it.
+  Maybe moved to a different place somewhere so that it isn't too prominent
+  anymore" -- then not in the side menu, but on *Privacy and data*, as a
+  link to the same page.
