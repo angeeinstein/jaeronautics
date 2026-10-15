@@ -137,16 +137,23 @@ maintainer says so).
   also get this admin notification on my private email and when I reply
   there, I would reply to this person with my private email. And this
   doesn't look that good and this doesn't fit our professional attitude."
-- **Decided so far:** the maintainer may create a new address (not
-  *no-reply*; "support or something similar") on the mail server; "we need
-  a way to select from which emails those messages will be sent" -- the mail
-  accounts (Settings › Mail accounts) already have their own sender address
-  and name, so likely a choice of account for replies.
-- **Open questions:** the maintainer's message was cut off ("and also as far
-  as I know …") -- ask how it went on. Do the person's answers come back to
-  that mailbox as normal emails, or does the portal read the mailbox (IMAP)
-  and show them in the conversation? Replies also for messages to a team's
-  leads (from the team's page, by its leads)?
+- **Decided (2026-10-15):**
+  - The maintainer adds a mail account for it (a *support* address, not
+    *no-reply*) in Settings › Mail accounts; a setting chooses which mail
+    account sends replies ("being able to select which is used here").
+  - **Only the main contact form** (Admin › Messages): "when a team leader is
+    contacted, I don't want them to reply from the same support email
+    address." Messages to a team's leads stay answered by email as now.
+  - **Answers to a reply:** the server receives no mail; sent from the
+    support address with no other Reply-To, a person's answer lands in that
+    mailbox, which the maintainer reads in Outlook ("I could just configure
+    this mailbox in Outlook as well"). Proposed: the portal keeps each reply
+    with the message (who, when, the text), and sends a copy to the support
+    address so the conversation is complete in that mailbox too.
+- **Later, if wanted:** the portal reading that mailbox (IMAP) and showing
+  answers in the conversation; a separate Reply-To address.
+- **Open question:** the copy to the support address (proposed above) -- or
+  not needed.
 
 ## Ideas for later (not scheduled)
 
