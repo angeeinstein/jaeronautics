@@ -77,7 +77,19 @@ describe('running attendance', () => {
     const form = await screen.findByRole('dialog', { name: 'Change a stay of Anna Active' });
     // No check-out yet: the button waits for one.
     expect(within(form).getByRole('button', { name: 'Save' })).toBeDisabled();
-    expect(calls.some((call) => call.method === 'PUT')).toBe(false);
+    await userEvent.type(within(form).getByRole('spinbutton', { name: 'Check-out hours' }), '23');
+    await userEvent.type(within(form).getByRole('spinbutton', { name: 'Check-out minutes' }), '40');
+    await userEvent.click(within(form).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(calls.some((call) => call.method === 'PUT')).toBe(true);
+    });
+    const sent = calls.filter((call) => call.method === 'PUT').at(-1);
+    // 18:02 to 23:40 on 13.10.2026, Vienna summer time: in UTC.
+    expect(await sent?.clone().json()).toEqual({
+      started_at: '2026-10-13T16:02:00.000Z',
+      ended_at: '2026-10-13T21:40:00.000Z',
+    });
   });
 
   it('switched off: the switch first, the hours only while some are recorded', async () => {

@@ -168,7 +168,8 @@ function StayForm({ api, stay, userId, people, onDone }: StayFormProps) {
       else notifyFailed(error);
     },
   });
-  const ready = who !== null && inDay && inTime && outDay && outTime;
+  // A stay changed keeps its person; a new one needs one chosen.
+  const ready = (stay !== undefined || who !== null) && inDay && inTime && outDay && outTime;
   return (
     <form
       onSubmit={(event) => {

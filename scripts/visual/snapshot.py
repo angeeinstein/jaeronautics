@@ -725,7 +725,7 @@ def seed(app, app_module, subscriptions):
         {"name": "teams--devices", "user": "active@example.org", "path": "/teams/rocket-team/manage/devices"},
         {"name": "teams--attendance", "user": "active@example.org", "path": "/teams/rocket-team/manage/attendance"},
         {"name": "teams--attendance-person", "user": "active@example.org",
-         "path": "/teams/rocket-team/manage/attendance", "click": "button:has-text('Anna')"},
+         "path": "/teams/rocket-team/manage/attendance", "click": "table[aria-label='Hours per person'] button:has-text('Anna')"},
         {"name": "admin--account-cards", "user": "admin@example.org",
          "path": f"/admin/accounts/{active.user.id}#cards"},
         {"name": "teams--messages", "user": "active@example.org", "path": "/teams/rocket-team/manage/messages"},

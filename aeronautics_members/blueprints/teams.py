@@ -191,6 +191,15 @@ def team_devices(slug):
     return app_shell()
 
 
+@teams_bp.route("/teams/<slug>/manage/attendance", methods=["GET"])
+@login_required
+def team_attendance(slug):
+    """The team's attendance (frontend/src/pages/teams/manage/Attendance.tsx)."""
+    team = _team_or_404(slug)
+    _may(team, teams_service.TeamPermission.ATTENDANCE)
+    return app_shell()
+
+
 @teams_bp.route("/teams/<slug>/manage/<any(details, fee, archive):section>", methods=["GET"])
 @login_required
 def team_admin_settings(slug, section):

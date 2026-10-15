@@ -43,6 +43,13 @@ def cards_page():
     return app_shell()
 
 
+@account_bp.route("/account/attendance", methods=["GET"])
+@login_required
+def attendance_page():
+    """One's stays at the attendance readers (api/attendance.py)."""
+    return app_shell()
+
+
 @account_bp.route("/account/credit", methods=["GET"])
 @login_required
 def credit_page():

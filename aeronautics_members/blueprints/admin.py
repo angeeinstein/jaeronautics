@@ -113,6 +113,14 @@ def admin_cards():
     return app_shell()
 
 
+@admin_bp.route("/admin/attendance", methods=["GET"])
+@login_required
+@requires(Permission.TEAMS_MANAGE)
+def admin_attendance():
+    """Attendance at the association's readers (frontend/src/pages/admin/Attendance.tsx)."""
+    return app_shell()
+
+
 @admin_bp.route("/admin/credit", methods=["GET"])
 @admin_bp.route("/admin/credit/<int:user_id>", methods=["GET"])
 @login_required
