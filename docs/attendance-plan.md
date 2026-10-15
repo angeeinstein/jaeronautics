@@ -1,6 +1,6 @@
 # Attendance with the same cards
 
-Agreed 2026-10-15, to be built on `claude/device-pairing`. The reader's side
+Agreed and built 2026-10-15, on `claude/device-pairing`. The reader's side
 is already in the firmware: in its *attendance* use it shows *Check in* and
 *Check out*; one is pressed, then the card tapped, and it shows "Welcome Alex"
 or "Goodbye Alex" with the time (`docs/device-protocol.md`, 8.2). The flight
@@ -42,7 +42,6 @@ team's members earn ECTS and must be there for a number of hours.
   this ... if somebody asks, we could implement something." Their stays are
   in their data export and go with an erasure. The privacy policy needs a
   sentence on it, with the drafts waiting for the board.
-
 - **A member asking for a correction** (agreed 2026-10-15): corrections only
   by the team; on My Account a stay "not checked out" has *Ask for a
   correction*, which opens the existing *Message the leads* form (for the
@@ -60,3 +59,40 @@ team's members earn ECTS and must be there for a number of hours.
   Maybe moved to a different place somewhere so that it isn't too prominent
   anymore" -- then not in the side menu, but on *Privacy and data*, as a
   link to the same page.
+
+## As built
+
+- **Stored:** `attendance_stays` (`db_models.AttendanceStay`): who, the owner
+  (`team_id`, none for the association), in and out with the reader, when a
+  stay was closed as not checked out, who corrected it last and when. The
+  switch: `teams.attendance_enabled`; the association's, the setting
+  `attendance_enabled`. Rules and counting: `services/attendance.py`
+  (`may_check_in` is the one place that says who may check in).
+- **The reader:** device type *Attendance*, reports `check_in` and
+  `check_out` (`docs/device-protocol.md`, 8.2). A reader belongs to a team, or
+  to nobody -- the association.
+- **The night:** `reconcile-billing` at 03:15 closes the stays started before
+  that day; every page that shows stays does the same first, so nothing waits
+  for the night.
+- **Pages:**
+  - My Account › Attendance (`/account/attendance`): a panel per team, a
+    month at a time, the month's total and the total altogether; *Ask for a
+    correction* on a stay not checked out -- *Message the leads* filled in, or
+    the contact form (`/contact?topic=&subject=&message=`) for the
+    association's readers. In the side menu while attendance is on for a team
+    (or the association) they are an active member of; otherwise, while they
+    have stays, a panel on *Privacy and data* leads there.
+  - A team's Attendance (`/teams/<slug>/manage/attendance`), for the team
+    permission *Attendance* (`team.attendance`; the leads hold it): who is
+    here now, hours per person for a period (this month, last month, this
+    semester -- October to February, March to September -- or any days), a
+    person's stays with *Change*, *Delete* and *Add a stay*, a CSV of the
+    period, the switch. In the side menu under People while on, under
+    Settings while off.
+  - Admin › Attendance (`/admin/attendance`, for whoever runs the teams):
+    the same for the association's readers; in the side menu while it is on
+    or stays are kept. Its switch is also in Settings › General.
+- **Corrections** are written to the log (`attendance_stay_added`,
+  `_changed`, `_deleted`, `attendance_switched`), with the stay before and
+  after.
+- **The data export** has a person's stays; an erasure deletes them.

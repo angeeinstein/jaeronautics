@@ -489,21 +489,40 @@ item. A successful `buy` carries what to do now:
   business. Opening a door without a sale (restocking) is in the device's own
   settings menu (section 5), not in the portal.
 
-### 8.2 Attendance: `attendance` (planned, around January)
+### 8.2 Attendance: `attendance` (built 2026-10-15)
 
 Two buttons on the screen, *Check in* and *Check out*. One is chosen, then the
-card is tapped.
+card is tapped. What the portal keeps, for whom, and who sees it:
+`docs/attendance-plan.md`.
 
 1. **`check_in`**, data `{"card": "…"}`. The answer:
    - `{"result": "checked_in", "first_name": "Alex", "at": "2026-10-14T16:02:11+02:00"}`, shown as "Welcome Alex, 16:02";
    - `{"result": "refused", "reason": "already_checked_in", "message": "Already checked in since 16:02: check out first.", "first_name": "Alex", "since": "2026-10-14T16:02:11+02:00"}`.
 2. **`check_out`**, data `{"card": "…"}`. The answer:
-   - `{"result": "checked_out", "first_name": "Alex", "at": "2026-10-14T18:36:40+02:00", "since": "2026-10-14T16:02:11+02:00", "duration_seconds": 9269}`, shown as "Goodbye Alex, 18:36, 2 h 34 min";
-   - `{"result": "refused", "reason": "not_checked_in", "message": "…", "first_name": "Alex"}`.
+   - `{"result": "checked_out", "first_name": "Alex", "at": "2026-10-14T18:36:40+02:00", "since": "2026-10-14T16:02:11+02:00", "duration_seconds": 9240}`, shown as "Goodbye Alex, 18:36, 2 h 34 min";
+   - `{"result": "refused", "reason": "not_checked_in", "message": "Not checked in here: check in first.", "first_name": "Alex"}`.
 
-Plus the card refusals of section 8.1 (`card_unknown`, `card_disabled`,
-`card_blocked`, `account_off`). The portal works out the duration. What
-attendance records, for whom, and who sees it is decided when it is built.
+- Times are the portal's local time, with their offset; `at` is when the
+  portal took the tap.
+- `duration_seconds` is what counts: whole minutes, both ends by their minute
+  (16:02 to 18:36 above), so always a multiple of 60.
+- A stay belongs to the reader's owner -- a team, or the association -- not
+  to the reader: checked in at one of the team's readers, out at another, is
+  one stay.
+- A stay still open at 03:15 the next night is closed as not checked out; the
+  next `check_in` simply starts a new one.
+
+Refusals besides the card's (section 8.1: `card_unknown` with its `link`,
+`card_disabled`, `card_blocked`, `account_off`), each with `first_name`:
+
+| `reason` | Meaning |
+|---|---|
+| `attendance_off` | Attendance is switched off for the reader's owner. |
+| `not_a_member` | Not an active member of the reader's team ("Only members of Rocket Team check in here."); at the association's readers, not an active member. |
+| `already_checked_in` | A stay is open: check out first. `since` says from when. |
+| `not_checked_in` | No stay open here to check out of. |
+
+No settings, no resources.
 
 ### 8.3 Test: `test` (built)
 
@@ -582,6 +601,9 @@ The list (`ICONS` in `aeronautics_members/services/credit_sales.py`):
 - **2026-10-15:** a firmware file is checked by what ESP-IDF puts in it: the
   same project and chip as the newest one (section 6.3). The planned marks
   of its own are dropped.
+- **2026-10-15:** attendance built (section 8.2) as first written down, with
+  the refusals `attendance_off` and `not_a_member`; `duration_seconds` counts
+  whole minutes.
 - **2026-10-14:** the `card` report's `linked` answer is gone (it came only
   while an admin waited at a reader, which was removed). Firmware that still
   handles it is harmless: it never comes.

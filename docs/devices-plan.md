@@ -272,12 +272,11 @@ document the firmware is written against.
   not guess an icon from the item's name.
 - **First name and balance on the screen:** yes. "Everybody knows each
   other here."
-- **Attendance** (to be built around January): two buttons, *Check in* and
-  *Check out*, then the card. Check in answers "Welcome Alex" and the time;
+- **Attendance** (built 2026-10-15): two buttons, *Check in* and *Check
+  out*, then the card. Check in answers "Welcome Alex" and the time;
   checking in again while checked in is refused ("check out first"); check
   out answers "Goodbye Alex", the time and how long, worked out by the
-  portal. What attendance records and who sees it is decided when it is
-  built.
+  portal. What it records and who sees it: `docs/attendance-plan.md`.
 - **Compatibility is not held on to.** "Please don't try to stick to
   something that's not as good as it could be just because of backwards
   compatibility. A small firmware update to all devices that are older is
@@ -408,11 +407,10 @@ its hash.
 ## Later
 
 - **Agreed 2026-10-13** (`docs/cards-plan.md`): cards linked to accounts, and
-  the first use, a "Sales point" type selling a fixed item; attendance around
-  January.
+  the first use, a "Sales point" type selling a fixed item; attendance
+  (built 2026-10-15, `docs/attendance-plan.md`).
 - Not decided: doors and cabinets (with a list kept on the device for when
-  the portal cannot be reached), what attendance records and who may see it
-  (and the privacy policy for it).
+  the portal cannot be reached).
 - Pairing by team leads for their own team (2026-10-14: admins only for now).
 - A stronger sign-in, and cards that prove themselves cryptographically
   (NTAG 424 DNA, DESFire) as well as plain card ids.

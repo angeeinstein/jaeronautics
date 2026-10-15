@@ -12,6 +12,7 @@
 import {
   IconAdjustments,
   IconArchive,
+  IconClockHour4,
   IconCoin,
   IconForms,
   IconHistory,
@@ -54,6 +55,9 @@ export function teamSidebar(team: Team): SidebarContent {
   const settings = may(team, 'team.edit_settings');
   // The team's treasurer sees its money, nothing about its people.
   const people = may(team, 'team.view_members');
+  // Attendance: a page of its people while it is on; while it is off, its switch is a setting.
+  const attendance = may(team, 'team.attendance');
+  const attendanceItem = { label: 'Attendance', to: `${base}/manage/attendance`, icon: IconClockHour4 };
   return {
     back: { label: `All ${team.labels.plural.toLowerCase()}`, to: '/teams' },
     header: { label: team.name, logoUrl: team.logo_url },
@@ -93,6 +97,7 @@ export function teamSidebar(team: Team): SidebarContent {
                 count: team.messages_open ?? 0,
               }
             : null,
+          attendance && team.attendance_enabled ? attendanceItem : null,
         ],
       },
       {
@@ -118,6 +123,7 @@ export function teamSidebar(team: Team): SidebarContent {
             ? { label: 'Access list', to: `${base}/manage/access-list`, icon: IconListCheck }
             : null,
           people ? { label: 'Roles', to: `${base}/manage/roles`, icon: IconUserShield } : null,
+          attendance && !team.attendance_enabled ? attendanceItem : null,
         ],
       },
       {

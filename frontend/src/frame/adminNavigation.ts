@@ -5,6 +5,7 @@
  */
 import {
   IconChecklist,
+  IconClockHour4,
   IconCoins,
   IconMail,
   IconSpeakerphone,
@@ -64,6 +65,8 @@ export function adminSidebar(me: Me): SidebarContent {
               }
             : null,
           can(me, 'cards.manage') ? { label: 'Cards', to: '/admin/cards', icon: IconId } : null,
+          // While it is on for the association, or stays at its readers are kept.
+          me.attendance_admin ? { label: 'Attendance', to: '/admin/attendance', icon: IconClockHour4 } : null,
         ],
       },
       {

@@ -547,6 +547,51 @@ def seed(app, app_module, subscriptions):
     # Waiting all day: the screenshots of its page come later than ten minutes.
     pairing.expires_at = now + timedelta(days=1)
 
+    # Attendance (docs/attendance-plan.md): on for the Rocket Team, with its
+    # two readers; Anna's stays this month -- one not checked out, one
+    # corrected by hand -- and Carla checked in now. One stay of Anna's at the
+    # association's reader, kept while the association's attendance is off.
+    from aeronautics_members.db_models import AttendanceStay
+
+    rocket.attendance_enabled = True
+    hangar, _key = devices_service.add(admin_user, name="Hangar door", type="attendance", owner=rocket,
+                                       place="Hangar")
+    workshop, _key = devices_service.add(admin_user, name="Workshop", type="attendance", owner=rocket,
+                                         place="Workshop")
+    clubroom, _key = devices_service.add(admin_user, name="Club room", type="attendance", place="Club room")
+    morning = now.replace(hour=7, minute=12, second=41, microsecond=0)
+
+    def stay(user, team, days, hours, minutes=0, *, at=hangar, out=workshop, closed=False, corrected=False,
+             open_=False):
+        started = morning - timedelta(days=days)
+        record = AttendanceStay(user_id=user.id, team_id=team.id if team else None, started_at=started,
+                                in_device_id=at.id, created_at=started)
+        if closed:
+            record.closed_at = min(started + timedelta(hours=20), now)
+        elif not open_:
+            record.ended_at = started + timedelta(hours=hours, minutes=minutes, seconds=17)
+            record.out_device_id = out.id if not corrected else None
+        if corrected:
+            record.corrected_by_user_id, record.corrected_at = active.user.id, now - timedelta(days=1)
+        db.session.add(record)
+
+    for days, hours, minutes in ((1, 3, 25), (3, 5, 2), (6, 2, 48), (8, 4, 0)):
+        stay(active.user, rocket, days, hours, minutes)
+    # Not checked out on the day of her newest stay, so the two are always in the same month.
+    stay(active.user, rocket, 1 - 5 / 24, 0, closed=True)
+    stay(active.user, rocket, 5, 6, 30, corrected=True)
+    stay(carla, rocket, 2, 4, 12, at=workshop, out=hangar)
+    stay(carla, rocket, 4, 1, 50)
+    # Checked in today, never before the day began: the night would close it.
+    from aeronautics_members.services import attendance
+
+    since = max(now - timedelta(hours=2),
+                attendance.day_start(attendance.local(now).date()).replace(tzinfo=timezone.utc) + timedelta(minutes=1))
+    db.session.add(AttendanceStay(user_id=carla.id, team_id=rocket.id, started_at=since, in_device_id=workshop.id,
+                                  created_at=since))
+    stay(active.user, None, 9, 2, 15, at=clubroom, out=clubroom)
+    db.session.commit()
+
     reset_token = build_password_reset_token(new.user)
     delete_token = build_account_deletion_token(active.user)
     db.session.commit()
@@ -589,6 +634,9 @@ def seed(app, app_module, subscriptions):
                       {"name": "account--data", "path": "/account/data"},
                       {"name": "account--credit", "path": "/account/credit"},
                       {"name": "account--cards", "path": "/account/cards"},
+                      {"name": "account--attendance", "path": "/account/attendance"},
+                      {"name": "account--attendance-ask", "path": "/account/attendance",
+                       "click": "button:has-text('Ask for a correction')"},
                       # Saving the profile: the success message with its tick.
                       {"name": "account--saved", "path": "/account/profile",
                        "open": "section[aria-label='Contact details'] button:has-text('Edit')",
@@ -673,7 +721,11 @@ def seed(app, app_module, subscriptions):
          "path": f"/admin/settings/devices/pair?code={device_pairing.shown(pairing.code)}"},
         {"name": "admin--settings-firmware", "user": "admin@example.org", "path": "/admin/settings/devices/firmware"},
         {"name": "admin--cards", "user": "admin@example.org", "path": "/admin/cards"},
+        {"name": "admin--attendance", "user": "admin@example.org", "path": "/admin/attendance"},
         {"name": "teams--devices", "user": "active@example.org", "path": "/teams/rocket-team/manage/devices"},
+        {"name": "teams--attendance", "user": "active@example.org", "path": "/teams/rocket-team/manage/attendance"},
+        {"name": "teams--attendance-person", "user": "active@example.org",
+         "path": "/teams/rocket-team/manage/attendance", "click": "button:has-text('Anna')"},
         {"name": "admin--account-cards", "user": "admin@example.org",
          "path": f"/admin/accounts/{active.user.id}#cards"},
         {"name": "teams--messages", "user": "active@example.org", "path": "/teams/rocket-team/manage/messages"},

@@ -1,14 +1,19 @@
 /**
  * Settings -> General: how members can pay at signup, the welcome email, and
- * the domains a student's address must be on. Data: GET|PUT
- * /api/v1/admin/settings/general (aeronautics_members/api/admin_settings.py).
+ * the domains a student's address must be on; for whoever runs the teams,
+ * attendance at the association's readers on or off (docs/attendance-plan.md).
+ * Data: GET|PUT /api/v1/admin/settings/general (aeronautics_members/api/
+ * admin_settings.py), PUT /api/v1/admin/attendance/switch.
  */
 import { Checkbox, Select, Stack, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
 import { IconAt, IconMail, IconUserPlus } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
+import { can, useMe } from '../../../api/session';
+import { AttendanceSwitch } from '../../../components/attendance/AttendanceBoard';
 import { Panel } from '../../../components/Panel';
+import { associationAttendance } from '../Attendance';
 import { SaveBar, SettingsPage, useSectionSave } from './shared';
 
 type GeneralOut = Schemas['GeneralOut'];
@@ -142,13 +147,21 @@ function Form({ data }: { data: GeneralOut }) {
 }
 
 export function General() {
+  const me = useMe().data;
   return (
     <SettingsPage
       title="General"
       description="Signing up, the welcome email, and the students' email domains."
       query={generalQuery}
     >
-      {(data) => <Form data={data} />}
+      {(data) => (
+        <Stack gap="lg">
+          <Form data={data} />
+          {can(me, 'teams.manage') ? (
+            <AttendanceSwitch api={associationAttendance} where="the association" />
+          ) : null}
+        </Stack>
+      )}
     </SettingsPage>
   );
 }

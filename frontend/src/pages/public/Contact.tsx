@@ -2,12 +2,15 @@
  * The contact form (docs/messages-plan.md): what it is about, a subject and
  * the message. It goes to the association's admins, who answer by email.
  * Somebody signed in writes as their account -- name and address are shown,
- * not asked -- and the page they came from goes along. Data: GET|POST
- * /api/v1/contact.
+ * not asked -- and the page they came from goes along. A link may fill it
+ * in (?topic=, ?subject=, ?message=): asking for a correction of a stay at
+ * the association's readers does (pages/account/Attendance.tsx). Data:
+ * GET|POST /api/v1/contact.
  */
 import { Alert, Button, Select, SimpleGrid, Stack, Text, Textarea, TextInput, Title } from '@mantine/core';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { IconMail } from '@tabler/icons-react';
 
 import { api, ApiError, call } from '../../api/client';
@@ -36,11 +39,12 @@ export function Contact() {
   useDocumentTitle('Contact');
   const form = useQuery(contactQuery);
   const writingTime = useWritingTime();
-  const [topic, setTopic] = useState<string | null>(null);
+  const [filledIn] = useSearchParams();
+  const [topic, setTopic] = useState<string | null>(filledIn.get('topic'));
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [subject, setSubject] = useState('');
-  const [message, setMessage] = useState('');
+  const [subject, setSubject] = useState(filledIn.get('subject') ?? '');
+  const [message, setMessage] = useState(filledIn.get('message') ?? '');
   const [website, setWebsite] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const send = useMutation({

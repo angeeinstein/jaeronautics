@@ -1,10 +1,11 @@
 /**
  * "Message the leads" on a team's pages (docs/messages-plan.md): a subject
  * and a message to the team's leads -- to the admins while it has none. The
- * leads answer by email; their addresses stay hidden until they do.
- * Data: POST /api/v1/teams/<slug>/message.
+ * leads answer by email; their addresses stay hidden until they do. It may
+ * open filled in, under a label of its own: *Ask for a correction* of a stay
+ * on My Account › Attendance. Data: POST /api/v1/teams/<slug>/message.
  */
-import { Alert, Button, Modal, Stack, Text, Textarea, TextInput } from '@mantine/core';
+import { Alert, Button, type ButtonProps, Modal, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { IconMail } from '@tabler/icons-react';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -13,10 +14,15 @@ import { api, ApiError, call } from '../../api/client';
 import { TrapField, useWritingTime } from '../../components/MessageGuard';
 import { notifyFailed } from '../../lib/notify';
 
-function Form({ slug, onDone }: { slug: string; onDone: () => void }) {
+interface FilledIn {
+  subject?: string;
+  message?: string;
+}
+
+function Form({ slug, filledIn, onDone }: { slug: string; filledIn: FilledIn; onDone: () => void }) {
   const writingTime = useWritingTime();
-  const [subject, setSubject] = useState('');
-  const [message, setMessage] = useState('');
+  const [subject, setSubject] = useState(filledIn.subject ?? '');
+  const [message, setMessage] = useState(filledIn.message ?? '');
   const [website, setWebsite] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const send = useMutation({
@@ -87,18 +93,31 @@ function Form({ slug, onDone }: { slug: string; onDone: () => void }) {
   );
 }
 
-export function MessageLeads({ slug, teamName }: { slug: string; teamName: string }) {
+export function MessageLeads({
+  slug,
+  teamName,
+  label = 'Message the leads',
+  size,
+  filledIn = {},
+}: {
+  slug: string;
+  teamName: string;
+  label?: string;
+  size?: ButtonProps['size'];
+  filledIn?: FilledIn;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <Button
         variant="default"
+        size={size}
         leftSection={<IconMail size={16} aria-hidden />}
         onClick={() => {
           setOpen(true);
         }}
       >
-        Message the leads
+        {label}
       </Button>
       <Modal
         opened={open}
@@ -111,6 +130,7 @@ export function MessageLeads({ slug, teamName }: { slug: string; teamName: strin
         {open ? (
           <Form
             slug={slug}
+            filledIn={filledIn}
             onDone={() => {
               setOpen(false);
             }}

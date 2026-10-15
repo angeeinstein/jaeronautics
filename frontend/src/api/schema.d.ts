@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/account/attendance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The person's own stays, per team (and the association): where attendance */
+        get: operations["account_attendance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/account/billing": {
         parameters: {
             query?: never;
@@ -648,6 +665,109 @@ export interface paths {
         put?: never;
         /** Stop an announcement: what has not gone out yet does not. */
         post: operations["admin_announcement_stop"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/attendance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The association's readers: hours per person for a period, and who is checked in now. */
+        get: operations["association_attendance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/attendance.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every stay of a period at the association's readers, as a CSV file. */
+        get: operations["association_attendance_csv"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/attendance/people/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One person's stays at the association's readers. */
+        get: operations["association_attendance_person"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/attendance/stays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A stay forgotten altogether, entered by hand. */
+        post: operations["association_attendance_add"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/attendance/stays/{stay_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** When a stay started and ended, set by hand. */
+        put: operations["association_attendance_change"];
+        post?: never;
+        /** A stay deleted. */
+        delete: operations["association_attendance_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/attendance/switch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Attendance on or off at the association's readers. */
+        put: operations["association_attendance_switch"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2658,6 +2778,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{slug}/manage/attendance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Hours per person for a period, and who is checked in now. */
+        get: operations["team_attendance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/attendance.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every stay of a period, as a CSV file. */
+        get: operations["team_attendance_csv"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/attendance/people/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One person's stays here, newest first: for a period, or all of them. */
+        get: operations["team_attendance_person"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/attendance/stays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A stay forgotten altogether, entered by hand. */
+        post: operations["team_attendance_add"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/attendance/stays/{stay_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** When a stay started and ended, set by hand. */
+        put: operations["team_attendance_change"];
+        post?: never;
+        /** A stay deleted. */
+        delete: operations["team_attendance_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/attendance/switch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Attendance on or off for the team: off, its readers refuse check-ins; its stays stay. */
+        put: operations["team_attendance_switch"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{slug}/manage/devices": {
         parameters: {
             query?: never;
@@ -3406,6 +3629,11 @@ export interface components {
             /** Id */
             id: number;
         };
+        /** AccountAttendanceOut */
+        AccountAttendanceOut: {
+            /** Owners */
+            owners: components["schemas"]["OwnerStaysOut"][];
+        };
         /** AccountListOut */
         AccountListOut: {
             /** Items */
@@ -3820,6 +4048,25 @@ export interface components {
              * @default null
              */
             confirm_name?: string | null;
+        };
+        /** AttendanceOut */
+        AttendanceOut: {
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /** Present */
+            present: components["schemas"]["PresentOut"][];
+            /** Rows */
+            rows: components["schemas"]["HoursRowOut"][];
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
         };
         /**
          * Attention
@@ -6043,6 +6290,19 @@ export interface components {
              */
             paid?: string | null;
         };
+        /** HoursRowOut */
+        HoursRowOut: {
+            /** Minutes */
+            minutes: number;
+            /** Name */
+            name: string;
+            /** Not Checked Out */
+            not_checked_out: number;
+            /** Stays */
+            stays: number;
+            /** User Id */
+            user_id: number;
+        };
         /** IdentityOut */
         IdentityOut: {
             /** First Name */
@@ -6606,6 +6866,11 @@ export interface components {
             access_list_enabled: boolean;
             /** Applications */
             applications: number;
+            /**
+             * Attendance Enabled
+             * @default false
+             */
+            attendance_enabled?: boolean;
             /** Has Lead In Force */
             has_lead_in_force: boolean;
             labels: components["schemas"]["LabelsOut"];
@@ -6614,7 +6879,7 @@ export interface components {
             /** Name */
             name: string;
             /** Permissions */
-            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices")[];
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices" | "team.attendance")[];
             /** Slug */
             slug: string;
         };
@@ -6624,6 +6889,16 @@ export interface components {
             admin_area: boolean;
             /** Admin Notices */
             admin_notices: components["schemas"]["Notice"][];
+            /**
+             * Attendance Admin
+             * @default false
+             */
+            attendance_admin?: boolean;
+            /**
+             * Attendance Area
+             * @default null
+             */
+            attendance_area?: ("menu" | "data") | null;
             /**
              * Cards Area
              * @default false
@@ -7321,6 +7596,22 @@ export interface components {
             /** Detail */
             detail: string;
         };
+        /** OwnerStaysOut */
+        OwnerStaysOut: {
+            /**
+             * Ask
+             * @enum {string}
+             */
+            ask: "team" | "contact";
+            /** Current */
+            current: boolean;
+            /** Name */
+            name: string;
+            /** Owner */
+            owner: string;
+            /** Stays */
+            stays: components["schemas"]["StayOut"][];
+        };
         /** PageIn */
         PageIn: {
             /**
@@ -7403,10 +7694,32 @@ export interface components {
             /** Paid Until */
             paid_until: string | null;
         };
+        /** PeriodQuery */
+        PeriodQuery: {
+            /**
+             * End
+             * @default null
+             */
+            end?: string | null;
+            /**
+             * Start
+             * @default null
+             */
+            start?: string | null;
+        };
         /** PersonCardsOut */
         PersonCardsOut: {
             /** Items */
             items: components["schemas"]["CardOut"][];
+            /** User Id */
+            user_id: number;
+        };
+        /** PersonStaysOut */
+        PersonStaysOut: {
+            /** Name */
+            name: string;
+            /** Stays */
+            stays: components["schemas"]["StayOut"][];
             /** User Id */
             user_id: number;
         };
@@ -7531,6 +7844,19 @@ export interface components {
              * @default null
              */
             tab?: string | null;
+        };
+        /** PresentOut */
+        PresentOut: {
+            /** Name */
+            name: string;
+            /** Place */
+            place: string | null;
+            /** Since */
+            since: string;
+            /** Stay Id */
+            stay_id: number;
+            /** User Id */
+            user_id: number;
         };
         /** PreviewIn */
         PreviewIn: {
@@ -8149,6 +8475,58 @@ export interface components {
             /** Label */
             label: string;
         };
+        /** StayChangeIn */
+        StayChangeIn: {
+            /**
+             * Ended At
+             * Format: date-time
+             */
+            ended_at: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+        };
+        /** StayIn */
+        StayIn: {
+            /**
+             * Ended At
+             * Format: date-time
+             */
+            ended_at: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** User Id */
+            user_id: number;
+        };
+        /** StayOut */
+        StayOut: {
+            /** Corrected At */
+            corrected_at: string | null;
+            /** Corrected By */
+            corrected_by: string | null;
+            /** Ended At */
+            ended_at: string | null;
+            /** Id */
+            id: number;
+            /** In Place */
+            in_place: string | null;
+            /** Minutes */
+            minutes: number | null;
+            /** Out Place */
+            out_place: string | null;
+            /** Started At */
+            started_at: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "open" | "done" | "not_checked_out";
+        };
         /** StepOut */
         StepOut: {
             /** Key */
@@ -8160,6 +8538,16 @@ export interface components {
              * @enum {string}
              */
             state: "pending" | "running" | "done" | "failed";
+        };
+        /** SwitchIn */
+        SwitchIn: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** SwitchOut */
+        SwitchOut: {
+            /** Enabled */
+            enabled: boolean;
         };
         /** SyncProblem */
         SyncProblem: {
@@ -8490,6 +8878,11 @@ export interface components {
             administers?: boolean;
             /** Applications Waiting */
             applications_waiting: number | null;
+            /**
+             * Attendance Enabled
+             * @default false
+             */
+            attendance_enabled?: boolean;
             /** Can Edit Page */
             can_edit_page: boolean;
             /** Can Manage */
@@ -8531,7 +8924,7 @@ export interface components {
             /** Name */
             name: string;
             /** Permissions */
-            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices")[];
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices" | "team.attendance")[];
             /** Photos */
             photos: components["schemas"]["PhotoOut"][];
             /** Picture Url */
@@ -9003,6 +9396,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MyAccountOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    account_attendance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountAttendanceOut"];
                 };
             };
             /** @description Not signed in. */
@@ -11111,6 +11533,414 @@ export interface operations {
             };
             /** @description Not found. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    association_attendance: {
+        parameters: {
+            query?: {
+                start?: string | null;
+                end?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    association_attendance_csv: {
+        parameters: {
+            query?: {
+                start?: string | null;
+                end?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    association_attendance_person: {
+        parameters: {
+            query?: {
+                start?: string | null;
+                end?: string | null;
+            };
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonStaysOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    association_attendance_add: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StayIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StayOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    association_attendance_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stay_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StayChangeIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StayOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    association_attendance_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stay_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    association_attendance_switch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SwitchIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SwitchOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -18500,6 +19330,398 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApplyingOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_attendance: {
+        parameters: {
+            query?: {
+                start?: string | null;
+                end?: string | null;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_attendance_csv: {
+        parameters: {
+            query?: {
+                start?: string | null;
+                end?: string | null;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_attendance_person: {
+        parameters: {
+            query?: {
+                start?: string | null;
+                end?: string | null;
+            };
+            header?: never;
+            path: {
+                slug: string;
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonStaysOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_attendance_add: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StayIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StayOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_attendance_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                stay_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StayChangeIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StayOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_attendance_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                stay_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_attendance_switch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SwitchIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SwitchOut"];
                 };
             };
             /** @description The input is not valid (see error.fields). */

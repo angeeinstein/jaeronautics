@@ -94,8 +94,9 @@ that appears when entering the admin area.
 | Admin | the admin sidebar | full |
 
 Sidebars are for the places where people *work* -- running a team, running
-the association -- and for My Account, which grows (credit and cards, since
-October 2026, are pages in its side menu) and so gets one place to add a page.
+the association -- and for My Account, which grows (credit, cards and
+attendance, since October 2026, are pages in its side menu) and so gets one
+place to add a page.
 
 ### The footer
 
@@ -113,7 +114,9 @@ Entered with the **gear** at the right of the top bar; opens on the Dashboard.
 - **‹ Back to the portal** (to My Account)
 - *Overview* -- **Dashboard**
 - *People* -- **Accounts**, **Reviews** (count of what waits), **Cards**
-  (every card linked; with `cards.manage`)
+  (every card linked; with `cards.manage`), **Attendance** (the
+  association's readers, `docs/attendance-plan.md`; while on, or stays are
+  kept)
 - *Money* -- **Money** (the teams' money), **Credit** (members' money: the
   totals, balances, the latest entries), **Sales** (what was sold, by seller
   and item; the association's price list and its sales points' menus)

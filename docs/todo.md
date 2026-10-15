@@ -17,9 +17,8 @@ card with a reader's QR code, device pairing and firmware updates on
 figures and delete, a device's page slimmer, card or SEPA asked before
 Stripe's page), and the batch after it (a sale switching a reader's
 outputs, tabs on long pages and an icon in every panel, the firmware file
-checked by its chip). Attendance with the
-same cards comes next, needed around January (not to be started before the
-maintainer says so).
+checked by its chip), and attendance with the same cards
+(`docs/attendance-plan.md`).
 
 ## Open
 
@@ -107,6 +106,11 @@ maintainer says so).
 - **Also (added 2026-10-14, with linking a card by QR code):** a card not
   linked yet, tapped on a reader with a screen, is kept as its hash for a day
   (§ 20, the cards paragraph). See `docs/cards-plan.md`.
+- **Also (added 2026-10-15, with attendance):** the privacy policy draft
+  names the stays recorded at attendance readers -- who, which team, in and
+  out with the reader, corrections and by whom; who sees them; kept with the
+  account, in the export, deleted with it (§ 20, after the cards). See
+  `docs/attendance-plan.md`.
 - **Also (added 2026-10-11, with Stripe's book):** the privacy policy draft
   says that the portal keeps a copy of the Stripe account's bookings without
   names, and that a difference with Stripe names the payer's address and is
@@ -119,12 +123,6 @@ maintainer says so).
 - **Once approved:** `status: "published"` in all four files, with the day
   of publishing as `version`/`effective_from` (and the file names); check
   that nothing refers to the old § 31-36 of the membership terms.
-
-### Attendance with the same cards (being built)
-
-- **Added:** 2026-10-13; **agreed 2026-10-15**, started then (the firmware
-  side was done first).
-- **What, decided and open:** `docs/attendance-plan.md`.
 
 ### Answering contact messages from inside the portal
 

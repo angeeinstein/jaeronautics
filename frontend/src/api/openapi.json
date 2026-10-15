@@ -276,6 +276,23 @@
         "title": "AccountActivity",
         "type": "object"
       },
+      "AccountAttendanceOut": {
+        "additionalProperties": false,
+        "properties": {
+          "owners": {
+            "items": {
+              "$ref": "#/components/schemas/OwnerStaysOut"
+            },
+            "title": "Owners",
+            "type": "array"
+          }
+        },
+        "required": [
+          "owners"
+        ],
+        "title": "AccountAttendanceOut",
+        "type": "object"
+      },
       "AccountListOut": {
         "additionalProperties": false,
         "properties": {
@@ -1561,6 +1578,48 @@
           "archived"
         ],
         "title": "ArchivedIn",
+        "type": "object"
+      },
+      "AttendanceOut": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "end": {
+            "format": "date",
+            "title": "End",
+            "type": "string"
+          },
+          "present": {
+            "items": {
+              "$ref": "#/components/schemas/PresentOut"
+            },
+            "title": "Present",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/HoursRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "start": {
+            "format": "date",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "start",
+          "end",
+          "rows",
+          "present"
+        ],
+        "title": "AttendanceOut",
         "type": "object"
       },
       "Attention": {
@@ -8386,6 +8445,40 @@
         "title": "HomeQuery",
         "type": "object"
       },
+      "HoursRowOut": {
+        "additionalProperties": false,
+        "properties": {
+          "minutes": {
+            "title": "Minutes",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "not_checked_out": {
+            "title": "Not Checked Out",
+            "type": "integer"
+          },
+          "stays": {
+            "title": "Stays",
+            "type": "integer"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "minutes",
+          "stays",
+          "not_checked_out"
+        ],
+        "title": "HoursRowOut",
+        "type": "object"
+      },
       "IdentityOut": {
         "additionalProperties": false,
         "properties": {
@@ -10028,6 +10121,11 @@
             "title": "Applications",
             "type": "integer"
           },
+          "attendance_enabled": {
+            "default": false,
+            "title": "Attendance Enabled",
+            "type": "boolean"
+          },
           "has_lead_in_force": {
             "title": "Has Lead In Force",
             "type": "boolean"
@@ -10066,7 +10164,8 @@
                 "team.appoint_leads",
                 "team.edit_prices",
                 "team.messages",
-                "team.devices"
+                "team.devices",
+                "team.attendance"
               ],
               "type": "string"
             },
@@ -10104,6 +10203,27 @@
             },
             "title": "Admin Notices",
             "type": "array"
+          },
+          "attendance_admin": {
+            "default": false,
+            "title": "Attendance Admin",
+            "type": "boolean"
+          },
+          "attendance_area": {
+            "anyOf": [
+              {
+                "enum": [
+                  "menu",
+                  "data"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Attendance Area"
           },
           "cards_area": {
             "default": false,
@@ -12292,6 +12412,47 @@
         "title": "OwnedReportOut",
         "type": "object"
       },
+      "OwnerStaysOut": {
+        "additionalProperties": false,
+        "properties": {
+          "ask": {
+            "enum": [
+              "team",
+              "contact"
+            ],
+            "title": "Ask",
+            "type": "string"
+          },
+          "current": {
+            "title": "Current",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
+          "stays": {
+            "items": {
+              "$ref": "#/components/schemas/StayOut"
+            },
+            "title": "Stays",
+            "type": "array"
+          }
+        },
+        "required": [
+          "owner",
+          "name",
+          "current",
+          "ask",
+          "stays"
+        ],
+        "title": "OwnerStaysOut",
+        "type": "object"
+      },
       "PageIn": {
         "additionalProperties": false,
         "properties": {
@@ -12570,6 +12731,39 @@
         "title": "Period",
         "type": "object"
       },
+      "PeriodQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "End"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Start"
+          }
+        },
+        "title": "PeriodQuery",
+        "type": "object"
+      },
       "PersonCardsOut": {
         "additionalProperties": false,
         "properties": {
@@ -12590,6 +12784,33 @@
           "items"
         ],
         "title": "PersonCardsOut",
+        "type": "object"
+      },
+      "PersonStaysOut": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "stays": {
+            "items": {
+              "$ref": "#/components/schemas/StayOut"
+            },
+            "title": "Stays",
+            "type": "array"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "stays"
+        ],
+        "title": "PersonStaysOut",
         "type": "object"
       },
       "PhotoOut": {
@@ -12963,6 +13184,47 @@
           }
         },
         "title": "PresenceQuery",
+        "type": "object"
+      },
+      "PresentOut": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place"
+          },
+          "since": {
+            "title": "Since",
+            "type": "string"
+          },
+          "stay_id": {
+            "title": "Stay Id",
+            "type": "integer"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stay_id",
+          "user_id",
+          "name",
+          "since",
+          "place"
+        ],
+        "title": "PresentOut",
         "type": "object"
       },
       "PreviewIn": {
@@ -14806,6 +15068,154 @@
         "title": "StatementRow",
         "type": "object"
       },
+      "StayChangeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "ended_at": {
+            "format": "date-time",
+            "title": "Ended At",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "started_at",
+          "ended_at"
+        ],
+        "title": "StayChangeIn",
+        "type": "object"
+      },
+      "StayIn": {
+        "additionalProperties": false,
+        "properties": {
+          "ended_at": {
+            "format": "date-time",
+            "title": "Ended At",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "started_at",
+          "ended_at"
+        ],
+        "title": "StayIn",
+        "type": "object"
+      },
+      "StayOut": {
+        "additionalProperties": false,
+        "properties": {
+          "corrected_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corrected At"
+          },
+          "corrected_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corrected By"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "in_place": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Place"
+          },
+          "minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minutes"
+          },
+          "out_place": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Out Place"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "done",
+              "not_checked_out"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "started_at",
+          "ended_at",
+          "minutes",
+          "state",
+          "in_place",
+          "out_place",
+          "corrected_by",
+          "corrected_at"
+        ],
+        "title": "StayOut",
+        "type": "object"
+      },
       "StepOut": {
         "additionalProperties": false,
         "properties": {
@@ -14834,6 +15244,34 @@
           "state"
         ],
         "title": "StepOut",
+        "type": "object"
+      },
+      "SwitchIn": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "SwitchIn",
+        "type": "object"
+      },
+      "SwitchOut": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "SwitchOut",
         "type": "object"
       },
       "SyncProblem": {
@@ -15963,6 +16401,11 @@
             ],
             "title": "Applications Waiting"
           },
+          "attendance_enabled": {
+            "default": false,
+            "title": "Attendance Enabled",
+            "type": "boolean"
+          },
           "can_edit_page": {
             "title": "Can Edit Page",
             "type": "boolean"
@@ -16092,7 +16535,8 @@
                 "team.appoint_leads",
                 "team.edit_prices",
                 "team.messages",
-                "team.devices"
+                "team.devices",
+                "team.attendance"
               ],
               "type": "string"
             },
@@ -17521,6 +17965,37 @@
         "summary": "My Account: everything on the page, with what to do next.",
         "tags": [
           "Account"
+        ]
+      }
+    },
+    "/api/v1/account/attendance": {
+      "get": {
+        "operationId": "account_attendance",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountAttendanceOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          }
+        },
+        "summary": "The person's own stays, per team (and the association): where attendance",
+        "tags": [
+          "Attendance"
         ]
       }
     },
@@ -20279,6 +20754,608 @@
         ],
         "x-permissions": [
           "announcements.send"
+        ]
+      }
+    },
+    "/api/v1/admin/attendance": {
+      "get": {
+        "operationId": "association_attendance",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttendanceOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "The association's readers: hours per person for a period, and who is checked in now.",
+        "tags": [
+          "Attendance"
+        ],
+        "x-permissions": [
+          "teams.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/attendance.csv": {
+      "get": {
+        "operationId": "association_attendance_csv",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The file"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "Every stay of a period at the association's readers, as a CSV file.",
+        "tags": [
+          "Attendance"
+        ],
+        "x-permissions": [
+          "teams.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/attendance/people/{user_id}": {
+      "get": {
+        "operationId": "association_attendance_person",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonStaysOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "One person's stays at the association's readers.",
+        "tags": [
+          "Attendance"
+        ],
+        "x-permissions": [
+          "teams.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/attendance/stays": {
+      "post": {
+        "operationId": "association_attendance_add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StayIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StayOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "A stay forgotten altogether, entered by hand.",
+        "tags": [
+          "Attendance"
+        ],
+        "x-permissions": [
+          "teams.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/attendance/stays/{stay_id}": {
+      "delete": {
+        "operationId": "association_attendance_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "stay_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Done."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "A stay deleted.",
+        "tags": [
+          "Attendance"
+        ],
+        "x-permissions": [
+          "teams.manage"
+        ]
+      },
+      "put": {
+        "operationId": "association_attendance_change",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "stay_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StayChangeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StayOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "When a stay started and ended, set by hand.",
+        "tags": [
+          "Attendance"
+        ],
+        "x-permissions": [
+          "teams.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/attendance/switch": {
+      "put": {
+        "operationId": "association_attendance_switch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwitchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwitchOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Attendance on or off at the association's readers.",
+        "tags": [
+          "Attendance"
+        ],
+        "x-permissions": [
+          "teams.manage"
         ]
       }
     },
@@ -29689,6 +30766,617 @@
         "summary": "Save how people join, how many the team takes, whether it takes new members and the question.",
         "tags": [
           "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/attendance": {
+      "get": {
+        "operationId": "team_attendance",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttendanceOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "Hours per person for a period, and who is checked in now.",
+        "tags": [
+          "Attendance"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/attendance.csv": {
+      "get": {
+        "operationId": "team_attendance_csv",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The file"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "Every stay of a period, as a CSV file.",
+        "tags": [
+          "Attendance"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/attendance/people/{user_id}": {
+      "get": {
+        "operationId": "team_attendance_person",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonStaysOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "One person's stays here, newest first: for a period, or all of them.",
+        "tags": [
+          "Attendance"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/attendance/stays": {
+      "post": {
+        "operationId": "team_attendance_add",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StayIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StayOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "A stay forgotten altogether, entered by hand.",
+        "tags": [
+          "Attendance"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/attendance/stays/{stay_id}": {
+      "delete": {
+        "operationId": "team_attendance_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "stay_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Done."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "A stay deleted.",
+        "tags": [
+          "Attendance"
+        ]
+      },
+      "put": {
+        "operationId": "team_attendance_change",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "stay_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StayChangeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StayOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "When a stay started and ended, set by hand.",
+        "tags": [
+          "Attendance"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/attendance/switch": {
+      "put": {
+        "operationId": "team_attendance_switch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwitchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwitchOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Attendance on or off for the team: off, its readers refuse check-ins; its stays stay.",
+        "tags": [
+          "Attendance"
         ]
       }
     },

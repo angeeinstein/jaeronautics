@@ -241,6 +241,9 @@ class TestPages:
 
         overview = client.get(url).get_json()
         assert overview["enabled"] is True
+        # The side menu's Attendance follows the switch.
+        page = client.get(f"/api/v1/teams/{team.slug}").get_json()
+        assert page["attendance_enabled"] is True and "team.attendance" in page["permissions"]
         assert [row["name"] for row in overview["rows"]] == ["Anna Berger", "Lena Lead"]
         assert [(here["name"], here["place"]) for here in overview["present"]] == [("Anna Berger", "Hangar")]
 

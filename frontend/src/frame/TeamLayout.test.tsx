@@ -92,6 +92,22 @@ describe("a team's menu", () => {
     ).not.toContain('Admin');
   });
 
+  it('attendance: among its people while on, a setting while off', () => {
+    const lead = { permissions: ['team.view_members', 'team.attendance'] } as const;
+    expect(
+      labels(teamSidebar(team({ ...lead, permissions: [...lead.permissions], attendance_enabled: true }))),
+    ).toEqual([
+      ['Team', 'Overview', 'About the team'],
+      ['People', 'Applications', 'Members', 'Former members', 'Attendance'],
+      ['Settings', 'Roles'],
+    ]);
+    expect(labels(teamSidebar(team({ permissions: [...lead.permissions] }))).at(-1)).toEqual([
+      'Settings',
+      'Roles',
+      'Attendance',
+    ]);
+  });
+
   it('a treasurer: the money, nothing about its people', () => {
     expect(labels(teamSidebar(team({ permissions: ['team.view_money'] })))).toEqual([
       ['Team', 'Overview', 'About the team'],
