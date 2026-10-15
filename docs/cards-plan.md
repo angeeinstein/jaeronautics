@@ -194,12 +194,11 @@ later on we can expand this if this works and if this feels right."
 - **Linking at a reader by its user**, proven by being there: a QR code with a
   short-lived token on a reader with a display, or pressing the reader's
   button within a few seconds of pressing *Link a card* in the portal.
-- **Undoing your own sale** for a few minutes, on My Account (a double tap, or
-  the favourite beverage was not in the fridge after all). Not at the reader.
+- ~~Undoing your own sale~~ -- turned down 2026-10-15 (`docs/todo.md`,
+  "Turned down").
 - **Actions at the reader** beyond light and beeps: a relay (a coffee
-  machine), a fridge's magnetic lock -- an output per item, sent with the
-  answer. "Especially because I don't have a concrete use case for the
-  readers right now."
+  machine), a fridge's magnetic lock. Taken up 2026-10-15: see the to-do item
+  "Sales points: switch outputs after a sale".
 - **Attendance**, around January, with the same cards.
 
 ## How it was built (decided while building)

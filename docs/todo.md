@@ -21,6 +21,47 @@ maintainer says so).
 
 ## Open
 
+### Sales points: switch outputs after a sale (a fridge's lock, a coffee machine)
+
+- **Added:** 2026-10-15
+- **What:** a reader switches one of its outputs for some seconds after a
+  sale -- a magnetic lock on the fridge (planned: the reader beside the
+  fridge, an honesty system, the door opening only after paying), a coffee
+  machine's relay. The firmware drives the outputs (a relay board on I2C,
+  "because of the available pins and that I may want to switch ... multiple
+  things"); the portal says which and how long.
+- **Agreed (2026-10-15):**
+  - Set in the portal, not built into the firmware: "it makes it easier to
+    configure. You can do this in the field with no need to build a new
+    firmware."
+  - **Not cluttering the pages:** behind an *Actions* button beside the other
+    buttons, opening a small dialog, with a switch to turn the whole action
+    off.
+  - It differs by reader and by item: "one coffee machine does not have an
+    action, and the other coffee machine will switch on a relay for some
+    time, and the third ... depending on which type of coffee was
+    purchased."
+  - **The portal being unreachable** needs nothing for now: "this magnetic
+    lock won't be some super secure thing anyways", and it can be unplugged.
+  - **Opening the door without buying** (restocking): in the device's own
+    settings menu, opened with an admin's card -- firmware only, nothing in
+    the portal.
+- **Proposed (not yet confirmed):**
+  - Price lists are per owner (the association's, each team's), and a reader
+    sells from its owner's list -- but actions differ per reader. So the
+    actions belong to **the reader's menu**, not to the price list: on the
+    owner's Sales page, *Sales points* tab, each reader's panel. There an
+    *Actions* button for the reader as a whole ("on any sale": the fridge
+    lock) and one beside each item of its menu (a coffee type); both run
+    when both are set.
+  - An action: output 1-N, for so many seconds; more than one per sale
+    allowed. The device reports how many outputs it has with its sign of
+    life; a reader with none shows no *Actions* button.
+  - The successful sale's answer (`buy`) carries them:
+    `actions: [{"output": 1, "seconds": 5}]`; `docs/device-protocol.md`
+    gets the field and the sign of life's output count.
+- **Open questions:** the proposal above.
+
 ### Long pages: tabs, and an icon in every panel's header
 
 - **Added:** 2026-10-15
@@ -106,6 +147,13 @@ maintainer says so).
   settings by card and backup code, and firmware updates are built (branch
   `claude/device-pairing`); this is the part left for when the firmware
   side is settled. Signing the firmware: not planned.
+- **A real file (2026-10-15):** `jae_terminal-0.4.0.bin` carries only
+  ESP-IDF's own app description -- project `jae_terminal`, version, build
+  time, IDF 5.2.1, chip ESP32-S3 -- and ESP-IDF's appended SHA-256; nothing
+  of its own after it. The portal reads all of it and checks the checksum
+  and the hash. **Proposed:** no marks of our own (without a signature they
+  prove nothing more than the project name); instead also refuse a file for
+  another chip than the newest firmware's. Waiting for the maintainer.
 
 ## Ideas for later (not scheduled)
 
@@ -145,6 +193,12 @@ Talked about, not agreed as work. Not built unless the maintainer brings them up
 What the maintainer did not want, and why -- a record, not a ban. Any of it
 may be suggested again, saying what has changed since. Only what the
 maintainer explicitly says must never change is marked so.
+
+- **Undoing your own sale** on My Account for a few minutes (2026-10-15;
+  listed under "Later" in `docs/cards-plan.md`). "I don't think that's
+  necessary if somebody is too stupid to only pay for something once, then
+  that's their problem" -- and a sale can still be taken back on the
+  person's credit page.
 
 - **Handling the forum's read-only mode in the portal** (2026-10-09).
   - The proposal had two parts:
