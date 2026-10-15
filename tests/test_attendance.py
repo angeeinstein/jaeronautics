@@ -228,13 +228,27 @@ class TestInTheAccount:
         assert db.session.query(AttendanceStay).count() == 0
 
 
+@pytest.fixture
+def midday(monkeypatch):
+    """Today at 12:00 in Vienna, wherever the clock really is: a check-in an
+    hour ago must not fall on yesterday, which the page closes as forgotten."""
+    from aeronautics_members.api import attendance as attendance_api
+
+    today = attendance.local(datetime.now(UTC)).date()
+    noon = datetime.combine(today, datetime.min.time().replace(hour=12), tzinfo=attendance.MEMBERSHIP_TIMEZONE)
+    now = noon.astimezone(UTC)
+    monkeypatch.setattr(attendance, "get_now_utc", lambda: now)
+    monkeypatch.setattr(attendance_api, "get_now_utc", lambda: now)
+    return now
+
+
 class TestPages:
-    def test_a_lead_sees_hours_and_who_is_here_and_corrects(self, app, client, anna, doors, rocket):
+    def test_a_lead_sees_hours_and_who_is_here_and_corrects(self, app, client, anna, doors, rocket, midday):
         from api_helpers import send, signed_in
 
         (hangar, _key), _workshop = doors
         team, lead = rocket
-        attendance.check_in(hangar, anna, now=datetime.now(UTC) - timedelta(hours=1))
+        attendance.check_in(hangar, anna, now=midday - timedelta(hours=1))
         db.session.commit()
         signed_in(client, lead)
         url = f"/api/v1/teams/{team.slug}/manage/attendance"
