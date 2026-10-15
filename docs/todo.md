@@ -47,9 +47,21 @@ maintainer says so).
   typed, with its dots and hyphens removed, equals one of the portal's
   domains with theirs removed, but the domain itself differs (perhaps also
   one letter off, `edu.fh-joaneum.at`).
-- **Open questions:** whether the same hint belongs elsewhere an address is
-  typed (signing in, *Forgot password*, joining's private address) -- not
-  asked for yet.
+- **Everywhere an address is typed** (2026-10-15: "if it's a very small
+  fix, I think this makes sense" -- it is): one check and one hint shown
+  under each field, the same wording everywhere --
+  - the contact form (`pages/public/Contact.tsx`);
+  - signing in (`pages/public/SignIn.tsx`) and *Forgot password*
+    (`pages/public/ForgotPassword.tsx`), where a mistyped address otherwise
+    only reads as "wrong address or password" / no email arriving;
+  - joining (`pages/public/MembershipForm.tsx`): the sign-in address, and
+    the university/institute address, whose refusal ("Please use your
+    student address") then also says which one was likely meant;
+  - My Account › Contact details (`pages/account/Contact.tsx`) and an
+    admin correcting someone's address (`pages/admin/account/ProfileTab.tsx`).
+
+  Not the test email in Settings. The domains come from
+  `GET /api/v1/forms/options`, which the joining form already loads.
 
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
