@@ -372,7 +372,13 @@ describe('firmware', () => {
 });
 
 /** The device's requests are folded away until asked for. */
+/** A device's requests and events are on its second tab. */
+async function openActivity() {
+  await userEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
+}
+
 async function openRequests() {
+  await openActivity();
   const panel = await screen.findByRole('region', { name: 'What the device can send' });
   await userEvent.click(within(panel).getByRole('button', { name: 'Show' }));
 }
@@ -415,6 +421,7 @@ describe('one device', () => {
 
     expect(await screen.findByRole('region', { name: 'State' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Key' })).not.toBeInTheDocument();
+    await openActivity();
     expect(screen.getByRole('region', { name: 'What the device can send' })).toBeInTheDocument();
   });
 
@@ -442,6 +449,7 @@ describe('one device', () => {
 
   it('every request with its answer', async () => {
     show(<DeviceDetail />, { [`${API}/3`]: { body: detail } }, route);
+    await openActivity();
 
     const table = await screen.findByRole('table', { name: 'Recent requests' });
     expect(within(table).getAllByRole('row')[1]).toHaveTextContent(

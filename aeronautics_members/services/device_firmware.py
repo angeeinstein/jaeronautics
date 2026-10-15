@@ -63,15 +63,18 @@ def project():
     return newest[0].project if newest else None
 
 
-def _marks(image, data):
-    """What else makes a file this association's firmware: problems, in words.
-
-    For now the project name (:func:`project`); the marks the firmware adds of
-    its own (after the app description, ``image.custom_offset``) are checked
-    here once they are settled with the firmware."""
-    expected = project()
-    if expected and image.project != expected:
-        return [f"This is firmware of \"{image.project}\", not of \"{expected}\"."]
+def _unlike_the_newest(image):
+    """What makes a file unlike the firmware uploaded before: problems, in
+    words. Checked against the newest one, by what ESP-IDF puts in every build
+    -- its project and its chip; nothing of the firmware's own is needed
+    (docs/device-protocol.md, 6.3)."""
+    newest = releases()
+    if not newest:
+        return []
+    if image.project != newest[0].project:
+        return [f"This is firmware of \"{image.project}\", not of \"{newest[0].project}\"."]
+    if newest[0].chip and image.chip != newest[0].chip:
+        return [f"This firmware is for the {image.chip or 'unknown chip'}, not the {newest[0].chip}."]
     return []
 
 
@@ -84,7 +87,7 @@ def upload(actor, data, *, file_name=None, notes=None):
         image = firmware_image.read(data)
     except firmware_image.NotAnImage as exc:
         raise ValidationError(str(exc), code="firmware_invalid", details={"fields": {"file": str(exc)}}) from exc
-    problems = _marks(image, data)
+    problems = _unlike_the_newest(image)
     if problems:
         raise ValidationError(problems[0], code="firmware_not_ours", details={"fields": {"file": problems[0]}})
     same = db.session.execute(db.select(FirmwareRelease).filter_by(sha256=image.sha256)).scalar_one_or_none()

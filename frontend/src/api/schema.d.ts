@@ -5020,6 +5020,11 @@ export interface components {
             name: string | null;
             /** Online */
             online: boolean;
+            /**
+             * Outputs
+             * @default null
+             */
+            outputs?: number | null;
             /** Owner */
             owner: string;
             /** Owner Label */
@@ -5225,7 +5230,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "text" | "number" | "switch" | "choice" | "choices";
+            kind: "text" | "number" | "switch" | "choice" | "choices" | "actions";
             /** Label */
             label: string;
             /** Max Length */
@@ -7288,6 +7293,11 @@ export interface components {
             name: string | null;
             /** Online */
             online: boolean;
+            /**
+             * Outputs
+             * @default null
+             */
+            outputs?: number | null;
             /** Place */
             place: string | null;
             /** Recent */

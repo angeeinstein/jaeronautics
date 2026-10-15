@@ -28,7 +28,9 @@ class Setting:
     "choice" or "choices". A choice's ``choices()`` returns what may be chosen
     now, as ``Choice``s; its value is the chosen one's ``value``, or None while
     nothing is chosen. "choices" is several of them, in the order chosen, at
-    most ``most``: a list, empty while nothing is chosen."""
+    most ``most``: a list, empty while nothing is chosen. Another kind is the
+    type's own (a sales point's "actions"): ``check`` cleans and checks its
+    value, and the front end draws it."""
 
     name: str
     label: str
@@ -49,6 +51,9 @@ class Setting:
     #: Sales page -- rather than on the device's own pages, which keep to the
     #: technical (a sales point's menu).
     with_prices: bool = False
+    #: For a kind of the type's own: ``check(setting, value, owner)`` returns
+    #: the value as kept, or refuses it with :func:`refuse`.
+    check: Callable[[Any, Any, Any], Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -107,6 +112,9 @@ class DeviceType:
     #: For whoever writes its firmware, in Markdown: what its answers mean and
     #: what the device should do with them (services/device_starter.py).
     firmware_notes: str = ""
+    #: ``tidy(settings)``: the settings once each is checked, made to fit
+    #: together (a sales point's actions keep to the items of its menu).
+    tidy: Callable[[dict], dict] | None = None
 
 
 _TYPES: dict[str, DeviceType] = {}
@@ -154,57 +162,63 @@ def clean_settings(device_type, given, *, current=None, owner=None, drop_unfitti
                 value = [chosen for chosen in value or [] if chosen in fitting]
             cleaned[name] = list(value or [])
             continue
+        if setting.check is not None and unchanged:
+            cleaned[name] = value  # kept as it was: ``tidy`` fits it to the rest
+            continue
         cleaned[name] = _checked(setting, value, owner)
-    return cleaned
+    return device_type.tidy(cleaned) if device_type.tidy else cleaned
 
 
 def _values(setting, owner):
     return {choice.value for choice in setting.choices(owner)}
 
 
-def _refuse(setting, message):
+def refuse(setting, message):
+    """Refuse ``setting``'s value, the message shown at its field."""
     raise ValidationError(message, code="device_setting_invalid",
                           details={"fields": {f"settings.{setting.name}": message}})
 
 
 def _checked(setting, value, owner=None):
+    if setting.check is not None:
+        return setting.check(setting, value, owner)
     if setting.kind == "choices":
         if value is None or value == "":
             return []
         if not isinstance(value, list):
-            _refuse(setting, f"{setting.label}: a list.")
+            refuse(setting, f"{setting.label}: a list.")
         if setting.most is not None and len(value) > setting.most:
-            _refuse(setting, f"{setting.label}: at most {setting.most}.")
+            refuse(setting, f"{setting.label}: at most {setting.most}.")
         if len(set(map(repr, value))) != len(value):
-            _refuse(setting, f"{setting.label}: each one once.")
+            refuse(setting, f"{setting.label}: each one once.")
         allowed = _values(setting, owner)
         if any(chosen not in allowed for chosen in value):
-            _refuse(setting, f"{setting.label}: choose from the list.")
+            refuse(setting, f"{setting.label}: choose from the list.")
         return list(value)
     if setting.kind == "choice":
         if value is None or value == "":
             return None
         if value not in _values(setting, owner):
-            _refuse(setting, f"{setting.label}: choose one of the list.")
+            refuse(setting, f"{setting.label}: choose one of the list.")
         return value
     if setting.kind == "switch":
         if not isinstance(value, bool):
-            _refuse(setting, f"{setting.label}: on or off.")
+            refuse(setting, f"{setting.label}: on or off.")
         return value
     if setting.kind == "number":
         if value is None or isinstance(value, bool) or not isinstance(value, int):
-            _refuse(setting, f"{setting.label}: a whole number.")
+            refuse(setting, f"{setting.label}: a whole number.")
         if setting.minimum is not None and value < setting.minimum:
-            _refuse(setting, f"{setting.label}: at least {setting.minimum}.")
+            refuse(setting, f"{setting.label}: at least {setting.minimum}.")
         if setting.maximum is not None and value > setting.maximum:
-            _refuse(setting, f"{setting.label}: at most {setting.maximum}.")
+            refuse(setting, f"{setting.label}: at most {setting.maximum}.")
         return value
     value = "" if value is None else value
     if not isinstance(value, str):
-        _refuse(setting, f"{setting.label}: text.")
+        refuse(setting, f"{setting.label}: text.")
     value = value.strip()
     if len(value) > setting.max_length:
-        _refuse(setting, f"{setting.label}: at most {setting.max_length} characters.")
+        refuse(setting, f"{setting.label}: at most {setting.max_length} characters.")
     return value
 
 

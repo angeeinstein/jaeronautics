@@ -3,9 +3,10 @@
  * is shown"): on the owner's Sales page, under the price list the items
  * come from -- the association's on Admin › Sales, a team's on its Sales
  * page. Only the settings chosen from the price list (a sales point's menu,
- * up to four items in order); a device's name, place and switch are on its
- * device page. Data: the owner's devices (api/device_owners.py), saved with
- * the same PATCH, sending only these settings.
+ * up to four items in order) and, behind a button, what it switches after a
+ * sale (SaleActions); a device's name, place and switch are on its device
+ * page. Data: the owner's devices (api/device_owners.py), saved with the same
+ * PATCH, sending only these settings.
  */
 import { Button, Group, Stack, Text } from '@mantine/core';
 import { IconCpu } from '@tabler/icons-react';
@@ -22,6 +23,7 @@ import {
 import { notifyDone, notifyFailed } from '../../lib/notify';
 import { Panel } from '../Panel';
 import type { OwnedDevice, OwnedDeviceChange, OwnedDevices } from './OwnedDevices';
+import { SaleActions } from './SaleActions';
 
 function Menu({
   device,
@@ -35,7 +37,9 @@ function Menu({
   change: (id: number, body: OwnedDeviceChange) => Promise<OwnedDevices>;
 }) {
   const client = useQueryClient();
-  const fields = menuFields(device.fields);
+  // What a sale switches has its own dialog (SaleActions), saved on its own.
+  const fields = menuFields(device.fields).filter((field) => field.kind !== 'actions');
+  const hasActions = (device.outputs ?? 0) > 0 && device.fields.some((field) => field.kind === 'actions');
   const [settings, setSettings] = useState<Settings>(device.settings);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const save = useMutation({
@@ -52,7 +56,11 @@ function Menu({
   });
   const nothingToChoose = fields.every((field) => !field.choices?.length);
   return (
-    <Panel title={device.label} icon={IconCpu}>
+    <Panel
+      title={device.label}
+      icon={IconCpu}
+      actions={hasActions ? <SaleActions device={device} queryKey={queryKey} change={change} /> : null}
+    >
       <form
         onSubmit={(event) => {
           event.preventDefault();

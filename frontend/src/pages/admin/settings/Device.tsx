@@ -1,12 +1,14 @@
 /**
- * Settings -> Devices -> one device (docs/devices-plan.md): its state, its
- * board and what its firmware can be; its name, place, type and settings;
- * switching it off; the firmware it runs and should run (one of its own, to
- * try a version on one device first); its backup code; its key on one line
- * (rotate, revoke); every request a device of its type can send --
- * described, as a command, and sent from here to see the answer; its recent
- * requests and events, refreshed every few seconds while the page is open;
- * removing it. Data: /api/v1/admin/devices/<id> (aeronautics_members/api/devices.py).
+ * Settings -> Devices -> one device (docs/devices-plan.md), in two tabs.
+ * *Device*: its state, its board, what its firmware can be and how many
+ * outputs it has; its name, place, type and settings; switching it off; the
+ * firmware it runs and should run (one of its own, to try a version on one
+ * device first); its backup code; its key on one line (rotate, revoke; not
+ * for a paired device); removing it. *Activity* (#activity): its recent
+ * requests and events, refreshed every few seconds while the page is open,
+ * and every request a device of its type can send -- described, as a
+ * command, and sent from here to see the answer.
+ * Data: /api/v1/admin/devices/<id> (aeronautics_members/api/devices.py).
  */
 import {
   Anchor,
@@ -22,7 +24,19 @@ import {
   Textarea,
   TextInput,
 } from '@mantine/core';
-import { IconTerminal2 } from '@tabler/icons-react';
+import {
+  IconActivity,
+  IconAdjustments,
+  IconArrowsExchange,
+  IconCloudDownload,
+  IconCpu,
+  IconHistory,
+  IconInfoCircle,
+  IconKey,
+  IconShieldLock,
+  IconTerminal2,
+  IconTrash,
+} from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
@@ -31,6 +45,7 @@ import { api, ApiError, call, type Schemas } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
 import { Details } from '../../../components/Details';
 import { PageHeader } from '../../../components/PageHeader';
+import { PageTabs } from '../../../components/PageTabs';
 import { Panel } from '../../../components/Panel';
 import { Pill } from '../../../components/Pill';
 import { EmptyState, ErrorState, LoadingState } from '../../../components/States';
@@ -71,6 +86,7 @@ const EVENT_LABELS: Record<string, string> = {
   hardware: 'Board',
   board: 'Board',
   types: 'Can be',
+  outputs: 'Outputs',
   type: 'Type',
   owner: 'Owner',
   settings: 'Settings',
@@ -80,7 +96,7 @@ const EVENT_LABELS: Record<string, string> = {
 function State({ device, types }: { device: Device; types: DeviceType[] }) {
   const status = statusOf(device);
   return (
-    <Panel title="State">
+    <Panel title="State" icon={IconInfoCircle}>
       <Details
         items={[
           [
@@ -99,6 +115,10 @@ function State({ device, types }: { device: Device; types: DeviceType[] }) {
           ['From', device.last_address ?? '–'],
           ['Board', [device.board, device.hardware_id].filter(Boolean).join(' · ') || '–'],
           ['Can be', canBe(types, device.supported_types)],
+          [
+            'Outputs',
+            device.outputs === null || device.outputs === undefined ? 'Not said' : String(device.outputs),
+          ],
           ['Firmware', device.firmware ?? '–'],
           ['Added', formatDateTime(device.created_at)],
         ]}
@@ -148,7 +168,7 @@ function SettingsForm({
   });
 
   return (
-    <Panel title="Settings">
+    <Panel title="Settings" icon={IconAdjustments}>
       <Stack gap="md">
         <Switch
           label="On"
@@ -511,9 +531,9 @@ function DeviceApi({
           ))}
           <Text size="sm" c="dimmed" p="md" style={{ borderTop: '1px solid var(--ja-border)' }}>
             HTTPS only, with the key as a bearer token: no session, no cookies. Every request says what the
-            device is: X-Device-Firmware, X-Device-Hardware (its MAC address), X-Device-Board, X-Device-Types.
-            Refused: 401 for an unknown or revoked key, 403 when switched off, 404 for what its type does not
-            offer, 429 when too often.
+            device is: X-Device-Firmware, X-Device-Hardware (its MAC address), X-Device-Board, X-Device-Types,
+            and X-Device-Outputs when it has outputs. Refused: 401 for an unknown or revoked key, 403 when
+            switched off, 404 for what its type does not offer, 429 when too often.
           </Text>
         </Stack>
       ) : null}
@@ -523,7 +543,7 @@ function DeviceApi({
 
 function Events({ events }: { events: Detail['events'] }) {
   return (
-    <Panel title="Recent events" flush>
+    <Panel title="Recent events" icon={IconHistory} flush>
       {events.length ? (
         <Table.ScrollContainer minWidth={560} type="native">
           <Table verticalSpacing="xs" aria-label="Recent events">
@@ -592,7 +612,7 @@ function FirmwareCard({ device }: { device: Device }) {
   const releases = firmware.data?.releases ?? [];
   const everyDevice = releases.find((release) => release.chosen);
   return (
-    <Panel title="Firmware">
+    <Panel title="Firmware" icon={IconCloudDownload}>
       <Stack gap="md">
         <Group gap="xs">
           <Pill tone={state.tone}>{state.label}</Pill>
@@ -655,7 +675,7 @@ function BackupCode({ device }: { device: Device }) {
     onError: notifyFailed,
   });
   return (
-    <Panel title="Backup code">
+    <Panel title="Backup code" icon={IconShieldLock}>
       <Stack gap="sm">
         <Group justify="space-between" gap="md" align="center">
           <Code fz="lg" aria-label="Backup code">
@@ -707,7 +727,7 @@ function KeyCard({ device }: { device: Device }) {
   });
 
   return (
-    <Panel title="Key">
+    <Panel title="Key" icon={IconKey}>
       {shown ? (
         <KeyReveal
           result={shown}
@@ -778,7 +798,7 @@ function KeyCard({ device }: { device: Device }) {
 
 function Requests({ requests }: { requests: Detail['requests'] }) {
   return (
-    <Panel title="Recent requests" flush>
+    <Panel title="Recent requests" icon={IconArrowsExchange} flush>
       {requests.length ? (
         <Table.ScrollContainer minWidth={560} type="native">
           <Table verticalSpacing="xs" aria-label="Recent requests">
@@ -835,7 +855,7 @@ function RemoveDevice({ device }: { device: Device }) {
     onError: notifyFailed,
   });
   return (
-    <Panel title="Remove the device">
+    <Panel title="Remove the device" icon={IconTrash}>
       <Group justify="space-between" gap="md" align="center">
         <Text size="sm" c="dimmed">
           Deletes the device, its key, its requests and its events.
@@ -865,7 +885,7 @@ function DevicePage({
 }) {
   const { device } = detail;
   const type = types.find((item) => item.slug === device.type);
-  return (
+  const settings = (
     <Stack gap="lg">
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
         <State device={device} types={types} />
@@ -890,11 +910,23 @@ function DevicePage({
       </SimpleGrid>
       {/* A paired device's key was handed to it; nobody saw it, so there is none to rotate here. */}
       {device.paired ? null : <KeyCard device={device} />}
+      <RemoveDevice device={device} />
+    </Stack>
+  );
+  const activity = (
+    <Stack gap="lg">
       <Requests requests={detail.requests} />
       <Events events={detail.events} />
       <DeviceApi device={device} server={detail.server} type={type} />
-      <RemoveDevice device={device} />
     </Stack>
+  );
+  return (
+    <PageTabs
+      tabs={[
+        { value: 'device', label: 'Device', icon: IconCpu, content: settings },
+        { value: 'activity', label: 'Activity', icon: IconActivity, content: activity },
+      ]}
+    />
   );
 }
 

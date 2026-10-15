@@ -5352,6 +5352,18 @@
             "title": "Online",
             "type": "boolean"
           },
+          "outputs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Outputs"
+          },
           "owner": {
             "title": "Owner",
             "type": "string"
@@ -5943,7 +5955,8 @@
               "number",
               "switch",
               "choice",
-              "choices"
+              "choices",
+              "actions"
             ],
             "title": "Kind",
             "type": "string"
@@ -12184,6 +12197,18 @@
           "online": {
             "title": "Online",
             "type": "boolean"
+          },
+          "outputs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Outputs"
           },
           "place": {
             "anyOf": [

@@ -26,9 +26,9 @@ BOARD = {"X-Device-Hardware": "98:a3:16:e5:06:3c", "X-Device-Firmware": "0.2.0",
          "X-Device-Board": "jae-terminal-s3", "X-Device-Types": "sales_point, test"}
 
 
-def _image(version="0.3.0", project="jae-terminal", payload=b"\x5a" * 300):
+def _image(version="0.3.0", project="jae-terminal", payload=b"\x5a" * 300, chip_id=0x0009):
     """An app image as ESP-IDF lays it out (checked against one esptool wrote, below)."""
-    return firmware_image.example(version, project, payload)
+    return firmware_image.example(version, project, payload, chip_id)
 
 
 @pytest.fixture
@@ -135,6 +135,9 @@ class TestFirmware:
             "firmware_version_taken"
         other = _upload(client, _image("1.0.0", project="someone-else"))
         assert other.get_json()["error"]["code"] == "firmware_not_ours"
+        # By what ESP-IDF puts in every build: the project, and the chip.
+        plain = _upload(client, _image("1.0.0", chip_id=0x0000))
+        assert plain.get_json()["error"]["message"] == "This firmware is for the esp32, not the esp32s3."
         assert db.session.query(FirmwareRelease).count() == 1
 
     def test_only_admins(self, app, client):
@@ -343,7 +346,7 @@ class TestWhatTheDeviceSays:
         key, added = _paired(app, client, admin)
         changed = send(client, "PATCH", f"/api/v1/admin/devices/{added['id']}", {"type": "sales_point"})
 
-        assert changed.get_json()["type"] == "sales_point" and changed.get_json()["settings"] == {"items": []}
+        assert changed.get_json()["type"] == "sales_point" and changed.get_json()["settings"]["items"] == []
         assert _hello(app, key).get_json()["type"] == "sales_point"
 
     def test_nothing_new_is_a_short_answer(self, app, client, admin):

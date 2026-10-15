@@ -46,6 +46,7 @@ configured with the portal's address.
 | `X-Device-Hardware` | `98:A3:16:E5:06:3C` | The board's MAC address. Shown in the portal. Noted as an event when the key turns up on another board. |
 | `X-Device-Board` | `jae-terminal-s3` | What the firmware calls the board. |
 | `X-Device-Types` | `sales_point, attendance` | Every use this firmware has screens for, comma-separated, in the portal's names (section 8). The portal only lets an admin choose one of these for the device. |
+| `X-Device-Outputs` | `4` | How many outputs it can switch (relays, a lock), 0 to 16; leave it out when it has none. Its owner can then have a sale switch them (section 8.1, "Actions"). |
 
 ### Answers
 
@@ -283,14 +284,13 @@ That version is then not offered to this device again until an admin clicks
 ### 6.3 What the portal accepts
 
 Only a whole ESP-IDF app image: checksum and appended SHA-256 intact, with an
-app description, and of the same project as the files uploaded before (the
-project name in the app description). Version, project, build date and chip
-are read from the file itself, and a version cannot be uploaded twice.
+app description, and of the same project and for the same chip as the newest
+file uploaded before (the project name in the app description, the chip in
+the image header). Version, project, build date and chip are read from the
+file itself, and a version cannot be uploaded twice.
 
-*Planned:* a few bytes of the firmware's own, right after the app description
-(`.rodata_custom_desc`), that mark it as this association's firmware. The
-portal and the device both check them. What they are is to be settled with
-the firmware.
+Nothing of the firmware's own is needed in the file: what ESP-IDF puts in
+every build is what is checked (decided 2026-10-15).
 
 ---
 
@@ -436,7 +436,8 @@ Two reports:
 
 2. **`buy`**, data `{"ticket": "t_5f2a…", "item": 4}`, sent when an item is
    chosen. The answer:
-   - `{"result": "sold", "item": "Coffee", "price_cents": 80, "balance_cents": 1170, "first_name": "Alex"}`;
+   - `{"result": "sold", "item": "Coffee", "price_cents": 80, "balance_cents": 1170, "first_name": "Alex", "actions": [{"output": 1, "seconds": 5}]}`
+     -- `actions`: see below;
    - or `refused` with `ticket_expired`, `ticket_used`, `item_off`,
      `not_enough`, `credit_off`, or -- the card changed while the menu was
      open -- `card_unknown`, `card_disabled`, `card_blocked`, `account_off`.
@@ -463,11 +464,30 @@ Show `message` for a reason the firmware does not know.
   Repeating a `buy` with the same `event_id` gets the first answer, as every
   report does.
 - Setting: `"items"`, the item ids in order, chosen by the owner from their
-  own price list.
+  own price list. Setting `"actions"` is the portal's (below): the device
+  need not read it.
 - Resource `menu`: `{"items": [{"id", "name", "price_cents", "icon"}, …]}`,
   the same items without `affordable`, for an idle screen ("tap your card").
   It changes when the owner changes the items or prices, which the sign of
   life's `ETag` shows: fetch it again after a `200`.
+
+**Actions (built 2026-10-15).** A sale can switch the device's outputs -- a
+fridge's magnetic lock, a coffee machine's relay. The device says how many it
+has with `X-Device-Outputs`; its owner sets, on their Sales page, which
+output a sale switches and for how long: after any sale, or after a given
+item. A successful `buy` carries what to do now:
+
+```json
+"actions": [{"output": 1, "seconds": 5}, {"output": 3, "seconds": 0.5}]
+```
+
+- Switch each `output` (counted from 1) on for its `seconds` (0.1 to 600,
+  one decimal), then off; all of them at once. `actions` is `[]` when there
+  is nothing to switch, and is never there in a refusal.
+- An output above what the device said it has is never sent.
+- What an output is wired to -- a relay on I2C, a pin -- is the firmware's
+  business. Opening a door without a sale (restocking) is in the device's own
+  settings menu (section 5), not in the portal.
 
 ### 8.2 Attendance: `attendance` (planned, around January)
 
@@ -556,6 +576,12 @@ The list (`ICONS` in `aeronautics_members/services/credit_sales.py`):
 - **2026-10-14:** linking an unknown card at the reader with a QR code
   (section 7.4) -- `link` in the `card_unknown` refusal, and
   `GET /api/v1/device/card-links/<id>`. Built as first written down.
+- **2026-10-15:** outputs: the `X-Device-Outputs` header and the `actions`
+  of a successful `buy` (section 8.1, "Actions"). Firmware that ignores them
+  is unaffected.
+- **2026-10-15:** a firmware file is checked by what ESP-IDF puts in it: the
+  same project and chip as the newest one (section 6.3). The planned marks
+  of its own are dropped.
 - **2026-10-14:** the `card` report's `linked` answer is gone (it came only
   while an admin waited at a reader, which was removed). Firmware that still
   handles it is harmless: it never comes.

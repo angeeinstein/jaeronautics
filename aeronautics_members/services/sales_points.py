@@ -13,7 +13,8 @@ and icons, "Hi Alex" and the balance -- and one is bought:
    ``link`` for the QR code its owner links it with (services/card_links.py).
 2. ``buy`` (data ``{"ticket", "item"}``): the item is sold with the ticket,
    answered ``{"result": "sold", "item", "price_cents", "balance_cents",
-   "first_name"}``, or ``refused``.
+   "first_name", "actions"}``, or ``refused``. ``actions`` are the outputs
+   to switch now, as its owner set them (``ACTIONS``).
 
 A ticket belongs to the card it was given for, to this device and to one
 purchase, for ``TICKET_LASTS``: nothing more is bought without the card
@@ -44,6 +45,12 @@ MOST_ITEMS = 4
 TICKET_LASTS = timedelta(seconds=20)
 #: Tickets are deleted after this (the nightly clean-up).
 TICKETS_KEPT = timedelta(days=1)
+#: Actions after a sale (docs/devices-plan.md, "Actions after a sale"): at
+#: most this many lines on a device, each switching an output for between
+#: ``SECONDS_LEAST`` and ``SECONDS_MOST`` seconds.
+ACTIONS_MOST = 16
+SECONDS_LEAST = 0.1
+SECONDS_MOST = 600
 
 NOT_ENOUGH = "not_enough"
 ITEM_OFF = "item_off"
@@ -92,6 +99,58 @@ def items_of(device):
         if item is not None and item.team_id == device.team_id and item.active and item.deleted_at is None:
             found.append(item)
     return found[:MOST_ITEMS]
+
+
+def _check_actions(setting, value, owner):
+    """A sales point's actions as kept: ``{"on": bool, "lines": [{"item": id
+    or None (any sale), "output": 1-16, "seconds": number}]}``. An item is one
+    of the owner's; that it is on the menu is :func:`_tidy`'s to see to."""
+    from .devices import OUTPUTS_MAX
+
+    value = {"on": True, "lines": []} if value in (None, "") else value
+    if not isinstance(value, dict) or not isinstance(value.get("on", True), bool) \
+            or not isinstance(value.get("lines") or [], list):
+        device_types.refuse(setting, "Actions: on or off, and a list of lines.")
+    lines = value.get("lines") or []
+    if len(lines) > ACTIONS_MOST:
+        device_types.refuse(setting, f"At most {ACTIONS_MOST} actions.")
+    items = {item.id for item in credit_sales.items(owner)}
+    cleaned = []
+    for line in lines:
+        if not isinstance(line, dict):
+            device_types.refuse(setting, "Each action: an item or any sale, an output and seconds.")
+        item, output, seconds = line.get("item"), line.get("output"), line.get("seconds")
+        if item is not None and (isinstance(item, bool) or item not in items):
+            device_types.refuse(setting, "Choose any sale or an item of the menu.")
+        if isinstance(output, bool) or not isinstance(output, int) or not 1 <= output <= OUTPUTS_MAX:
+            device_types.refuse(setting, f"An output from 1 to {OUTPUTS_MAX}.")
+        if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) \
+                or not SECONDS_LEAST <= seconds <= SECONDS_MOST:
+            device_types.refuse(setting, f"Between {SECONDS_LEAST} and {SECONDS_MOST} seconds.")
+        cleaned.append({"item": item, "output": output, "seconds": round(float(seconds), 1)})
+    return {"on": value.get("on", True), "lines": cleaned}
+
+
+def _tidy(settings):
+    """An item's actions go when it leaves the menu: they could never run."""
+    actions = settings.get("actions")
+    if isinstance(actions, dict):
+        menu = set(settings.get("items") or [])
+        lines = [line for line in actions.get("lines") or [] if line.get("item") is None or line["item"] in menu]
+        settings = {**settings, "actions": {**actions, "lines": lines}}
+    return settings
+
+
+def actions_for(device, item):
+    """What ``device`` switches now that ``item`` was sold: the lines for any
+    sale and for this item, while its actions are on. An output the device does
+    not have (it said fewer) is left out."""
+    actions = (device.settings or {}).get("actions") or {}
+    if not actions.get("on", True):
+        return []
+    return [{"output": line["output"], "seconds": line["seconds"]}
+            for line in actions.get("lines") or []
+            if line.get("item") in (None, item.id) and (device.outputs is None or line["output"] <= device.outputs)]
 
 
 def _item_out(item):
@@ -229,7 +288,8 @@ def _buy(device, data, event_id):
     card.last_used_at, card.last_used_device_id = now, device.id
     ticket.used_at, ticket.entry_id = now, entry.id
     return {"result": "sold", "item": item.name, "price_cents": item.price_cents,
-            "balance_cents": entry.balance_after_cents, "first_name": _first_name(user)}
+            "balance_cents": entry.balance_after_cents, "first_name": _first_name(user),
+            "actions": actions_for(device, item)}
 
 
 def forget_old_tickets(now=None):
@@ -243,9 +303,17 @@ device_types.register(device_types.DeviceType(
     label="Sales point",
     description="A card reader with a screen beside the fridge or the coffee machine: a card tapped opens a "
                 "menu of up to four items, bought for credit.",
-    settings=(device_types.Setting(
-        "items", "Items", kind="choices", choices=_item_choices, owner_may_change=True, most=MOST_ITEMS, with_prices=True,
-        default=[], help=f"What its menu offers, in this order: at most {MOST_ITEMS}, from the owner's price list."),),
+    settings=(
+        device_types.Setting(
+            "items", "Items", kind="choices", choices=_item_choices, owner_may_change=True, most=MOST_ITEMS,
+            with_prices=True, default=[],
+            help=f"What its menu offers, in this order: at most {MOST_ITEMS}, from the owner's price list."),
+        device_types.Setting(
+            "actions", "Actions", kind="actions", owner_may_change=True, with_prices=True,
+            default={"on": True, "lines": []}, check=_check_actions,
+            help="Outputs it switches after a sale: after any sale, or after an item of its menu."),
+    ),
+    tidy=_tidy,
     resources={"menu": device_types.Resource(_menu, "What its menu offers, for its screen while nobody uses it.")},
     reports={
         "card": device_types.Report(_card, description="A card tapped: the menu, the name and the balance, and a "
@@ -275,7 +343,10 @@ portal's to decide. The `answer` is one of:
 
 **An item chosen:** report `buy` with `"data": {"ticket": "t_…", "item": 4}`. The answer:
 
-- `{"result": "sold", "item": "Coffee", "price_cents": 80, "balance_cents": 1170, "first_name": "Alex"}`;
+- `{"result": "sold", "item": "Coffee", "price_cents": 80, "balance_cents": 1170, "first_name": "Alex",
+  "actions": [{"output": 1, "seconds": 5}]}` -- switch each output on for its seconds (outputs counted
+  from 1); `actions` is empty when there is nothing to switch. Say how many outputs the device has
+  with the `X-Device-Outputs` header (see the sign of life).
 - `{"result": "refused", "reason": "...", "message": "..."}` -- `reason` one of `ticket_expired` (tap
   again), `ticket_used` (one ticket buys once), `item_off`, `not_enough` (with `balance_cents`),
   `credit_off`, `card_blocked`, `card_disabled`, `account_off`.

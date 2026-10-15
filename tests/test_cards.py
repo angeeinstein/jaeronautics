@@ -174,7 +174,7 @@ class TestSalesPoint:
         answer = _buy(app, key, menu["ticket"], beer.id)
 
         assert answer == {"result": "sold", "item": "Beer", "price_cents": 150, "balance_cents": 350,
-                          "first_name": "Anna"}
+                          "first_name": "Anna", "actions": []}
         [sale] = _sales_of(anna)
         assert (sale.item_id, sale.card_id, sale.device_id, sale.channel) == (beer.id, card.id, device.id, "reader")
         assert sale.team_id is None
@@ -331,11 +331,11 @@ class TestSalesPoint:
         five = [credit_sales.add_item(None, name=f"Item {n}", price_cents=100).id for n in range(5)]
         with pytest.raises(ValidationError, match="at most 4"):
             devices.change(None, device, settings={"items": five})
-        assert devices.change(None, device, settings={"items": five[:4]}).settings == {"items": five[:4]}
+        assert devices.change(None, device, settings={"items": five[:4]}).settings["items"] == five[:4]
         # Kept as it was once switched off, though it cannot be chosen any more.
         devices.change(None, device, settings={"items": [beer.id]})
         credit_sales.update_item(None, beer, active=False)
-        assert devices.change(None, device, settings={"items": [beer.id]}).settings == {"items": [beer.id]}
+        assert devices.change(None, device, settings={"items": [beer.id]}).settings["items"] == [beer.id]
 
     def test_a_team_device_sells_only_the_teams_items(self, app, anna, beer, reader):
         from test_teams_flow import _team
@@ -348,7 +348,7 @@ class TestSalesPoint:
 
         # Given to the team: the association's beer no longer fits, and is cleared.
         devices.change(None, device, owner=rocket)
-        assert device.settings == {"items": []}
+        assert device.settings["items"] == []
         with pytest.raises(ValidationError):
             devices.change(None, device, settings={"items": [beer.id]})
         devices.change(None, device, settings={"items": [mate.id]})

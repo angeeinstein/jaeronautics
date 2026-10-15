@@ -54,6 +54,8 @@ MAC_PATTERN = re.compile(r"^[0-9A-F]{2}(:[0-9A-F]{2}){5}$")
 TYPE_PATTERN = re.compile(r"^[a-z0-9_]{1,40}$")
 #: At most this many types in ``X-Device-Types``.
 TYPES_MAX = 20
+#: At most this many outputs (``X-Device-Outputs``): a relay board or two.
+OUTPUTS_MAX = 16
 BACKUP_CODE_LENGTH = 6
 #: How often a device should ask for its sign of life (it is answered "nothing
 #: new", 304, when nothing changed): what is changed in the portal reaches it
@@ -192,6 +194,15 @@ def parse_types(value):
         if TYPE_PATTERN.match(part) and part not in found:
             found.append(part)
     return found[:TYPES_MAX]
+
+
+def parse_outputs(value):
+    """The number in an ``X-Device-Outputs`` header -- "4" -- or None when there
+    was none, or it was not one from 0 to ``OUTPUTS_MAX``: nothing is changed."""
+    value = (value or "").strip()
+    if not value.isdigit() or int(value) > OUTPUTS_MAX:
+        return None
+    return int(value)
 
 
 # --- Managing them (Admin › Settings › Devices) ---------------------------------------------
@@ -461,10 +472,11 @@ def normalize_mac(value):
     return ":".join(digits[i:i + 2] for i in range(0, 12, 2))
 
 
-def seen(device, *, address=None, firmware=None, hardware=None, board=None, types=None, now=None):
+def seen(device, *, address=None, firmware=None, hardware=None, board=None, types=None, outputs=None, now=None):
     """The device spoke: when, from where, with which firmware, on which board
-    (its MAC address, and what the firmware calls the board), and what its
-    firmware can be used as (``types``, a list; None: not said). Written at
+    (its MAC address, and what the firmware calls the board), what its
+    firmware can be used as (``types``, a list; None: not said), and how many
+    outputs it can switch (None: not said). Written at
     most every half minute, unless something changed. Another board with the
     same key is said as an event."""
     from . import device_firmware
@@ -482,6 +494,9 @@ def seen(device, *, address=None, firmware=None, hardware=None, board=None, type
         labels = [(device_types.get(slug).label if device_types.get(slug) else slug) for slug in types]
         _record(device, "types", detail="Can be: " + (", ".join(labels) if labels else "nothing the portal knows"))
         device.supported_types = types
+    if outputs is not None and outputs != device.outputs:
+        _record(device, "outputs", detail=f"Outputs: {outputs}")
+        device.outputs = outputs
     if firmware:
         device_firmware.ran(device, firmware)
     if hardware and hardware != device.hardware_id:

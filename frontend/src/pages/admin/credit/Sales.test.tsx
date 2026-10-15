@@ -57,7 +57,7 @@ function seller(overrides: Partial<Schemas['SellerSalesOut']> = {}): Schemas['Se
   };
 }
 
-function salesPoint(): Schemas['OwnedDeviceOut'] {
+function salesPoint(overrides: Partial<Schemas['OwnedDeviceOut']> = {}): Schemas['OwnedDeviceOut'] {
   return {
     id: 7,
     code: 'K7MQ-2X9A',
@@ -85,8 +85,21 @@ function salesPoint(): Schemas['OwnedDeviceOut'] {
         owner_may_change: true,
         choices: [{ value: 1, label: 'Beer, €2.00', group: 'Rocket', owner: 'rocket' }],
       },
+      {
+        name: 'actions',
+        label: 'Actions',
+        kind: 'actions',
+        with_prices: true,
+        default: { on: true, lines: [] },
+        help: '',
+        max_length: 200,
+        minimum: null,
+        maximum: null,
+        owner_may_change: true,
+      },
     ],
     recent: [],
+    ...overrides,
   };
 }
 
@@ -210,6 +223,53 @@ describe('a team’s Sales page', () => {
     });
     const patch = calls.find((call) => call.method === 'PATCH');
     expect(await patch?.clone().json()).toEqual({ settings: { items: [1] } });
+  });
+
+  it('what a sale switches: behind a button, only on a reader with outputs, saved on its own', async () => {
+    const fridge = salesPoint({ outputs: 2, settings: { items: [1] } });
+    const plain = salesPoint({ id: 8, name: 'Coffee', label: 'Coffee', outputs: null });
+    const { calls } = showTeam(['team.edit_prices', 'team.devices'], {
+      '/api/v1/teams/rocket/manage/devices': { body: { items: [fridge, plain] } },
+      'PATCH /api/v1/teams/rocket/manage/devices/7': { body: { items: [fridge, plain] } },
+    });
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Sales points' }));
+    const coffee = await screen.findByRole('region', { name: 'Coffee' });
+    expect(within(coffee).queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
+    const reader = screen.getByRole('region', { name: 'Rocket fridge' });
+    await userEvent.click(within(reader).getByRole('button', { name: 'Actions' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Rocket fridge: actions' });
+    expect(within(dialog).getByText('Nothing is switched after a sale yet.')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
+    const [first, second] = within(dialog).getAllByRole('listitem');
+    if (!first || !second) throw new Error('two lines');
+    // The second for Beer only, on output 2 for half a second.
+    await userEvent.click(within(second).getByRole('combobox', { name: 'After' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Beer' }));
+    await userEvent.click(within(second).getByRole('combobox', { name: 'Output' }));
+    await userEvent.click(await screen.findByRole('option', { name: '2' }));
+    const seconds = within(second).getByRole('textbox', { name: 'Seconds' });
+    await userEvent.clear(seconds);
+    await userEvent.type(seconds, '0.5');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(calls.some((call) => call.method === 'PATCH')).toBe(true);
+    });
+    const patch = calls.find((call) => call.method === 'PATCH');
+    expect(await patch?.clone().json()).toEqual({
+      settings: {
+        actions: {
+          on: true,
+          lines: [
+            { item: null, output: 1, seconds: 5 },
+            { item: 1, output: 2, seconds: 0.5 },
+          ],
+        },
+      },
+    });
   });
 });
 

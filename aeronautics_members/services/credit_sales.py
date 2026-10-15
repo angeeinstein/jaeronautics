@@ -154,8 +154,9 @@ def move_item(actor, item, direction):
 
 def delete_item(actor, item):
     """Off its price list for good: what was sold still names it. A sales
-    point's menu loses it at once."""
+    point's menu loses it at once, and with it the item's actions there."""
     from ..db_models import Device
+    from . import device_types
 
     item.deleted_at = get_now_utc()
     item.active = False
@@ -165,7 +166,9 @@ def delete_item(actor, item):
     for device in devices:
         chosen = (device.settings or {}).get("items")
         if isinstance(chosen, list) and item.id in chosen:
-            device.settings = {**device.settings, "items": [found for found in chosen if found != item.id]}
+            settings = {**device.settings, "items": [found for found in chosen if found != item.id]}
+            device_type = device_types.get(device.type)
+            device.settings = device_type.tidy(settings) if device_type and device_type.tidy else settings
     _audit("credit_item_deleted", actor, item)
     return item
 

@@ -112,7 +112,7 @@ def read(data):
                  sha256=hashlib.sha256(data).hexdigest())
 
 
-def example(version="1.0.0", project="jae-terminal", payload=b"\x5a" * 300):
+def example(version="1.0.0", project="jae-terminal", payload=b"\x5a" * 300, chip_id=0x0009):
     """A small app image laid out as ESP-IDF builds one, for the tests and the
     example portal (scripts/visual/snapshot.py): nothing a device could run.
     tests/fixtures holds one esptool wrote, which :func:`read` is checked against."""
@@ -122,7 +122,7 @@ def example(version="1.0.0", project="jae-terminal", payload=b"\x5a" * 300):
     segment = desc.ljust(APP_DESC_SIZE, b"\0") + payload
     header = bytearray(HEADER_SIZE)
     header[0], header[1] = IMAGE_MAGIC, 1
-    struct.pack_into("<H", header, 12, 0x0009)  # an ESP32-S3
+    struct.pack_into("<H", header, 12, chip_id)  # 0x0009: an ESP32-S3
     header[23] = 1  # the SHA-256 appended
     data = bytes(header) + struct.pack("<II", 0x3C000020, len(segment)) + segment
     checksum = CHECKSUM_SEED

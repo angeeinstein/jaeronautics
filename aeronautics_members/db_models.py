@@ -1461,6 +1461,9 @@ class Device(db.Model):
     #: The types its firmware can be used as (``X-Device-Types``); none when
     #: it has not said, and then any type may be chosen.
     supported_types = db.Column(db.JSON, nullable=True)
+    #: How many outputs it can switch -- relays, a lock -- as its firmware says
+    #: (``X-Device-Outputs``); none until it says.
+    outputs = db.Column(db.Integer, nullable=True)
     #: Opens its settings on the device when the portal cannot be reached: six
     #: digits, shown to admins on its page. The device gets only a hash.
     backup_code = db.Column(db.String(12), nullable=True)

@@ -50,7 +50,8 @@ def _as_device(answer, *, listed=True):
                              firmware=request.headers.get("X-Device-Firmware"),
                              hardware=request.headers.get("X-Device-Hardware"),
                              board=request.headers.get("X-Device-Board"),
-                             types=devices_service.parse_types(request.headers.get("X-Device-Types")))
+                             types=devices_service.parse_types(request.headers.get("X-Device-Types")),
+                             outputs=devices_service.parse_outputs(request.headers.get("X-Device-Outputs")))
         result = answer(device)
         status = result.status_code if isinstance(result, Response) else 200
         # "Nothing new" to a device asking every few seconds is not listed: its
@@ -408,7 +409,9 @@ class DeviceChoiceOut(Model):
 class DeviceSettingOut(Model):
     name: str
     label: str
-    kind: Literal["text", "number", "switch", "choice", "choices"]
+    #: Or a kind of the type's own, drawn by the front end ("actions": a
+    #: sales point's outputs after a sale).
+    kind: Literal["text", "number", "switch", "choice", "choices", "actions"]
     default: Any
     help: str
     max_length: int
@@ -474,6 +477,8 @@ class DeviceOut(Model):
     board: str | None
     #: The types its firmware can be used as; none when it has not said (then any).
     supported_types: list[str] | None
+    #: How many outputs it can switch; none when it has not said.
+    outputs: int | None = None
     #: Opens its settings on the device when the portal cannot be reached.
     backup_code: str | None
     #: The firmware it should run, and how that stands: "none" chosen,
@@ -672,7 +677,7 @@ def device_out(device):
         settings=device.settings or {}, enabled=device.enabled,
         online=devices_service.is_online(device), last_seen_at=device.last_seen_at,
         last_address=device.last_address, firmware=device.firmware, board=device.board,
-        supported_types=device.supported_types, backup_code=device.backup_code,
+        supported_types=device.supported_types, outputs=device.outputs, backup_code=device.backup_code,
         firmware_wanted=wanted.version if wanted is not None else None,
         firmware_state=device_firmware.state(device), firmware_release_id=device.firmware_release_id,
         firmware_failed_detail=device.firmware_failed_detail if device_firmware.state(device) == "failed" else None,
