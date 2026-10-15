@@ -172,6 +172,15 @@ What the maintainer did not want, and why -- a record, not a ban. Any of it
 may be suggested again, saying what has changed since. Only what the
 maintainer explicitly says must never change is marked so.
 
+- **The credit switch hiding everything that belongs to credit** (2026-10-15).
+  Asked: with credit off, Admin › Credit and Admin › Sales still showed (they
+  stay while anybody holds a balance, so it can be refunded). Proposed: the
+  switch as *Credit and sales* -- Admin › Sales hidden, Admin › Credit only
+  with a note while balances remain, *Sales point* not offered as a type. The
+  maintainer, once they knew a sales point already refuses every tap with
+  "Paying with credit is switched off" and a team's Sales page and members'
+  credit are hidden: "we can leave it as is. This is fine."
+
 - **Undoing your own sale** on My Account for a few minutes (2026-10-15;
   listed under "Later" in `docs/cards-plan.md`). "I don't think that's
   necessary if somebody is too stupid to only pay for something once, then
