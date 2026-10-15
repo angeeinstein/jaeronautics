@@ -120,18 +120,11 @@ maintainer says so).
   of publishing as `version`/`effective_from` (and the file names); check
   that nothing refers to the old § 31-36 of the membership terms.
 
-### Attendance with the same cards (later)
+### Attendance with the same cards (being built)
 
-- **Added:** 2026-10-13
-- **Put off by the maintainer:** needed "in January, maybe a bit before ...
-  not something that we need to build now immediately".
-- **What:** the flight team's members earn ECTS and must be there for a
-  number of hours; members tap their card on a reader there. The cards and
-  the readers exist (`docs/cards-plan.md`, `docs/devices-plan.md`); this is
-  a device type of its own.
-- **Open questions:** what counts (tapping in and out, a forgotten tap-out,
-  a least time), who may see it (team leads, whoever handles ECTS), and the
-  privacy policy for it.
+- **Added:** 2026-10-13; **agreed 2026-10-15**, started then (the firmware
+  side was done first).
+- **What, decided and open:** `docs/attendance-plan.md`.
 
 ## Ideas for later (not scheduled)
 
