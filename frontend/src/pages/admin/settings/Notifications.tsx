@@ -6,6 +6,7 @@
  */
 import { Checkbox, Select, Stack, Table, Text } from '@mantine/core';
 import { useState } from 'react';
+import { IconBell, IconSend } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
 import { Panel } from '../../../components/Panel';
@@ -23,7 +24,7 @@ const notificationsQuery = {
 
 function Health({ data }: { data: NotificationsOut }) {
   return (
-    <Panel title="How each channel stands" flush>
+    <Panel icon={IconBell} title="How each channel stands" flush>
       <Table.ScrollContainer minWidth={720} type="native">
         <Table verticalSpacing="sm" aria-label="Notification channels">
           <Table.Thead>
@@ -79,7 +80,7 @@ function Form({ data }: { data: NotificationsOut }) {
 
   return (
     <Stack gap="lg">
-      <Panel title="What goes out">
+      <Panel icon={IconSend} title="What goes out">
         <Stack gap="md">
           <Text size="sm" c="dimmed">
             Admins get these once their email address is verified. What waits for review and application

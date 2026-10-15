@@ -337,6 +337,16 @@ page with only the chosen method.
 - **Feedback**: a short toast at the bottom ("Saved", "Approved") instead of a
   banner across the page; errors stay next to the field they concern.
 - **Empty states**: one muted sentence in the card ("Nobody yet.").
+- **An icon in every card's header** (2026-10-15), on the accent colour,
+  chosen by what the card holds: "everything looks rather similar ... it's
+  sometimes a bit hard to see at a glance where something is". Cards about
+  the same thing share one (a clock for history, an envelope for email).
+- **Tabs on long pages** (`components/PageTabs.tsx`, 2026-10-15): one part
+  at a time, the tab in the address (`#history`), the first tab without it.
+  The Sales pages (*Price list*, *Sales points*), a device (*Device*,
+  *Activity*), a team's money on Admin › Money (*Balance*, *History*),
+  Updates (*Update*, *History*) and Backup (*Backup*, *Restore*). "I like
+  the tabs on those pages where there is much content."
 
 ## 8. Visual language (a guide)
 

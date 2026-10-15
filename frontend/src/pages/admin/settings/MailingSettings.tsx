@@ -7,6 +7,7 @@
  */
 import { NumberInput, Select, SimpleGrid, Stack, Text } from '@mantine/core';
 import { useState } from 'react';
+import { IconSend } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
 import { Panel } from '../../../components/Panel';
@@ -31,7 +32,7 @@ function Form({ data }: { data: MailingSettingsOut }) {
   );
   return (
     <Stack gap="lg">
-      <Panel title="Sending">
+      <Panel icon={IconSend} title="Sending">
         <Stack gap="md">
           <Select
             label="Mail account"

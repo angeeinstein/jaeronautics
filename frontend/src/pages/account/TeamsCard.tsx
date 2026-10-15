@@ -3,6 +3,7 @@
  * with its state -- or, for a member in none, what teams are.
  */
 import { Button, Group, Stack, Text } from '@mantine/core';
+import { IconUsersGroup } from '@tabler/icons-react';
 
 import type { Schemas } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
@@ -14,6 +15,7 @@ type Teams = Schemas['TeamsCardOut'];
 export function TeamsCard({ teams }: { teams: Teams }) {
   return (
     <Panel
+      icon={IconUsersGroup}
       title={teams.plural}
       actions={
         teams.mine.length ? (

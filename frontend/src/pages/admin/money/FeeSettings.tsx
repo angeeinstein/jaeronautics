@@ -8,6 +8,7 @@
 import { SegmentedControl, Stack, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconPercentage } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
 import { Panel } from '../../../components/Panel';
@@ -60,7 +61,7 @@ function Form({ data }: { data: MoneySettings }) {
 export function FeeSettings() {
   const settings = useQuery(settingsQuery);
   return (
-    <Panel title="Stripe's fees">
+    <Panel icon={IconPercentage} title="Stripe's fees">
       {settings.data ? (
         <Form key={JSON.stringify(settings.data)} data={settings.data} />
       ) : (

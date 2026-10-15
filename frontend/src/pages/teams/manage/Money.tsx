@@ -9,6 +9,7 @@
 import { Button, Group, SimpleGrid, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconBuildingBank, IconCalendar, IconReceipt, IconTransfer } from '@tabler/icons-react';
 
 import { api, ApiError, call, type Schemas } from '../../../api/client';
 import { useMe } from '../../../api/session';
@@ -59,7 +60,7 @@ function Bank({ funds }: { funds: Funds }) {
     },
   });
   return (
-    <Panel title="Bank details">
+    <Panel icon={IconBuildingBank} title="Bank details">
       <Stack gap="md">
         <Text size="sm" c="dimmed">
           Where the association transfers the team's money. Every change is logged, and the association's
@@ -150,7 +151,7 @@ function Body({ funds }: { funds: Funds }) {
         key={`${funds.bank.account_holder ?? ''}|${funds.bank.iban ?? ''}|${funds.bank.bic ?? ''}`}
         funds={funds}
       />
-      <Panel title="By period" flush>
+      <Panel icon={IconCalendar} title="By period" flush>
         {funds.by_period.length ? (
           <Table verticalSpacing="sm" aria-label="By period">
             <Table.Thead>
@@ -179,6 +180,7 @@ function Body({ funds }: { funds: Funds }) {
         )}
       </Panel>
       <Panel
+        icon={IconTransfer}
         title="Transfers"
         flush
         actions={
@@ -222,6 +224,7 @@ function Body({ funds }: { funds: Funds }) {
       </Panel>
       {funds.sales.count || funds.sales.by_item.length ? <SalesPanel sales={funds.sales} /> : null}
       <Panel
+        icon={IconReceipt}
         title="Payments"
         flush
         actions={

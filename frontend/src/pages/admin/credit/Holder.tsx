@@ -21,6 +21,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useParams } from 'react-router';
+import { IconPencil, IconReceiptRefund } from '@tabler/icons-react';
 
 import { api, ApiError, call } from '../../../api/client';
 import { AppLink } from '../../../app/AppLink';
@@ -111,7 +112,7 @@ function Book({ holder }: { holder: CreditHolder }) {
       ? itemId !== null
       : amount !== '' && amount !== 0 && (kind !== 'correction' || note.trim() !== '');
   return (
-    <Panel title="Book by hand">
+    <Panel icon={IconPencil} title="Book by hand">
       <Stack gap="md">
         <SegmentedControl
           data={sells ? BOOKINGS : BOOKINGS.filter((booking) => booking.value !== 'sale')}
@@ -203,7 +204,7 @@ function Refund({ holder }: { holder: CreditHolder }) {
   const byHand = balance - holder.refundable_cents;
   if (balance === 0) return null;
   return (
-    <Panel title="Refund">
+    <Panel icon={IconReceiptRefund} title="Refund">
       <Stack gap="sm">
         <Text size="sm">
           {holder.refundable_cents

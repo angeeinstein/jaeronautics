@@ -22,6 +22,7 @@ import {
 } from '@mantine/core';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconMessages, IconPhoto, IconPlugConnected, IconUsersGroup } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
 import { type Detail, Details } from '../../../components/Details';
@@ -66,7 +67,7 @@ function Connection({ data }: { data: ForumOut }) {
     onError: notifyFailed,
   });
   return (
-    <Panel title="Connection">
+    <Panel icon={IconPlugConnected} title="Connection">
       <Stack gap="md">
         <Details
           items={[
@@ -138,7 +139,7 @@ function Form({ data }: { data: ForumOut }) {
 
   return (
     <Stack gap="lg">
-      <Panel title="The forum">
+      <Panel icon={IconMessages} title="The forum">
         <Stack gap="md">
           <Checkbox
             label="Connected"
@@ -182,7 +183,7 @@ function Form({ data }: { data: ForumOut }) {
           </SimpleGrid>
         </Stack>
       </Panel>
-      <Panel title="Groups">
+      <Panel icon={IconUsersGroup} title="Groups">
         <Stack gap="md">
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
             {text('member_group', 'Members')}
@@ -239,7 +240,7 @@ function Form({ data }: { data: ForumOut }) {
           </SimpleGrid>
         </Stack>
       </Panel>
-      <Panel title="Profile pictures">
+      <Panel icon={IconPhoto} title="Profile pictures">
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
           <NumberInput
             label="Largest file"

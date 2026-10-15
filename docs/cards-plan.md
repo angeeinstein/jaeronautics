@@ -197,8 +197,8 @@ later on we can expand this if this works and if this feels right."
 - ~~Undoing your own sale~~ -- turned down 2026-10-15 (`docs/todo.md`,
   "Turned down").
 - **Actions at the reader** beyond light and beeps: a relay (a coffee
-  machine), a fridge's magnetic lock. Taken up 2026-10-15: see the to-do item
-  "Sales points: switch outputs after a sale".
+  machine), a fridge's magnetic lock -- built 2026-10-15
+  (`docs/devices-plan.md`, "Actions after a sale").
 - **Attendance**, around January, with the same cards.
 
 ## How it was built (decided while building)

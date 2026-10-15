@@ -6,6 +6,7 @@ import { Anchor, Button, PasswordInput, Stack, Title } from '@mantine/core';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { IconLock } from '@tabler/icons-react';
 
 import { api, ApiError, call } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
@@ -52,7 +53,7 @@ export function ResetPassword() {
           </Anchor>
         </Stack>
       ) : (
-        <Panel title="Your new password">
+        <Panel icon={IconLock} title="Your new password">
           <form
             onSubmit={(event) => {
               event.preventDefault();

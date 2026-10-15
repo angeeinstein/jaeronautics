@@ -13,6 +13,7 @@ import { Alert, Button, Group, Stack, Text, TextInput, Title } from '@mantine/co
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useParams } from 'react-router';
+import { IconCircleCheck, IconNfc } from '@tabler/icons-react';
 
 import { api, call } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
@@ -83,7 +84,10 @@ export function LinkCard() {
       ) : opened.isError ? (
         <ErrorState error={opened.error} />
       ) : link.isSuccess ? (
-        <Panel title={`Linked${link.data.first_name ? `, hi ${link.data.first_name}` : ''}`}>
+        <Panel
+          icon={IconCircleCheck}
+          title={`Linked${link.data.first_name ? `, hi ${link.data.first_name}` : ''}`}
+        >
           <Stack gap="md">
             <Alert color="green" variant="light" role="status">
               {link.data.card.name} ({link.data.card.tail}) is linked to your account. Tap it on the reader
@@ -97,7 +101,7 @@ export function LinkCard() {
           </Stack>
         </Panel>
       ) : (
-        <Panel title={`Card ${opened.data.card}`}>
+        <Panel icon={IconNfc} title={`Card ${opened.data.card}`}>
           <Stack gap="md">
             <Text size="sm">
               Tapped on {opened.data.reader}

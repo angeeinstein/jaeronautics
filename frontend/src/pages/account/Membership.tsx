@@ -7,6 +7,7 @@
 import { Button, Group, Radio, Stack } from '@mantine/core';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconId } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../api/client';
 import { Details } from '../../components/Details';
@@ -82,7 +83,11 @@ export function MembershipCard({ membership }: { membership: Membership }) {
     onError: notifyFailed,
   });
   return (
-    <Panel title="Membership" actions={<Pill tone={membership.tone}>{membership.status_label}</Pill>}>
+    <Panel
+      icon={IconId}
+      title="Membership"
+      actions={<Pill tone={membership.tone}>{membership.status_label}</Pill>}
+    >
       <Stack gap="md">
         <Details
           compact

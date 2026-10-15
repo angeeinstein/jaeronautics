@@ -9,6 +9,7 @@ import { Avatar, Button, Group, SimpleGrid, Stack, Text, Textarea, TextInput } f
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useParams } from 'react-router';
+import { IconHistory, IconInfoCircle, IconNotes, IconUser } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
@@ -73,7 +74,11 @@ function Now({ person, personKey }: { person: Person; personKey: readonly unknow
   if (!now) return null;
   const deciding = now.status === 'applied' || now.status === 'invited';
   return (
-    <Panel title="Now" actions={<Pill tone={TONES[now.status] ?? 'neutral'}>{now.status_label}</Pill>}>
+    <Panel
+      icon={IconUser}
+      title="Now"
+      actions={<Pill tone={TONES[now.status] ?? 'neutral'}>{now.status_label}</Pill>}
+    >
       <Stack gap="md">
         {now.answer ? (
           <div>
@@ -185,7 +190,7 @@ function Notes({ person, personKey }: { person: Person; personKey: readonly unkn
     'Note saved.',
   );
   return (
-    <Panel title="Notes">
+    <Panel icon={IconNotes} title="Notes">
       <Stack gap="md">
         <Text size="sm" c="dimmed">
           Seen by the leads and the admins. Not shown to the person, but part of their data if they ask for it
@@ -258,7 +263,7 @@ export function Person() {
       <ManageHeader title={data.name} crumbs={[{ label: 'Members', to: `/teams/${slug}/manage/members` }]} />
       <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg">
         <Stack gap="lg">
-          <Panel title="Details">
+          <Panel icon={IconInfoCircle} title="Details">
             <Group gap="md" align="flex-start" wrap="nowrap">
               <Avatar src={data.picture_url} alt="" radius={0} size={72} aria-hidden>
                 {data.name.charAt(0)}
@@ -274,7 +279,7 @@ export function Person() {
             </Group>
           </Panel>
           <Now person={data} personKey={personKey} />
-          <Panel title="History">
+          <Panel icon={IconHistory} title="History">
             <Stack gap="xs">
               {data.history.map((entry, index) => (
                 <Group key={index} gap="xs" wrap="wrap">

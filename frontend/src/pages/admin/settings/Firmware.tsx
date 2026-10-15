@@ -12,6 +12,7 @@ import { Button, FileInput, Group, Stack, Table, Text, TextInput } from '@mantin
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { IconCloudDownload, IconCpu, IconUpload } from '@tabler/icons-react';
 
 import { api, ApiError, call, type Schemas } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
@@ -71,7 +72,7 @@ function Upload({ data }: { data: FirmwareOut }) {
     },
   });
   return (
-    <Panel title="Upload firmware">
+    <Panel icon={IconUpload} title="Upload firmware">
       <Stack gap="md">
         <Group align="flex-start" gap="md" grow preventGrowOverflow={false}>
           <FileInput
@@ -212,7 +213,7 @@ function ReleaseRow({ release }: { release: Release }) {
 
 function Releases({ data }: { data: FirmwareOut }) {
   return (
-    <Panel title="Firmware" flush>
+    <Panel icon={IconCloudDownload} title="Firmware" flush>
       {data.releases.length ? (
         <Table.ScrollContainer minWidth={760} type="native">
           <Table verticalSpacing="sm" aria-label="Firmware">
@@ -243,7 +244,7 @@ function Releases({ data }: { data: FirmwareOut }) {
 
 function DeviceStates({ data }: { data: FirmwareOut }) {
   return (
-    <Panel title="Devices" flush>
+    <Panel icon={IconCpu} title="Devices" flush>
       {data.devices.length ? (
         <Table.ScrollContainer minWidth={560} type="native">
           <Table verticalSpacing="sm" aria-label="Devices' firmware">

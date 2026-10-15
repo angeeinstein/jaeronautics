@@ -8,6 +8,7 @@
 import { Alert, Checkbox, Group, List, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useState } from 'react';
+import { IconShield } from '@tabler/icons-react';
 
 import { api, call } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
@@ -118,7 +119,7 @@ function Editor({ account, access }: { account: Account; access: Access }) {
 export function RolesTab({ account }: { account: Account }) {
   const access = account.access;
   return (
-    <Panel title="Roles">
+    <Panel icon={IconShield} title="Roles">
       {access ? (
         <Stack gap="lg">
           {access.effective_permissions.length ? (

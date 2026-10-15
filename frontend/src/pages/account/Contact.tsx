@@ -9,6 +9,7 @@
 import { Button, Group, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconAddressBook } from '@tabler/icons-react';
 
 import { api, ApiError, call, type Schemas } from '../../api/client';
 import { type Detail, Details } from '../../components/Details';
@@ -117,6 +118,7 @@ export function ContactCard({
   if (!editing)
     return (
       <Panel
+        icon={IconAddressBook}
         title="Contact details"
         actions={
           <Button
@@ -145,7 +147,7 @@ export function ContactCard({
     );
 
   return (
-    <Panel title="Contact details">
+    <Panel icon={IconAddressBook} title="Contact details">
       <form
         onSubmit={(event) => {
           event.preventDefault();

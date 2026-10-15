@@ -21,6 +21,7 @@ import {
 } from '@mantine/core';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconMail, IconPencil, IconTransfer } from '@tabler/icons-react';
 
 import { api, ApiError, call, type Schemas } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
@@ -125,6 +126,7 @@ function AccountForm({ editing, onDone }: { editing: Account | null; onDone: () 
 
   return (
     <Panel
+      icon={IconPencil}
       title={editing ? `Change ${editing.key}` : 'Add an account'}
       actions={
         editing ? (
@@ -322,7 +324,7 @@ function ImportExport() {
   );
 
   return (
-    <Panel title="Import and export">
+    <Panel icon={IconTransfer} title="Import and export">
       <Stack gap="lg">
         <Stack gap="sm">
           <Text size="sm" c="dimmed">
@@ -399,7 +401,7 @@ function Accounts({ data }: { data: Schemas['MailOut'] }) {
   const [editing, setEditing] = useState<Account | null>(null);
   return (
     <Stack gap="lg">
-      <Panel title="Accounts" flush>
+      <Panel icon={IconMail} title="Accounts" flush>
         {data.accounts.length ? (
           <Table.ScrollContainer minWidth={680} type="native">
             <Table verticalSpacing="sm" aria-label="Mail accounts">

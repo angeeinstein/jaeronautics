@@ -7,6 +7,7 @@
 import { Button, Card, Group, Stack, Switch, Table, Text, TextInput } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconSettings } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
 import { AppLink } from '../../../app/AppLink';
@@ -30,7 +31,7 @@ function SettingsPanel({ settings }: { settings: Settings }) {
     },
   });
   return (
-    <Panel title="Settings">
+    <Panel icon={IconSettings} title="Settings">
       <Stack gap="md">
         <Switch
           label="Switched on"

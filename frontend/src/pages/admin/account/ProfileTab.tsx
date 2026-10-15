@@ -5,6 +5,7 @@
  */
 import { Button, Group, Stack, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
+import { IconMail, IconUser } from '@tabler/icons-react';
 
 import { api, ApiError, call } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
@@ -43,7 +44,7 @@ function CorrectEmail({ account }: { account: Account }) {
   );
 
   return (
-    <Panel title="Correct the private address">
+    <Panel icon={IconMail} title="Correct the private address">
       <Stack gap="sm">
         <Text size="sm" c="dimmed">
           For a member who cannot get in because the address is wrong and the password forgotten. Whoever
@@ -83,7 +84,7 @@ function CorrectEmail({ account }: { account: Account }) {
 export function ProfileTab({ account }: { account: Account }) {
   return (
     <Stack gap="lg">
-      <Panel title="Account">
+      <Panel icon={IconUser} title="Account">
         <Details
           items={[
             ['Name', account.name],

@@ -11,6 +11,7 @@ import { Button, Group, Select, SimpleGrid, Stack, Table, Text, TextInput } from
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { IconCpu, IconLink, IconPlus } from '@tabler/icons-react';
 
 import { api, ApiError, call, type Schemas } from '../../../api/client';
 import { PageHeader } from '../../../components/PageHeader';
@@ -74,7 +75,7 @@ function DeviceRow({ device }: { device: Device }) {
 
 function Waiting({ pairings, types }: { pairings: Pairing[]; types: Schemas['DeviceTypeOut'][] }) {
   return (
-    <Panel title="Waiting to be paired" flush>
+    <Panel icon={IconLink} title="Waiting to be paired" flush>
       <Table.ScrollContainer minWidth={560} type="native">
         <Table verticalSpacing="sm" aria-label="Waiting to be paired">
           <Table.Thead>
@@ -172,7 +173,7 @@ function AddDevice({
   });
 
   return (
-    <Panel title="Add a device">
+    <Panel icon={IconPlus} title="Add a device">
       <Stack gap="md">
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
           <Select
@@ -260,7 +261,7 @@ function DeviceList({ data }: { data: Schemas['DevicesOut'] }) {
   return (
     <Stack gap="lg">
       {data.pairings.length ? <Waiting pairings={data.pairings} types={data.types} /> : null}
-      <Panel title="Devices" flush>
+      <Panel icon={IconCpu} title="Devices" flush>
         {data.items.length ? (
           <Table.ScrollContainer minWidth={680} type="native">
             <Table verticalSpacing="sm" aria-label="Devices">

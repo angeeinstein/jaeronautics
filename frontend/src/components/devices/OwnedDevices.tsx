@@ -9,6 +9,7 @@
 import { Button, Group, SimpleGrid, Stack, Switch, Table, Text, TextInput } from '@mantine/core';
 import { type QueryKey, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconCpu } from '@tabler/icons-react';
 
 import { ApiError, type Schemas } from '../../api/client';
 import {
@@ -76,6 +77,7 @@ function DeviceCard({
 
   return (
     <Panel
+      icon={IconCpu}
       title={device.label}
       actions={
         <Switch

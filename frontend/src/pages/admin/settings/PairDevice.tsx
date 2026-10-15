@@ -11,6 +11,7 @@ import { Button, Group, SegmentedControl, Select, SimpleGrid, Stack, Text, TextI
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
+import { IconAdjustments, IconCpu, IconLink } from '@tabler/icons-react';
 
 import { api, ApiError, call, type Schemas } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
@@ -28,7 +29,7 @@ type Devices = Schemas['DevicesOut'];
 function EnterCode({ initial, onFound }: { initial: string; onFound: (code: string) => void }) {
   const [code, setCode] = useState(initial);
   return (
-    <Panel title="The code on the device">
+    <Panel icon={IconLink} title="The code on the device">
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -112,7 +113,7 @@ function Approve({ pairing, devices }: { pairing: Pairing; devices: Devices }) {
 
   return (
     <Stack gap="lg">
-      <Panel title={`Device ${pairing.code}`}>
+      <Panel icon={IconCpu} title={`Device ${pairing.code}`}>
         <Details
           items={[
             ['Board', [pairing.board, pairing.hardware_id].filter(Boolean).join(' · ') || '–'],
@@ -126,7 +127,7 @@ function Approve({ pairing, devices }: { pairing: Pairing; devices: Devices }) {
           ]}
         />
       </Panel>
-      <Panel title="It becomes">
+      <Panel icon={IconAdjustments} title="It becomes">
         <Stack gap="md">
           <SegmentedControl
             aria-label="It becomes"

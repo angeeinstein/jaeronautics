@@ -280,6 +280,8 @@ describe('one team', () => {
     show(<TeamMoney />, ...route);
 
     expect(await screen.findByRole('heading', { name: 'Rocket Team', level: 1 })).toBeInTheDocument();
+    // The payments are under History; the balance first.
+    await userEvent.click(screen.getByRole('tab', { name: 'History' }));
     expect(screen.getByRole('table', { name: 'Payments' })).toHaveTextContent(
       '01.10.2026Lena Lead31.03.2027€10.00€0.35carried by the association€6.00€4.00 refunded',
     );

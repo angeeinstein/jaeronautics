@@ -29,6 +29,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { IconPencil, IconSend } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
 import { DayInput } from '../../../components/DayInput';
@@ -302,10 +303,10 @@ export function Announcements() {
         <ErrorState error={list.error} onRetry={() => void list.refetch()} />
       ) : (
         <Stack gap="lg">
-          <Panel title="Write">
+          <Panel icon={IconPencil} title="Write">
             <Write data={list.data} />
           </Panel>
-          <Panel title="Sent" flush>
+          <Panel icon={IconSend} title="Sent" flush>
             <MailingTable
               items={list.data.items}
               linkTo={(mailing) => `/admin/announcements/${String(mailing.id)}`}

@@ -6,7 +6,7 @@
  * (aeronautics_members/api/credit.py).
  */
 import { Alert, Anchor, Avatar, Group, SimpleGrid, Stack, Table, Text } from '@mantine/core';
-import { IconDownload } from '@tabler/icons-react';
+import { IconDownload, IconHistory, IconWallet } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 
 import { AppLink } from '../../../app/AppLink';
@@ -153,12 +153,12 @@ export function Credit() {
               note="Last 30 days"
             />
           </SimpleGrid>
-          <Panel title="Balances" flush>
+          <Panel icon={IconWallet} title="Balances" flush>
             <div className={classes.inset}>
               <People people={overview.data.people} />
             </div>
           </Panel>
-          <Panel title="Latest" flush>
+          <Panel icon={IconHistory} title="Latest" flush>
             <div className={classes.inset}>
               <Recent entries={overview.data.recent} />
             </div>

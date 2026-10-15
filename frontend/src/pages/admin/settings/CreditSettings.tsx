@@ -8,6 +8,7 @@
 import { Alert, Checkbox, NumberInput, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconAdjustments, IconWallet } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
 import { meQuery } from '../../../api/session';
@@ -72,7 +73,7 @@ function Form({ data }: { data: CreditSettingsOut }) {
           Stripe&apos;s keys are not set yet (Settings › Membership fee). Nothing can be paid until they are.
         </Alert>
       ) : null}
-      <Panel title="Credit">
+      <Panel icon={IconWallet} title="Credit">
         <Stack gap="md">
           <Checkbox
             label="Credit is on"
@@ -105,7 +106,7 @@ function Form({ data }: { data: CreditSettingsOut }) {
           />
         </Stack>
       </Panel>
-      <Panel title="Limits">
+      <Panel icon={IconAdjustments} title="Limits">
         <Stack gap="md">
           <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
             <NumberInput

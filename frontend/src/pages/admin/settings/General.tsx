@@ -5,6 +5,7 @@
  */
 import { Checkbox, Select, Stack, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
+import { IconAt, IconMail, IconUserPlus } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
 import { Panel } from '../../../components/Panel';
@@ -38,7 +39,7 @@ function Form({ data }: { data: GeneralOut }) {
 
   return (
     <Stack gap="lg">
-      <Panel title="Signing up">
+      <Panel icon={IconUserPlus} title="Signing up">
         <Checkbox
           label="Paying by invoice"
           description="Offered beside paying online when somebody joins."
@@ -48,7 +49,7 @@ function Form({ data }: { data: GeneralOut }) {
           }}
         />
       </Panel>
-      <Panel title="Welcome email">
+      <Panel icon={IconMail} title="Welcome email">
         <Stack gap="md">
           <Checkbox
             label="Send it by itself"
@@ -92,7 +93,7 @@ function Form({ data }: { data: GeneralOut }) {
           />
         </Stack>
       </Panel>
-      <Panel title="University email domains">
+      <Panel icon={IconAt} title="University email domains">
         <Stack gap="md">
           <Stack gap="xs">
             <TextInput

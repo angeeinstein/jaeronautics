@@ -8,6 +8,7 @@
  */
 import { Button, Stack } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { IconNfc } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
 import { type Card, CardList } from '../../../components/cards/CardParts';
@@ -105,7 +106,7 @@ export function CardsTab({ userId }: { userId: number }) {
   if (cards.isPending) return <LoadingState />;
   if (cards.isError) return <ErrorState error={cards.error} onRetry={() => void cards.refetch()} />;
   return (
-    <Panel title="Cards" flush>
+    <Panel icon={IconNfc} title="Cards" flush>
       {cards.data.items.length ? (
         <CardList cards={cards.data.items}>{(card) => <Actions card={card} userId={userId} />}</CardList>
       ) : (

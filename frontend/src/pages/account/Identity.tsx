@@ -8,6 +8,7 @@
 import { Button, Group, Select, SimpleGrid, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconUser } from '@tabler/icons-react';
 
 import { api, ApiError, call, type Schemas } from '../../api/client';
 import { ConfirmButton } from '../../components/ConfirmButton';
@@ -204,6 +205,7 @@ export function IdentityCard({
   const salutation = options.salutations.find((choice) => choice.value === identity.salutation)?.label;
   return (
     <Panel
+      icon={IconUser}
       title="Name and membership type"
       actions={
         request || asking ? null : (

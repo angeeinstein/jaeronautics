@@ -1,10 +1,11 @@
 /**
- * Settings -> Backup and restore: one encrypted file with everything this
- * installation holds, made in the background while the page follows along;
- * the backups kept on the server; how to restore one. On a portal just
- * restored, first its paused background jobs -- resumed only once somebody
- * says this is the server members use -- and then, line by line, whether
- * everything works. Data: /api/v1/admin/settings/backup
+ * Settings -> Backup and restore, in two tabs. *Backup*: one encrypted file
+ * with everything this installation holds, made in the background while the
+ * page follows along, and the backups kept on the server. *Restore*
+ * (#restore): how to restore one. On a portal just restored, above both,
+ * first its paused background jobs -- resumed only once somebody says this
+ * is the server members use -- and then, line by line, whether everything
+ * works. Data: /api/v1/admin/settings/backup
  * (aeronautics_members/api/admin_backup.py); a backup is downloaded from
  * /admin/backup/files/<name>.
  */
@@ -24,11 +25,19 @@ import {
 } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type SyntheticEvent, useState } from 'react';
+import {
+  IconChecklist,
+  IconClock,
+  IconDatabaseExport,
+  IconDatabaseImport,
+  IconFolder,
+} from '@tabler/icons-react';
 
 import { api, ApiError, call, type Schemas } from '../../../api/client';
 import { Checklist } from '../../../components/Checklist';
 import { ConfirmButton } from '../../../components/ConfirmButton';
 import { PageHeader } from '../../../components/PageHeader';
+import { PageTabs } from '../../../components/PageTabs';
 import { Panel } from '../../../components/Panel';
 import { Pill } from '../../../components/Pill';
 import { ErrorState, LoadingState } from '../../../components/States';
@@ -64,7 +73,7 @@ function Paused({ page }: { page: Page }) {
   });
   const made = page.paused?.backup_created_at;
   return (
-    <Panel title="Background jobs" actions={<Pill tone="pending">Paused</Pill>}>
+    <Panel icon={IconClock} title="Background jobs" actions={<Pill tone="pending">Paused</Pill>}>
       <Stack gap="md">
         <Alert color="amber" variant="light">
           This portal was restored from a backup{made ? ` made on ${formatDateTime(made)}` : ''}. Its
@@ -118,6 +127,7 @@ function Working({ first }: { first: Schemas['CheckOut'][] }) {
   });
   return (
     <Panel
+      icon={IconChecklist}
       title="Is everything working?"
       actions={
         <>
@@ -220,7 +230,7 @@ function MakeOne({ page }: { page: Page }) {
     start.mutate();
   };
   return (
-    <Panel title="Make a backup">
+    <Panel icon={IconDatabaseExport} title="Make a backup">
       <Stack gap="md">
         <Text size="sm" c="dimmed">
           One file with everything this installation holds: all accounts and memberships, every setting and
@@ -279,7 +289,7 @@ function Kept({ page }: { page: Page }) {
     onError: notifyFailed,
   });
   return (
-    <Panel title="Backups on this server" flush>
+    <Panel icon={IconFolder} title="Backups on this server" flush>
       <Table.ScrollContainer minWidth={600} type="native">
         <Table verticalSpacing="sm" aria-label="Backups on this server">
           <Table.Thead>
@@ -335,7 +345,7 @@ function Kept({ page }: { page: Page }) {
 
 function Restore({ page }: { page: Page }) {
   return (
-    <Panel title="Restore">
+    <Panel icon={IconDatabaseImport} title="Restore">
       <Stack gap="sm">
         <Text size="sm" c="dimmed">
           Restoring replaces everything on an installation with the backup, including any account made while
@@ -371,9 +381,27 @@ export function Backup() {
         <Stack gap="lg">
           {page.data.paused ? <Paused page={page.data} /> : null}
           {!page.data.paused && page.data.checklist ? <Working first={page.data.checklist} /> : null}
-          <MakeOne page={page.data} />
-          {page.data.backups.length ? <Kept page={page.data} /> : null}
-          <Restore page={page.data} />
+          <PageTabs
+            tabs={[
+              {
+                value: 'backup',
+                label: 'Backup',
+                icon: IconDatabaseExport,
+                content: (
+                  <Stack gap="lg">
+                    <MakeOne page={page.data} />
+                    {page.data.backups.length ? <Kept page={page.data} /> : null}
+                  </Stack>
+                ),
+              },
+              {
+                value: 'restore',
+                label: 'Restore',
+                icon: IconDatabaseImport,
+                content: <Restore page={page.data} />,
+              },
+            ]}
+          />
         </Stack>
       )}
     </>

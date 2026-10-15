@@ -78,6 +78,8 @@ test.describe('settings', () => {
     await page.goto('/admin/settings/updates');
 
     await expect(page.getByRole('region', { name: 'Version', exact: true })).toContainText('Installed');
+    // How the last one went is on the second tab.
+    await page.getByRole('tab', { name: 'History' }).click();
     const steps = page.getByRole('list', { name: 'Steps of the last update' });
     await expect(steps.getByRole('listitem')).toHaveCount(12);
     await expect(steps).toContainText('Fetching the front end built by CI: Done');
@@ -88,9 +90,10 @@ test.describe('settings', () => {
   });
 
   test('backup and restore: the steps of a backup, made in the background', async ({ page }) => {
-    await page.goto('/admin/settings/backup');
+    await page.goto('/admin/settings/backup#restore');
 
     await expect(page.getByRole('region', { name: 'Restore' })).toContainText('install.sh --restore');
+    await page.getByRole('tab', { name: 'Backup' }).click();
     await page.getByLabel('Passphrase', { exact: true }).fill('a long enough passphrase');
     await page.getByLabel('Passphrase again').fill('a long enough passphrase');
     await page.getByRole('button', { name: 'Back up' }).click();

@@ -17,6 +17,7 @@ import {
   Text,
   TextInput,
 } from '@mantine/core';
+import { IconKey } from '@tabler/icons-react';
 
 import type { Schemas } from '../../../api/client';
 import { Panel } from '../../../components/Panel';
@@ -292,7 +293,7 @@ export function KeyReveal({ result, onDone }: { result: DeviceKey; onDone: () =>
 /** A new device's key, where the form to add it was. */
 export function KeyShown({ result, onDone }: { result: DeviceKey; onDone: () => void }) {
   return (
-    <Panel title={`The key of ${result.device.label}`}>
+    <Panel icon={IconKey} title={`The key of ${result.device.label}`}>
       <KeyReveal result={result} onDone={onDone} />
     </Panel>
   );

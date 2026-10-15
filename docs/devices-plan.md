@@ -198,11 +198,13 @@ The firmware can already update itself over the air.
 
 ### Open (2026-10-14)
 
-- **The marks of "our" firmware:** ESP-IDF's app description already holds
-  the project name and version; with a few bytes of our own (a marker and
-  the board) both the server and the device can tell this firmware from any
-  other. That guards against a wrong file, not against someone who takes over
-  an admin account or the server: anyone can copy the marker.
+- ~~The marks of "our" firmware~~ -- **settled 2026-10-15: none of our
+  own.** A real file carries ESP-IDF's app description (project, version,
+  build time, IDF version) and its chip in the image header; the portal
+  checks those -- the same project and chip as the newest firmware -- with
+  the checksum and the appended SHA-256. "This was exactly what I meant."
+  Bytes of our own would guard only against a wrong file too, and anyone can
+  copy them.
 - **Signing the firmware: not planned** (2026-10-14). The maintainer: "I am
   not really worried about admins uploading malicious firmware, because if
   they are already an admin, they can do a lot of other malicious stuff."
@@ -214,9 +216,39 @@ The firmware can already update itself over the air.
   "the parts that are not really dependent on this": pairing, the device
   reporting what it is and can do, the backup code and the card opening the
   settings, and the base of firmware updates -- uploading a file in the
-  portal, its checks (the marks above are a hook in
-  `services/device_firmware.py`, `_marks`), the device asking for its version,
+  portal, its checks (`services/device_firmware.py`, `_unlike_the_newest`),
+  the device asking for its version,
   downloading it and saying how it went.
+
+## Actions after a sale (agreed and built 2026-10-15)
+
+A sale can switch a reader's outputs: a magnetic lock on the fridge (the
+reader beside it, an honesty system -- the door opens after paying), a
+coffee machine's relay. The firmware drives the outputs ("a relay connected
+via I2C ... switch on and off multiple things"); the portal says which and
+how long, "so you can do this in the field with no need to build a new
+firmware".
+
+- **The device says how many outputs it has** (`X-Device-Outputs`, 0 to 16),
+  shown on its page.
+- **Per reader, one list of lines**, kept in its settings (`actions`, with an
+  on/off switch): *after any sale* or *after this item* -> output 1-N for
+  0.1 to 600 seconds. "Any sale" is one choice of the first field, so there
+  is one list, not one per reader and one per item. An item's line is for
+  that item **on that reader**: the price list carries none, and the same
+  item on another reader has its own, or none. Both kinds run when both
+  are set. An item's lines go when it leaves the menu or is deleted.
+- **Set on the owner's Sales page**, *Sales points* tab: an *Actions* button
+  on the reader's panel opens a small dialog with its lines, *Add*, a delete
+  per line and the switch. Not on readers without outputs -- "I don't want
+  to clutter the site".
+- **The sale's answer carries what to do now** (`actions` in `buy`'s
+  `sold`); the firmware need not read the list.
+- **Decided with it:** nothing for the portal being unreachable ("this
+  magnetic lock won't be some super secure thing anyways" -- unplug it);
+  opening the door without buying (restocking) is in the device's own
+  settings menu, opened with an admin's card; an output per item on readers
+  with several outputs is covered by the item lines.
 
 ## The screens: a menu, icons, attendance (agreed 2026-10-14)
 

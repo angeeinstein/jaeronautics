@@ -7,6 +7,7 @@
 import { Alert, Button, Group, Select, Stack, TextInput } from '@mantine/core';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconMailForward } from '@tabler/icons-react';
 
 import { api, ApiError, call, type Schemas } from '../../../api/client';
 import { useMe } from '../../../api/session';
@@ -56,7 +57,7 @@ function Form({ data, email }: { data: Schemas['TestEmailOut']; email: string })
     );
   }
   return (
-    <Panel title="Send a test email">
+    <Panel icon={IconMailForward} title="Send a test email">
       <Stack gap="md" maw={520}>
         <Select
           label="From"

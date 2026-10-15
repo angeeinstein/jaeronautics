@@ -6,6 +6,7 @@
  */
 import { Stack, Switch, Text } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { IconNews } from '@tabler/icons-react';
 
 import { api, call } from '../../api/client';
 import { Panel } from '../../components/Panel';
@@ -28,7 +29,7 @@ export function NewsCard() {
   });
   if (!news.data) return null;
   return (
-    <Panel title="News by email">
+    <Panel icon={IconNews} title="News by email">
       <Stack gap="sm">
         <Switch
           label="The association's news"

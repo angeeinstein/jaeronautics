@@ -124,9 +124,12 @@ describe('backup and restore', () => {
       'href',
       '/admin/backup/files/portal-backup-20261007-080000.jabackup',
     );
+    // How to restore it is on the second tab.
+    await userEvent.click(screen.getByRole('tab', { name: 'Restore' }));
     expect(screen.getByRole('region', { name: 'Restore' })).toHaveTextContent(
       'sudo ./install.sh --restore /path/to/portal-backup-20261007-080000.jabackup',
     );
+    await userEvent.click(screen.getByRole('tab', { name: 'Backup' }));
     await userEvent.click(within(table).getByRole('button', { name: 'Delete' }));
     expect(calls.some((call) => call.method === 'DELETE')).toBe(false);
     await userEvent.click(within(table).getByRole('button', { name: 'Yes, delete' }));

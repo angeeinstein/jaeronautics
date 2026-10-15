@@ -705,7 +705,10 @@ Devices (admins: `devices.manage`). The plan, and what is decided:
   for a new key.
 - **Switching one off** refuses it whatever key it has. *Remove* deletes it,
   its key and its events.
-- **Its page** shows when it last spoke (written at most every 30 seconds),
+- **Its page** (two tabs: *Device*, and *Activity* with its requests, events
+  and what it can send) shows how many outputs it says it has (a sale can
+  switch them: set on the owner's Sales page, `docs/devices-plan.md`,
+  "Actions after a sale"), when it last spoke (written at most every 30 seconds),
   from where, its firmware (`X-Device-Firmware`), its board's MAC address
   (`X-Device-Hardware`; another board with the same key is noted as an event), its last 100 requests with
   their answers, its recent events (kept 90 days, by the nightly

@@ -7,6 +7,7 @@
  */
 import { Button, Group, Stack, Text, Title } from '@mantine/core';
 import { useMutation } from '@tanstack/react-query';
+import { IconDatabase } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../api/client';
 import { Panel } from '../../components/Panel';
@@ -30,7 +31,7 @@ export function YourDataCard({
     onError: notifyFailed,
   });
   return (
-    <Panel title="Your data">
+    <Panel icon={IconDatabase} title="Your data">
       <Stack gap="lg">
         <Stack gap="sm">
           <Text size="sm">You can download everything we store about you.</Text>

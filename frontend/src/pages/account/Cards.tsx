@@ -8,7 +8,7 @@
  * Data: /api/v1/account/cards (aeronautics_members/api/cards.py).
  */
 import { ActionIcon, Group, Stack, Switch, Text, TextInput, Tooltip } from '@mantine/core';
-import { IconCheck, IconPencil, IconX } from '@tabler/icons-react';
+import { IconCheck, IconNfc, IconPencil, IconX } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -168,7 +168,7 @@ export function Cards() {
         <ErrorState error={cards.error} onRetry={() => void cards.refetch()} />
       ) : (
         <Stack gap="lg">
-          <Panel title="Your cards" flush>
+          <Panel icon={IconNfc} title="Your cards" flush>
             {cards.data.items.length ? (
               <CardList cards={cards.data.items}>{(card) => <Actions card={card} />}</CardList>
             ) : (

@@ -8,6 +8,7 @@
 import { Alert, Button, Select, SimpleGrid, Stack, Text, Textarea, TextInput, Title } from '@mantine/core';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconMail } from '@tabler/icons-react';
 
 import { api, ApiError, call } from '../../api/client';
 import { TrapField, useWritingTime } from '../../components/MessageGuard';
@@ -77,7 +78,7 @@ export function Contact() {
   return (
     <Stack gap="lg" maw={640} mx="auto" mt={{ base: 0, sm: 'xl' }}>
       <Title order={1}>Contact</Title>
-      <Panel title="Write to us">
+      <Panel icon={IconMail} title="Write to us">
         {send.data ? (
           <Stack gap="md">
             <Alert color="green" variant="light" role="status">

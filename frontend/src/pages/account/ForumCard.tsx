@@ -5,6 +5,7 @@
  * once it is open.
  */
 import { Alert, Button, Image, Stack, Text } from '@mantine/core';
+import { IconMessages } from '@tabler/icons-react';
 
 import type { Schemas } from '../../api/client';
 import { Details } from '../../components/Details';
@@ -22,6 +23,7 @@ export function ForumCard({ forum }: { forum: Forum }) {
   const picture = forum.picture;
   return (
     <Panel
+      icon={IconMessages}
       title="Forum"
       actions={
         forum.may_open ? (

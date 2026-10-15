@@ -4,6 +4,7 @@
  * management.
  */
 import { Group, Stack, Table } from '@mantine/core';
+import { IconShield, IconUsersGroup } from '@tabler/icons-react';
 
 import { AppLink } from '../../../app/AppLink';
 import { Panel } from '../../../components/Panel';
@@ -15,7 +16,7 @@ import type { Account } from './shared';
 export function TeamsTab({ teams, title }: { teams: NonNullable<Account['teams']>; title: string }) {
   if (!teams.roles.length && !teams.memberships.length) {
     return (
-      <Panel title={title}>
+      <Panel icon={IconUsersGroup} title={title}>
         <EmptyState>Not in any team, and never applied to one.</EmptyState>
       </Panel>
     );
@@ -23,7 +24,7 @@ export function TeamsTab({ teams, title }: { teams: NonNullable<Account['teams']
   return (
     <Stack gap="lg">
       {teams.roles.length ? (
-        <Panel title="Roles in teams">
+        <Panel icon={IconShield} title="Roles in teams">
           <Group gap={6}>
             {teams.roles.map((role) => (
               <Pill key={`${role.team}-${role.role_label}`} tone="info">
@@ -34,7 +35,7 @@ export function TeamsTab({ teams, title }: { teams: NonNullable<Account['teams']
         </Panel>
       ) : null}
       {teams.memberships.length ? (
-        <Panel title={title} flush>
+        <Panel icon={IconUsersGroup} title={title} flush>
           <Table.ScrollContainer minWidth={560} type="native">
             <Table verticalSpacing="sm" aria-label={title}>
               <Table.Thead>

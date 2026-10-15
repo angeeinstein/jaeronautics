@@ -7,6 +7,7 @@
  */
 import { Button, Group, SimpleGrid, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
+import { IconActivity, IconBellRinging } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
@@ -136,7 +137,7 @@ function NeedsAttention({ attention }: { attention: Attention }) {
     return <AllClear title="Nothing needs your attention" detail={allClearDetail(attention)} />;
   }
   return (
-    <Panel title="Needs your attention" flush>
+    <Panel icon={IconBellRinging} title="Needs your attention" flush>
       {tasks.map((task) => (
         <Group key={task.key} className={classes.task} gap="md">
           <Text className={`${classes.count} ja-figures`}>{task.count}</Text>
@@ -159,6 +160,7 @@ function RecentActivity({ entries }: { entries: Dashboard['recent_activity'] }) 
   if (entries === null) return null;
   return (
     <Panel
+      icon={IconActivity}
       title="Recent activity"
       flush
       actions={

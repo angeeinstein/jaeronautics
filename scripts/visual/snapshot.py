@@ -531,7 +531,10 @@ def seed(app, app_module, subscriptions):
     # could not install it -- and a device waiting to be paired.
     from aeronautics_members.services import device_firmware, device_pairing, firmware_image
 
-    devices_service.seen(sales_point, board="jae-terminal-s3", types=["sales_point", "test"], now=now)
+    devices_service.seen(sales_point, board="jae-terminal-s3", types=["sales_point", "test"], outputs=2, now=now)
+    # The fridge's lock opens for five seconds after any sale; output 2 rings a bell for a beer.
+    devices_service.change(admin_user, sales_point, settings={"actions": {"on": True, "lines": [
+        {"item": None, "output": 1, "seconds": 5}, {"item": beer.id, "output": 2, "seconds": 0.5}]}})
     devices_service.seen(fridge, board="jae-terminal-s3", types=["sales_point", "test"],
                          hardware="98:A3:16:E5:06:3C", now=now)
     release = device_firmware.upload(admin_user, firmware_image.example("1.1.0"), file_name="jae-terminal.bin",
@@ -607,6 +610,8 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--logs", "user": "admin@example.org", "path": "/admin/logs"},
         {"name": "admin--settings", "user": "admin@example.org", "path": "/admin/settings"},
         {"name": "admin--settings-updates", "user": "admin@example.org", "path": "/admin/settings/updates"},
+        {"name": "admin--settings-updates-history", "user": "admin@example.org",
+         "path": "/admin/settings/updates#history"},
         {"name": "admin--teams", "user": "admin@example.org", "path": "/admin/teams"},
         {"name": "admin--team-detail", "user": "admin@example.org", "path": "/teams/rocket-team/manage/details"},
         {"name": "admin--team-fee", "user": "admin@example.org", "path": "/teams/rocket-team/manage/fee"},
@@ -632,6 +637,7 @@ def seed(app, app_module, subscriptions):
         {"name": "teams--money-treasurer", "user": "admin@example.org", "path": "/teams/rocket-team/money"},
         {"name": "admin--money", "user": "admin@example.org", "path": "/admin/money"},
         {"name": "admin--money-team", "user": "admin@example.org", "path": "/admin/money/rocket-team"},
+        {"name": "admin--money-team-history", "user": "admin@example.org", "path": "/admin/money/rocket-team#history"},
         {"name": "admin--dashboard-treasurer", "user": "treasurer@example.org", "path": "/admin"},
         {"name": "admin--credit", "user": "admin@example.org", "path": "/admin/credit"},
         {"name": "admin--credit-holder", "user": "treasurer@example.org", "path": f"/admin/credit/{active.user.id}"},
@@ -639,6 +645,9 @@ def seed(app, app_module, subscriptions):
         {"name": "teams--sales", "user": "active@example.org", "path": "/teams/rocket-team/manage/sales"},
         {"name": "teams--sales-points", "user": "active@example.org",
          "path": "/teams/rocket-team/manage/sales#sales-points"},
+        # What a sale switches: behind the reader's Actions button.
+        {"name": "teams--sales-actions", "user": "active@example.org",
+         "path": "/teams/rocket-team/manage/sales#sales-points", "open": "button:has-text('Actions')"},
         {"name": "admin--sales", "user": "admin@example.org", "path": "/admin/sales"},
         {"name": "public--contact", "path": "/contact"},
         {"name": "public--contact-signed-in", "user": "active@example.org", "path": "/contact"},
@@ -656,6 +665,8 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--settings-devices", "user": "admin@example.org", "path": "/admin/settings/devices"},
         {"name": "admin--settings-device", "user": "admin@example.org",
          "path": f"/admin/settings/devices/{fridge.id}"},
+        {"name": "admin--settings-device-activity", "user": "admin@example.org",
+         "path": f"/admin/settings/devices/{fridge.id}#activity"},
         {"name": "admin--settings-sales-point", "user": "admin@example.org",
          "path": f"/admin/settings/devices/{sales_point.id}"},
         {"name": "admin--settings-device-pair", "user": "admin@example.org",

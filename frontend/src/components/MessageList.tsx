@@ -58,6 +58,7 @@ function MessageCard({
   ].filter(Boolean);
   return (
     <Panel
+      icon={IconMail}
       title={message.subject}
       actions={message.done_at ? <Pill tone="neutral">Done</Pill> : <Pill tone="pending">Open</Pill>}
     >

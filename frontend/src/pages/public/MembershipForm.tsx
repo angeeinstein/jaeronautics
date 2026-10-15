@@ -36,7 +36,7 @@ import {
   VisuallyHidden,
 } from '@mantine/core';
 import { useReducedMotion } from '@mantine/hooks';
-import { IconArrowRight, IconCheck, IconMessages } from '@tabler/icons-react';
+import { IconArrowRight, IconCheck, IconListCheck, IconMessages } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Fragment, useEffect, useRef, useState } from 'react';
 
@@ -1010,7 +1010,7 @@ function Form({ door, options }: { door: Door; options: FormOptions }) {
         </form>
       </div>
       <aside className={classes.aside} aria-label="After joining">
-        <Panel title="After joining">
+        <Panel icon={IconListCheck} title="After joining">
           <AfterJoining price={price.data?.price ?? null} twoAddresses={twoAddresses} />
         </Panel>
       </aside>

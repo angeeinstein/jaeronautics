@@ -8,6 +8,7 @@
  */
 import { Button, Collapse, Stack, Table, Text } from '@mantine/core';
 import { useState } from 'react';
+import { IconCalculator } from '@tabler/icons-react';
 
 import type { Schemas } from '../api/client';
 import { formatDate, formatEuros } from '../lib/format';
@@ -108,7 +109,7 @@ function Lines({ lines }: { lines: Line[] }) {
 export function MoneyStatement({ statement }: { statement: Statement }) {
   const [open, setOpen] = useState(false);
   return (
-    <Panel title="How it adds up">
+    <Panel icon={IconCalculator} title="How it adds up">
       <Stack gap="sm">
         <Sums statement={statement} />
         <Text size="sm" c="dimmed">

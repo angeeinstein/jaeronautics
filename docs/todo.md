@@ -15,79 +15,13 @@ The legal drafts below wait for the board. Cards and sales points
 card with a reader's QR code, device pairing and firmware updates on
 `claude/device-pairing`, with the batch of 2026-10-15 (price lists with their
 figures and delete, a device's page slimmer, card or SEPA asked before
-Stripe's page). Attendance with the
+Stripe's page), and the batch after it (a sale switching a reader's
+outputs, tabs on long pages and an icon in every panel, the firmware file
+checked by its chip). Attendance with the
 same cards comes next, needed around January (not to be started before the
 maintainer says so).
 
 ## Open
-
-### Sales points: switch outputs after a sale (a fridge's lock, a coffee machine)
-
-- **Added:** 2026-10-15
-- **What:** a reader switches one of its outputs for some seconds after a
-  sale -- a magnetic lock on the fridge (planned: the reader beside the
-  fridge, an honesty system, the door opening only after paying), a coffee
-  machine's relay. The firmware drives the outputs (a relay board on I2C,
-  "because of the available pins and that I may want to switch ... multiple
-  things"); the portal says which and how long.
-- **Agreed (2026-10-15):**
-  - Set in the portal, not built into the firmware: "it makes it easier to
-    configure. You can do this in the field with no need to build a new
-    firmware."
-  - **Not cluttering the pages:** behind an *Actions* button beside the other
-    buttons, opening a small dialog, with a switch to turn the whole action
-    off.
-  - It differs by reader and by item: "one coffee machine does not have an
-    action, and the other coffee machine will switch on a relay for some
-    time, and the third ... depending on which type of coffee was
-    purchased."
-  - **The portal being unreachable** needs nothing for now: "this magnetic
-    lock won't be some super secure thing anyways", and it can be unplugged.
-  - **Opening the door without buying** (restocking): in the device's own
-    settings menu, opened with an admin's card -- firmware only, nothing in
-    the portal.
-- **Proposed (not yet confirmed):**
-  - Price lists are per owner (the association's, each team's), and a reader
-    sells from its owner's list -- but actions differ per reader. So the
-    actions belong to **the reader's menu**, not to the price list: on the
-    owner's Sales page, *Sales points* tab, each reader's panel. There an
-    *Actions* button for the reader as a whole ("on any sale": the fridge
-    lock) and one beside each item of its menu (a coffee type); both run
-    when both are set.
-    An item's actions are for **that item on that reader** (the maintainer
-    asked, 2026-10-15): the price-list item itself carries none, and the
-    same item on another reader has its own, or none.
-  - An action: output 1-N, for so many seconds; more than one per sale
-    allowed. The device reports how many outputs it has with its sign of
-    life; a reader with none shows no *Actions* button.
-  - The successful sale's answer (`buy`) carries them:
-    `actions: [{"output": 1, "seconds": 5}]`; `docs/device-protocol.md`
-    gets the field and the sign of life's output count.
-- **Open questions:** the proposal above.
-
-### Long pages: tabs, and an icon in every panel's header
-
-- **Added:** 2026-10-15
-- **What:** what the Sales pages got in the 2026-10-15 batch, elsewhere:
-  1. **Tabs** on pages with much on them. After testing the Sales pages: "I
-     like the tabs on those pages where there is much content. We could do
-     this for more pages." Built as there (`frontend/src/components/SalesTabs.tsx`:
-     Mantine tabs, the tab in the address's `#…` so a link and the back
-     button keep it).
-  2. **An icon in every panel's header** (`Panel`'s `icon`, as in the
-     sidebar), agreed 2026-10-14 for "a later batch of its own": "with our
-     current UI design, everything looks rather similar ... it's sometimes a
-     bit hard to see at a glance where something is".
-- **Where (pages with the most panels, as candidates):** a device's page
-  (`pages/admin/settings/Device.tsx`, 9 panels: e.g. *Device* -- state,
-  settings, firmware, backup code, key -- and *Activity* -- requests, events,
-  what it can send); a team's money on Admin › Money
-  (`pages/admin/money/TeamMoney.tsx`, 7); Settings › Updates and Backup (5
-  each); Admin › Legal texts (5); a team's Money and Admin pages (4 each).
-  Already tabbed: an account on Admin › Accounts, the Sales pages, a team's
-  settings.
-- **Open question:** which pages get tabs, and which tabs -- to be shown to
-  the maintainer at the start of the batch.
 
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
@@ -136,22 +70,6 @@ maintainer says so).
 - **Open questions:** what counts (tapping in and out, a forgotten tap-out,
   a least time), who may see it (team leads, whoever handles ECTS), and the
   privacy policy for it.
-
-### Devices: a firmware file checked by what it already carries
-
-- **Added:** 2026-10-14; **decided 2026-10-15**.
-- **What:** no marks of our own in the firmware. "This was exactly what I
-  meant ... that the firmware should be checked for this metadata that is
-  currently inside already." A real file (`jae_terminal-0.4.0.bin`) carries
-  ESP-IDF's app description -- project, version, build time, IDF version,
-  chip -- and ESP-IDF's appended SHA-256. The portal already reads it all,
-  checks the checksum and the hash, and refuses another project than the
-  newest firmware's. Left to do: **also refuse a file for another chip** than
-  the newest firmware's (ESP32-S3 now).
-- **Where:** `services/device_firmware.py`, `_marks` (rename it to what it
-  is: the check against the newest firmware); its comment about "marks the
-  firmware adds of its own" goes; `docs/devices-plan.md`, "Open", says it is
-  settled. Signing the firmware: not planned.
 
 ## Ideas for later (not scheduled)
 
