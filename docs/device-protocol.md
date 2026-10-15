@@ -167,7 +167,7 @@ always with `If-None-Match` set to the `ETag` of the last `200`.
   "type": "sales_point",
   "owner": "Rocket Team",
   "place": "Workshop, beside the fridge",
-  "settings": {"items": [4, 7, 9, 12]},
+  "settings": {"items": [4, 7, 9, 12], "actions": {"on": true, "lines": [{"item": null, "output": 1, "seconds": 5}]}},
   "resources": ["menu"],
   "reports": ["card", "buy"],
   "backup_code_hash": "9f86d081884c7d65…",
@@ -181,7 +181,7 @@ always with `If-None-Match` set to the `ETag` of the last `200`.
 |---|---|
 | `name` | Its name, else its code: show it where the device names itself. |
 | `type` | What it is used as now. **It can change**: then switch to that use's screens. |
-| `settings` | The settings of its use (section 8). Read them from here; never keep your own copy as the truth. |
+| `settings` | The settings of its use (section 8). Read them from here; never keep your own copy as the truth. A sales point's `actions` are the portal's: what to switch comes with each sale (section 8.1). |
 | `resources`, `reports` | What this use may fetch and report. |
 | `backup_code_hash` | Section 5. |
 | `firmware` | `null`, or the firmware to install (section 6). |
