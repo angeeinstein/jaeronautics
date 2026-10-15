@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { api, call, type Schemas } from '../../api/client';
 import { Details } from '../../components/Details';
 import { Panel } from '../../components/Panel';
+import { PayButton, useAsksHowToPay } from '../../components/payment/PayMethod';
 import { Pill } from '../../components/Pill';
 import { formatDate } from '../../lib/format';
 import { notifyFailed, notifyNote } from '../../lib/notify';
@@ -28,7 +29,7 @@ export function useBilling() {
   });
 }
 
-function Rejoin({ invoicePayments }: { invoicePayments: boolean }) {
+function Rejoin({ invoicePayments, asks }: { invoicePayments: boolean; asks: boolean }) {
   const [method, setMethod] = useState<'checkout' | 'invoice'>('checkout');
   const rejoin = useMutation({
     mutationFn: () => call(api.POST('/api/v1/account/rejoin', { body: { payment_method: method } })),
@@ -55,14 +56,16 @@ function Rejoin({ invoicePayments }: { invoicePayments: boolean }) {
         </Radio.Group>
       ) : null}
       <Group>
-        <Button
-          loading={rejoin.isPending}
-          onClick={() => {
+        <PayButton
+          payFor="membership"
+          ask={asks && method === 'checkout'}
+          loading={rejoin.isPending || rejoin.isSuccess}
+          onPay={() => {
             rejoin.mutate();
           }}
         >
           Rejoin
-        </Button>
+        </PayButton>
       </Group>
     </Stack>
   );
@@ -70,6 +73,7 @@ function Rejoin({ invoicePayments }: { invoicePayments: boolean }) {
 
 export function MembershipCard({ membership }: { membership: Membership }) {
   const billing = useBilling();
+  const asks = useAsksHowToPay();
   const resume = useMutation({
     mutationFn: () => call(api.POST('/api/v1/account/payment')),
     onSuccess: ({ url }) => {
@@ -93,18 +97,20 @@ export function MembershipCard({ membership }: { membership: Membership }) {
           ]}
         />
         {membership.note ? <Note note={membership.note} /> : null}
-        {membership.may_rejoin ? <Rejoin invoicePayments={membership.invoice_payments} /> : null}
+        {membership.may_rejoin ? <Rejoin invoicePayments={membership.invoice_payments} asks={asks} /> : null}
         {membership.may_resume_payment || membership.may_manage_billing ? (
           <Group>
             {membership.may_resume_payment ? (
-              <Button
-                loading={resume.isPending}
-                onClick={() => {
+              <PayButton
+                payFor="membership"
+                ask={asks}
+                loading={resume.isPending || resume.isSuccess}
+                onPay={() => {
                   resume.mutate();
                 }}
               >
                 Resume payment
-              </Button>
+              </PayButton>
             ) : null}
             {membership.may_manage_billing ? (
               <Button

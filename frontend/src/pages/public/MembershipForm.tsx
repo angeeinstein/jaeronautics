@@ -7,8 +7,9 @@
  * somebody is, which decides what the next steps ask and how they say it;
  * then the name and what that kind is asked (the year group, the university
  * address, the company) with the forum name it makes; then how to reach them;
- * the password (signup only); and last everything once more, what it costs and
- * the texts to accept. Each step is checked before the next; the server checks
+ * the password (signup only); and last everything once more, what it costs,
+ * how they want to pay (components/payment/PayMethod.tsx: card or SEPA, both
+ * on the same Stripe page) and the texts to accept. Each step is checked before the next; the server checks
  * all of it again and a field it refuses takes the form back to its step.
  *
  * The rules are the server's (forms.py, through aeronautics_members/api/signup.py):
@@ -43,6 +44,12 @@ import { api, ApiError, call, type Schemas } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
 import { LegalTextBody } from '../../components/legal/LegalText';
 import { Panel } from '../../components/Panel';
+import {
+  type PayMethod,
+  PayMethodChoice,
+  QUESTION,
+  signupPriceQuery,
+} from '../../components/payment/PayMethod';
 import { isYearGroup, YearGroupPicker } from '../../components/YearGroupPicker';
 import { ErrorState, LoadingState } from '../../components/States';
 import { formatDate } from '../../lib/format';
@@ -92,6 +99,7 @@ const FIELD_STEP: Record<string, StepId> = {
   city: 'contact',
   country: 'contact',
   password: 'password',
+  pay_with: 'check',
   terms_accepted: 'check',
 };
 
@@ -345,13 +353,12 @@ function Form({ door, options }: { door: Door; options: FormOptions }) {
   const moved = useRef(false);
   const advance = useRef<number | undefined>(undefined);
   const reduceMotion = useReducedMotion();
-  const price = useQuery({
-    queryKey: ['signup', 'price'] as const,
-    queryFn: () => call(api.GET('/api/v1/signup/price')),
-    staleTime: 5 * 60_000,
-  });
+  const price = useQuery(signupPriceQuery);
+  const [payWith, setPayWith] = useState<PayMethod | null>(null);
 
   const step = steps[at] ?? 'kind';
+  // Nothing charged today (the year's free months): how they pay changes nothing yet.
+  const asksHowToPay = !price.data?.price || !!price.data.price.due_today;
   const kind: Kind | undefined = kinds.find((category) => category.value === value.member_category);
   const wording = wordingFor(value.member_category);
   const asksYear = kind !== undefined && kind.year_group !== 'hidden';
@@ -470,6 +477,7 @@ function Form({ door, options }: { door: Door; options: FormOptions }) {
       if (!value.country) found.country = 'Please choose your country.';
     }
     if (which === 'password' && password.length < 8) found.password = 'At least 8 characters.';
+    if (which === 'check' && asksHowToPay && !payWith) found.pay_with = 'Please choose one.';
     if (which === 'check' && !accepted) found.terms_accepted = 'Please accept the texts to join.';
     return found;
   };
@@ -945,6 +953,18 @@ function Form({ door, options }: { door: Door; options: FormOptions }) {
                   ))}
                 </dl>
                 <PriceBox price={price.isError ? null : price.data?.price} />
+                {asksHowToPay ? (
+                  <PayMethodChoice
+                    payFor="membership"
+                    label={QUESTION}
+                    value={payWith}
+                    error={errors.pay_with ?? null}
+                    onChange={(chosen) => {
+                      setPayWith(chosen);
+                      clear('pay_with');
+                    }}
+                  />
+                ) : null}
                 <Stack gap="sm" className={classes.inlineAfter}>
                   <Title order={3} size="h5">
                     After joining

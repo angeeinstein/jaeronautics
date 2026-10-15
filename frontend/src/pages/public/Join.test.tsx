@@ -200,7 +200,15 @@ describe('joining, step by step', () => {
     expect(cost).toHaveTextContent('€20.05');
     expect(cost).toHaveTextContent('€40.00');
     expect(cost).toHaveTextContent('31.12.2026');
+    // How they pay is a choice to make: card or SEPA, each saying when the membership starts.
     await userEvent.click(screen.getByRole('checkbox'));
+    await userEvent.click(screen.getByRole('button', { name: 'Join and continue to payment' }));
+    expect(await screen.findByText('Please choose one.')).toBeInTheDocument();
+    expect(calls.some((call) => call.method === 'POST')).toBe(false);
+    expect(screen.getByRole('radio', { name: /^SEPA Direct Debit/ })).toHaveAccessibleName(
+      /starts once the debit clears, in a few days/,
+    );
+    await userEvent.click(screen.getByRole('radio', { name: /^Card/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Join and continue to payment' }));
 
     await vi.waitFor(() => {
@@ -298,6 +306,7 @@ describe('joining, step by step', () => {
     await next('Your password');
     fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'a-good-password' } });
     await next('Check and join');
+    await userEvent.click(screen.getByRole('radio', { name: /^Card/ }));
     await userEvent.click(screen.getByRole('checkbox'));
     await userEvent.click(screen.getByRole('button', { name: 'Join and continue to payment' }));
 
@@ -352,6 +361,7 @@ describe('joining, step by step', () => {
     expect(screen.getByText('Sign-in email').closest('div')).toHaveTextContent(
       'lena.lecturer@fh-joanneum.at',
     );
+    await userEvent.click(screen.getByRole('radio', { name: /^Card/ }));
     await userEvent.click(screen.getByRole('checkbox'));
     await userEvent.click(screen.getByRole('button', { name: 'Join and continue to payment' }));
 
@@ -407,6 +417,7 @@ describe('joining, step by step', () => {
     renderPage(<Join />);
 
     await toTheLastStep();
+    await userEvent.click(screen.getByRole('radio', { name: /^Card/ }));
     await userEvent.click(screen.getByRole('checkbox'));
     await userEvent.click(screen.getByRole('button', { name: 'Join and continue to payment' }));
 
@@ -428,6 +439,7 @@ describe('joining, step by step', () => {
     renderPage(<Join />);
 
     await toTheLastStep();
+    await userEvent.click(screen.getByRole('radio', { name: /^Card/ }));
     await userEvent.click(screen.getByRole('checkbox'));
     await userEvent.click(screen.getByRole('button', { name: 'Join and continue to payment' }));
 
@@ -464,6 +476,8 @@ describe('joining, step by step', () => {
     expect(screen.getByRole('region', { name: 'What it costs' })).toHaveTextContent(
       /NothingFree until 31\.12\.2026/,
     );
+    // Nothing is charged today: how they pay changes nothing yet, so it is not asked.
+    expect(screen.queryByRole('radio', { name: /^Card/ })).not.toBeInTheDocument();
     unmount();
 
     mockFetch({ ...base, '/api/v1/signup/price': { body: { price: null } } });
@@ -498,6 +512,7 @@ describe('a membership for a login without one', () => {
     expect(address).toHaveValue('staff@example.org');
     expect(address).toHaveAttribute('readonly');
     await next('Check and join');
+    await userEvent.click(screen.getByRole('radio', { name: /^Card/ }));
     await userEvent.click(screen.getByRole('checkbox'));
     await userEvent.click(screen.getByRole('button', { name: 'Start membership and continue to payment' }));
 

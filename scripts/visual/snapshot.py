@@ -592,7 +592,10 @@ def seed(app, app_module, subscriptions):
                        "submit": "section[aria-label='Contact details'] button[type=submit]"},
                       {"name": "account--delete-confirm", "path": f"/account/delete/{delete_token}"}),
         *member_pages("sepa", {"name": "account--membership-sepa", "path": "/account/membership"}),
-        *member_pages("ended", {"name": "account--membership-ended", "path": "/account/membership"}),
+        *member_pages("ended", {"name": "account--membership-ended", "path": "/account/membership"},
+                      # Rejoining asks card or SEPA before Stripe's page.
+                      {"name": "account--rejoin-pay-method", "path": "/account/membership",
+                       "open": "button:has-text('Rejoin')"}),
         *member_pages("failed"),
         *member_pages("cancelling"),
         *member_pages("returning"),

@@ -161,11 +161,21 @@ logs, and where do they belong". Now:
 
 - **Admin › Credit:** members' money only -- the totals, *Balances*, *Latest*.
 - **Admin › Sales:** what was sold, by seller (the association and each
-  team) and by item -- how many and what each made, the last 30 days and
-  ever, "to see what beverages ... are liked by the members and how much
-  money they made with each item" -- the association's price list, and its
-  sales points' menus.
-- **A team's Sales page** (was *Prices*): the same for the team.
+  team); then, as tabs, the association's **price list** and its **sales
+  points**' menus.
+- **A team's Sales page** (was *Prices*): the same tabs for the team.
+- **The price list holds its figures** (2026-10-15, replacing a separate
+  *Sold by item* table): Item, Price, Sold, Made, On sale -- how many of each
+  and what it made, "to see what beverages ... are liked by the members and
+  how much money they made with each item", with a *30 days / Ever* switch in
+  the panel's header and a *Together* row. An item can be **deleted** (asked
+  once more): past sales keep its name, and sales points' menus lose it at
+  once; one sold before is shown below, greyed, "No longer on the list".
+  Item names are at most **20** characters (four fit on a small screen),
+  with a counter; a longer one saved before stays until edited.
+- Each panel on the Sales pages has an icon in its header, so the pages are
+  easier to find one's way in ("everything looks rather similar"). Icons on
+  every panel elsewhere: a later batch of its own.
 - **Device pages** (Settings › Devices, a team's *Devices*): technical only.
   What a sales point sells is a setting marked `with_prices`
   (`services/device_types.py`), shown and saved only on the Sales pages --

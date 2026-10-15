@@ -701,7 +701,8 @@ Devices (admins: `devices.manage`). The plan, and what is decided:
   an ESP32 (Arduino) with the key in place. Only a SHA-256 hash of the key is kept, and its last
   four characters to tell keys apart. On the device's page: *Rotate* (a new
   key; the old one stops at once) and *Revoke* (no key works until a new one
-  is made).
+  is made) -- only for a device added by hand: a paired one is paired again
+  for a new key.
 - **Switching one off** refuses it whatever key it has. *Remove* deletes it,
   its key and its events.
 - **Its page** shows when it last spoke (written at most every 30 seconds),
@@ -709,7 +710,8 @@ Devices (admins: `devices.manage`). The plan, and what is decided:
   (`X-Device-Hardware`; another board with the same key is noted as an event), its last 100 requests with
   their answers, its recent events (kept 90 days, by the nightly
   `cleanup-logs`) -- both refreshed every 5 seconds while open -- and *What
-  the device can send*: each request of its type, described, as a `curl`
+  the device can send* (folded away at the bottom, opened with *Show*): each
+  request of its type, described, as a `curl`
   command, and with *Send* to send it from the page and see the device's
   answer (not counted as seen; never for a report that would really change
   something). A run of requests held back by the rate limit (429

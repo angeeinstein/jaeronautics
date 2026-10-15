@@ -63,8 +63,8 @@ association the admins or leaders can use their device however they like."
   team's side menu shows *Devices* once the team owns one.
 - **Each device has a code,** random and made when it is added (`K7MQ-2X9A`,
   no 0/O/1/I/L): "a unique ID of just random characters, so that this does
-  not seem like a name given by a person". A name is optional; the code
-  stands in for it. The maintainer suggested the ESP32's MAC address as the
+  not seem like a name given by a person". A name is optional (at most 30
+  characters, since 2026-10-15); the code stands in for it. The maintainer suggested the ESP32's MAC address as the
   ID; it was kept beside it instead, because the device is added in the
   portal before it has ever spoken, and a replaced board would otherwise be
   another device. The board sends its MAC address with every request
@@ -298,11 +298,17 @@ version (and the one it should install) and its address.
     *Rotate* (a new key works at once, the old one stops; the new one is
     shown in the same card) and *Revoke* (no key works until a new one is
     made; the device stays) -- asked for after testing, 2026-10-12;
+    not shown for a **paired** device (since 2026-10-15): its key is given
+    at pairing and never shown, *Revoke* does what switching it off does, and
+    one needing a new key is paired again. A device added by hand (*Add a
+    device*, for development) keeps it;
   - its last 100 requests, each with its answer (`200`, `403 device_off`,
     ...), and its recent events: refused sign-ins, errors, what it reported.
     Both refresh every 5 seconds while the page is open, for watching a
     device while its firmware is written;
-  - *What the device can send*: every request a device of its type can
+  - *What the device can send* (folded closed at the bottom of the page,
+    opened with *Show*, since 2026-10-15: rarely needed once the firmware is
+    done): every request a device of its type can
     send -- the sign of life, each resource, each report -- one per row, with
     what it is for (the type describes its resources and reports), its
     `curl` command, and *Send*: sent from the page as the device, the answer

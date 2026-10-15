@@ -275,14 +275,45 @@ steps on top with a line that fills, each done one a way back to it:
 4. **Password** -- signup only, with how strong it is.
 5. **Check and join** -- everything once more, each line back to its step;
    what it costs today and every year, read from Stripe's price (or nothing
-   today in the free months); the texts to accept, each opening over the form.
-   How to pay is chosen on Stripe's page.
+   today in the free months); **how they want to pay** (below); the texts to
+   accept, each opening over the form.
 
 *After joining* (pay, confirm the address or both, add a picture for the
 forum) stands beside the steps on a wide screen and in the last step on a
 narrow one. Each step is checked before the next; a field the server refuses
 takes the form back to its step. Steps slide in, fields that become relevant
 fade in -- all of it still for whoever asks their device for less motion.
+
+### How somebody pays
+
+Agreed and built 2026-10-15. Before Stripe's payment page opens, a choice to
+click (`frontend/src/components/payment/PayMethod.tsx`, the same wording
+everywhere):
+
+- **Card, Apple Pay or Google Pay** -- "Your membership starts right away."
+- **SEPA Direct Debit** -- "Your membership starts once the debit clears, in
+  a few days."
+
+For a team's fee: "Your team membership starts ..." (to join), "... carries
+on ..." (to stay). Joining asks on its last step; rejoining, *Resume payment*
+and a team's *Pay and join* and *Pay to stay* ask in a small dialog when the
+button is pressed, and choosing goes on at once. Not asked where it changes
+nothing: a membership in the year's free months (nothing is charged today),
+a team's *Pay for next period* (paid ahead), an invoice.
+
+Why: SEPA takes days, which is "most of all annoying for them, because they
+have to wait some time before they can use their account, or before they can
+become a team member". Card for whoever does not mind; SEPA kept for those
+with no card or who prefer it. A line near the button is not read ("nobody
+reads such fine prints"); a choice is.
+
+Both answers open **the same** Stripe page, with card and SEPA as before:
+whoever changes their mind there has read what it means, and is better off
+paying by SEPA than leaving to "complete it later". The choice is not sent to
+the server. Ruled out: switching SEPA off in Stripe (it would break the
+portal's checkouts and members' SEPA renewals, as the portal names the
+methods itself); a line of text alone; SEPA only on the cancel page; Stripe's
+page with only the chosen method.
 
 ## 7. Page patterns
 

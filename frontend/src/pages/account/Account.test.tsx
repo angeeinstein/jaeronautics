@@ -325,6 +325,40 @@ describe('my account: membership and billing', () => {
     });
     expect(await sentBody(calls, 'POST', '/api/v1/account/rejoin')).toEqual({ payment_method: 'invoice' });
   });
+
+  it('rejoining through Stripe asks card or SEPA first, and goes on at the choice', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('location', { origin: window.location.origin, href: window.location.href, assign });
+    const { calls } = show(
+      {
+        '/api/v1/signup/price': {
+          body: {
+            price: {
+              annual_fee: '€40.00',
+              due_today: '€20.05',
+              paid_until: '2026-12-31',
+              renews_on: '2027-01-01',
+            },
+          },
+        },
+        'POST /api/v1/account/rejoin': { body: { url: 'https://checkout.stripe.test/r', message: null } },
+      },
+      '/account/membership',
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Rejoin' }));
+    const dialog = await screen.findByRole('dialog', { name: 'How do you want to pay?' });
+    expect(
+      within(dialog).getByRole('radio', { name: /^Card, Apple Pay or Google Pay/ }),
+    ).toHaveAccessibleName(/Your membership starts right away/);
+    expect(calls.some((call) => call.method === 'POST')).toBe(false);
+    await userEvent.click(within(dialog).getByRole('radio', { name: /^SEPA Direct Debit/ }));
+
+    await waitFor(() => {
+      expect(assign).toHaveBeenCalledWith('https://checkout.stripe.test/r');
+    });
+    expect(await sentBody(calls, 'POST', '/api/v1/account/rejoin')).toEqual({ payment_method: 'checkout' });
+  });
 });
 
 describe('my account: profile', () => {
