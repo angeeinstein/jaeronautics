@@ -252,3 +252,4 @@ greeting on the device's page in the portal and watch it arrive.""",
 
 # The types of the uses built so far, each in its own module.
 from . import sales_points  # noqa: E402,F401 -- registers "Sales point"
+from . import attendance  # noqa: E402,F401 -- registers "Attendance"

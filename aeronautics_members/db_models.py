@@ -857,6 +857,9 @@ class Team(db.Model):
     # Every team has an access list (migration e5b8d3f1a2c4); nothing is sent
     # until somebody sends it or sets the automatic sending up.
     access_list_enabled = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    #: Its readers record who is there (services/attendance.py): switched on by
+    #: its leads or an admin; off, its readers refuse check-ins.
+    attendance_enabled = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     access_list_recipients = db.Column(db.Text, nullable=True)
     access_list_dates = db.Column(db.String(255), nullable=True)
     access_list_auto_send = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
@@ -1204,6 +1207,42 @@ class SaleTicket(db.Model):
     entry_id = db.Column(db.Integer, db.ForeignKey("credit_entries.id", ondelete="SET NULL"), nullable=True)
 
     card = db.relationship("Card")
+
+
+class AttendanceStay(db.Model):
+    """Somebody there, from checking in to checking out (services/attendance.py,
+    docs/attendance-plan.md). It belongs to the reader's owner -- a team, or
+    the association (``team_id`` none) -- not to the reader: checked in at
+    one of its readers and out at another is one stay. The exact times are
+    kept; they count in full minutes.
+
+    Open while ``ended_at`` and ``closed_at`` are both empty. A stay left open
+    overnight is closed at 03:15 as *not checked out* (``closed_at``) and
+    counts nothing until somebody of the team sets when it ended.
+    """
+
+    __tablename__ = "attendance_stays"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id", ondelete="CASCADE"), nullable=True, index=True)
+    started_at = db.Column(db.DateTime, nullable=False)
+    ended_at = db.Column(db.DateTime, nullable=True)
+    #: Closed by the nightly step, not checked out: counts nothing until corrected.
+    closed_at = db.Column(db.DateTime, nullable=True)
+    #: Where it was tapped; none when it was entered by hand (or the reader is gone).
+    in_device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)
+    out_device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)
+    #: Who last corrected it -- or entered it by hand -- and when.
+    corrected_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    corrected_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    user = db.relationship("User", foreign_keys=[user_id])
+    team = db.relationship("Team")
+    in_device = db.relationship("Device", foreign_keys=[in_device_id])
+    out_device = db.relationship("Device", foreign_keys=[out_device_id])
+    corrected_by = db.relationship("User", foreign_keys=[corrected_by_user_id])
 
 
 class ContactMessage(db.Model):

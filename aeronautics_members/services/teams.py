@@ -93,11 +93,15 @@ class TeamPermission:
     #: The team's own devices (a reader at its fridge): their names, places,
     #: what they do within their type, on or off (docs/devices-plan.md).
     DEVICES = "team.devices"
+    #: Who checked in and out at its readers, how many hours, corrections, the
+    #: switch (docs/attendance-plan.md).
+    ATTENDANCE = "team.attendance"
 
     ALL = frozenset({
         VIEW_MEMBERS, REVIEW_APPLICATIONS, REMOVE_MEMBERS,
         WRITE_NOTES, EXPORT, EDIT_SETTINGS, SEND_ACCESS_LIST,
         VIEW_MONEY, EDIT_BANK_DETAILS, APPOINT_TREASURER, APPOINT_LEADS, EDIT_PRICES, MESSAGES, DEVICES,
+        ATTENDANCE,
     })
     #: The team's money, the account it is paid to, its prices and the readers
     #: that sell them -- nothing about people.

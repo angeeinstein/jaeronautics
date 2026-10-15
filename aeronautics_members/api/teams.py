@@ -71,6 +71,7 @@ TeamPermissionName = Literal[
     "team.view_members", "team.review_applications", "team.remove_members", "team.write_notes", "team.export",
     "team.edit_settings", "team.send_access_list", "team.view_money", "team.edit_bank_details",
     "team.appoint_treasurer", "team.appoint_leads", "team.edit_prices", "team.messages", "team.devices",
+    "team.attendance",
 ]
 
 #: Applications still to be decided or completed: applied, invited, or approved and paying.

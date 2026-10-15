@@ -67,6 +67,8 @@ class ManageOut(Model):
     applications: int
     has_lead_in_force: bool
     access_list_enabled: bool
+    #: Its readers record attendance: its Attendance page.
+    attendance_enabled: bool = False
 
 
 def _frame_team(slug):
@@ -97,6 +99,7 @@ def team_manage(slug):
         if teams_service.can_in_team(current_user, team, P.VIEW_MEMBERS) else 0,
         has_lead_in_force=teams_service.has_lead_in_force(team),
         access_list_enabled=bool(team.access_list_enabled),
+        attendance_enabled=bool(team.attendance_enabled),
     )
 
 
