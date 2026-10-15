@@ -85,6 +85,29 @@ checked by its chip), attendance with the same cards
   Not the test email in Settings. The domains come from
   `GET /api/v1/forms/options`, which the joining form already loads.
 
+### Admin › Attendance always in the admin menu, its switch there only
+
+- **Added:** 2026-10-16
+- **What:** the admin side menu's *Attendance* (People group) shown always to
+  whoever runs the teams (`teams.manage`), not only while the association's
+  attendance is on or stays are kept. The switch lives on that page only (it
+  already shows at the top while off, at the bottom while on); the
+  *Attendance* panel in Settings › General goes.
+- **Where:** `api/session.py` (`_attendance_admin`: `teams.manage` alone),
+  `frontend/src/frame/adminNavigation.ts`,
+  `frontend/src/pages/admin/settings/General.tsx` (drop `AttendanceSwitch`;
+  remove it from `components/attendance/AttendanceBoard.tsx` if unused),
+  `docs/attendance-plan.md` ("As built", Admin › Attendance),
+  `docs/frontend-structure.md` (the admin sidebar).
+- **Why:** "it would be more consistent if we have this sidebar menu for
+  attendance always shown, and the switch to turn on and off attendance is
+  in this sidebar [page], because this would then match how the teams see
+  this." A team's *Attendance* is always in its menu for those who run it
+  (under People while on, under Settings while off), with the switch on the
+  page.
+- **Decided:** as above; the off page shows only the switch (and the hours
+  while stays are kept), as the team's does.
+
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
 - **Added:** 2026-10-08
