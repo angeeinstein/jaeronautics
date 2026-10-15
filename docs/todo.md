@@ -23,6 +23,24 @@ maintainer says so).
 
 ## Open
 
+### Price lists: deleted items folded into one row
+
+- **Added:** 2026-10-15
+- **What:** an item deleted after it was sold now stays in its price list for
+  good, greyed, "No longer on the list" -- in *30 days* too, with 0. "Over
+  the time, there are multiple or dozens of products that are deleted, but
+  are still shown in the list here. This would be annoying." Instead, **one
+  row**, folded: "▸ 3 no longer on the list · 9 sold · €18.40"; a click
+  unfolds the items, greyed as now. In *30 days* it counts only those sold in
+  the last 30 days, and is not there when there are none.
+- **Where:** `frontend/src/components/PriceList.tsx` (`GoneRow`, the `gone`
+  list), on Admin › Sales and a team's Sales page.
+- **Why folded, not hidden:** *Together* still adds up -- what they made does
+  not vanish from the totals -- and the detail stays one click away. A
+  deleted item never sold stays out of the list, as now.
+- **Open question:** the proposal above, offered 2026-10-15 (the maintainer
+  named hiding, removing, a collapsed section or another list as options).
+
 ### Contact form: a hint when a university address looks mistyped
 
 - **Added:** 2026-10-15
