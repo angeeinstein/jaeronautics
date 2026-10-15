@@ -23,6 +23,34 @@ maintainer says so).
 
 ## Open
 
+### Contact form: a hint when a university address looks mistyped
+
+- **Added:** 2026-10-15
+- **What:** on the contact form, when the address typed looks like a
+  university or institute address but does not match one exactly, a small
+  hint under the field that it may be wrong -- best with the likely right
+  one: "Did you mean anna.muster@edu.fh-joanneum.at?". A hint only: the
+  message can still be sent as typed.
+- **Where:** `frontend/src/pages/public/Contact.tsx`, the *Email* field
+  (visitors not signed in; a signed-in person's address is their account's).
+  The domains to compare with are the portal's own, not written into the
+  code: Admin › Settings › General, *University email domains*
+  (`services/institutional_email.py`, `get_student_domains` /
+  `get_staff_domains`; the front end has them from `GET /api/v1/forms/options`,
+  `student_domains`, `staff_domains`).
+- **Why:** "A common mistake that people make is that the email address is
+  edu.fh-joanneum.at but people sometimes switch the point that's meant to
+  separate the subdomain with the hyphen between fh and the joanneum" --
+  `edu-fh.joanneum.at`, `edu.fh.joanneum.at` and the like, and the answer
+  then never arrives.
+- **Decided:** a hint, not a refusal. Suggestion for the check: the domain
+  typed, with its dots and hyphens removed, equals one of the portal's
+  domains with theirs removed, but the domain itself differs (perhaps also
+  one letter off, `edu.fh-joaneum.at`).
+- **Open questions:** whether the same hint belongs elsewhere an address is
+  typed (signing in, *Forgot password*, joining's private address) -- not
+  asked for yet.
+
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
 - **Added:** 2026-10-08
