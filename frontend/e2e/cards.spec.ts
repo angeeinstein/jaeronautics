@@ -22,12 +22,14 @@ test.describe('cards and sales points', () => {
     await expect(device.getByRole('combobox', { name: 'Items' })).toHaveCount(0);
 
     await page.goto('/teams/rocket-team/manage/sales');
+    // The price list first, with what each item sold; the menus on their own tab.
+    await expect(
+      page.getByRole('table', { name: 'Price list' }).getByRole('row', { name: /^Beer/ }),
+    ).toBeVisible();
+    await page.getByRole('tab', { name: 'Sales points' }).click();
     const menu = page.getByRole('region', { name: 'Rocket fridge' });
     await expect(menu.getByRole('combobox', { name: 'Items' })).toBeVisible();
     await expect(menu.getByText('Beer, €2.00', { exact: true })).toBeVisible();
-    await expect(
-      page.getByRole('table', { name: 'Sold by item' }).getByRole('row', { name: /Beer/ }),
-    ).toBeVisible();
   });
 
   test('an unknown card tapped on a reader is linked with its QR code, on the phone', async ({
@@ -36,7 +38,7 @@ test.describe('cards and sales points', () => {
     baseURL,
   }, info) => {
     await signIn(page);
-    const name = `E2E QR reader ${info.project.name} ${String(Date.now())}`;
+    const name = `QR ${info.project.name} ${String(Date.now()).slice(-8)}`;
     await page.goto('/admin/settings/devices');
     const form = page.getByRole('region', { name: 'Add a device' });
     await form.getByRole('textbox', { name: /^Name/ }).fill(name);

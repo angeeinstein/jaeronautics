@@ -633,6 +633,8 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--credit-holder", "user": "treasurer@example.org", "path": f"/admin/credit/{active.user.id}"},
         {"name": "admin--settings-credit", "user": "admin@example.org", "path": "/admin/settings/credit"},
         {"name": "teams--sales", "user": "active@example.org", "path": "/teams/rocket-team/manage/sales"},
+        {"name": "teams--sales-points", "user": "active@example.org",
+         "path": "/teams/rocket-team/manage/sales#sales-points"},
         {"name": "admin--sales", "user": "admin@example.org", "path": "/admin/sales"},
         {"name": "public--contact", "path": "/contact"},
         {"name": "public--contact-signed-in", "user": "active@example.org", "path": "/contact"},

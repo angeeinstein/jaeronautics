@@ -10,7 +10,7 @@ test.describe('devices', () => {
     playwright,
     baseURL,
   }, info) => {
-    const name = `E2E reader ${info.project.name} ${String(Date.now())}`;
+    const name = `Reader ${info.project.name} ${String(Date.now()).slice(-8)}`;
     await page.goto('/admin/settings/devices');
     const form = page.getByRole('region', { name: 'Add a device' });
     await form.getByRole('textbox', { name: /^Name/ }).fill(name);
@@ -61,7 +61,7 @@ test.describe('devices', () => {
     playwright,
     baseURL,
   }, info) => {
-    const name = `E2E paired ${info.project.name} ${String(Date.now())}`;
+    const name = `Paired ${info.project.name} ${String(Date.now()).slice(-8)}`;
     const device = await playwright.request.newContext({ baseURL });
     const started = await device.post('/api/v1/device/pair/start', {
       headers: {
@@ -106,7 +106,7 @@ test.describe('devices', () => {
     test.skip(info.project.name !== 'desktop', 'one upload is enough');
     await page.goto('/admin/settings/devices');
     const form = page.getByRole('region', { name: 'Add a device' });
-    const name = `E2E updated ${String(Date.now())}`;
+    const name = `Updated ${String(Date.now()).slice(-8)}`;
     await form.getByRole('textbox', { name: /^Name/ }).fill(name);
     await form.getByRole('combobox', { name: 'Type' }).click();
     await page.getByRole('option', { name: 'Test' }).click();
