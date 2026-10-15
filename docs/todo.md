@@ -108,6 +108,37 @@ checked by its chip), attendance with the same cards
 - **Decided:** as above; the off page shows only the switch (and the hours
   while stays are kept), as the team's does.
 
+### Settings › Email: one page with tabs for everything about sending email
+
+- **Added:** 2026-10-16 -- **proposal, waiting for the maintainer's yes**.
+- **What the maintainer asked:** "we could merge all of those mailing
+  settings … at least … which sender account something is sent from. So the
+  notification emails, the mailings, and the replies … and the welcome
+  emails … maybe like we already did for some other sites with the tabs."
+  Today they are spread over Settings › General (welcome email), Settings ›
+  Notifications, Settings › Mailings, Settings › Mail accounts and Settings
+  › Test email; each "From" falls back to another (replies → mailings →
+  notifications → the welcome email's sender).
+- **Proposal:** one entry, **Settings › Email**, replacing Notifications,
+  Mailings, Mail accounts and Test email, with tabs (`PageTabs`):
+  1. **Senders** -- one panel, *Which account sends what*: a **default
+     account**, then Welcome emails, Notifications (to admins and members),
+     Announcements and team mailings, Replies to contact messages -- each
+     "Empty: the default" -- and the reply copy setting.
+  2. **What goes out** -- the welcome email (sent by itself, template, legal
+     PDFs attached), the notifications (which kinds go out, how each channel
+     stands), the mailings' limits an hour and a day.
+  3. **Accounts** -- the mail accounts (add, test, remove, import and
+     export); only with `settings.credentials`, as now.
+  4. **Test** -- send a test email; only with `notifications.manage`.
+- **The university email domains stay in General**: they decide who counts
+  as a student or staff (the membership kinds, confirming a university
+  address), not how email is sent. General then holds *Signing up* (paying
+  by invoice) and *University email domains* (its attendance switch goes to
+  Admin › Attendance, the item above).
+- **Open:** the maintainer's yes, or changes; whether General should be
+  renamed (e.g. *Joining*) once it holds only those two.
+
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
 - **Added:** 2026-10-08
