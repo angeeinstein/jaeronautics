@@ -54,6 +54,9 @@ maintainer says so).
     *Actions* button for the reader as a whole ("on any sale": the fridge
     lock) and one beside each item of its menu (a coffee type); both run
     when both are set.
+    An item's actions are for **that item on that reader** (the maintainer
+    asked, 2026-10-15): the price-list item itself carries none, and the
+    same item on another reader has its own, or none.
   - An action: output 1-N, for so many seconds; more than one per sale
     allowed. The device reports how many outputs it has with its sign of
     life; a reader with none shows no *Actions* button.
@@ -134,26 +137,21 @@ maintainer says so).
   a least time), who may see it (team leads, whoever handles ECTS), and the
   privacy policy for it.
 
-### Devices: the marks of "our" firmware
+### Devices: a firmware file checked by what it already carries
 
-- **Added:** 2026-10-14
-- **What:** the check of an uploaded firmware file (and the device's own
-  check before installing) for the few bytes that mark it as this
-  association's firmware, once they are settled with the firmware.
-- **Where:** `services/device_firmware.py`, `_marks` (it checks the project
-  name now); the device's firmware.
-- **Why, decided, open questions:** `docs/devices-plan.md`, "One device for
-  everything", "Open". Pairing, the device saying what it can be, the
-  settings by card and backup code, and firmware updates are built (branch
-  `claude/device-pairing`); this is the part left for when the firmware
-  side is settled. Signing the firmware: not planned.
-- **A real file (2026-10-15):** `jae_terminal-0.4.0.bin` carries only
-  ESP-IDF's own app description -- project `jae_terminal`, version, build
-  time, IDF 5.2.1, chip ESP32-S3 -- and ESP-IDF's appended SHA-256; nothing
-  of its own after it. The portal reads all of it and checks the checksum
-  and the hash. **Proposed:** no marks of our own (without a signature they
-  prove nothing more than the project name); instead also refuse a file for
-  another chip than the newest firmware's. Waiting for the maintainer.
+- **Added:** 2026-10-14; **decided 2026-10-15**.
+- **What:** no marks of our own in the firmware. "This was exactly what I
+  meant ... that the firmware should be checked for this metadata that is
+  currently inside already." A real file (`jae_terminal-0.4.0.bin`) carries
+  ESP-IDF's app description -- project, version, build time, IDF version,
+  chip -- and ESP-IDF's appended SHA-256. The portal already reads it all,
+  checks the checksum and the hash, and refuses another project than the
+  newest firmware's. Left to do: **also refuse a file for another chip** than
+  the newest firmware's (ESP32-S3 now).
+- **Where:** `services/device_firmware.py`, `_marks` (rename it to what it
+  is: the check against the newest firmware); its comment about "marks the
+  firmware adds of its own" goes; `docs/devices-plan.md`, "Open", says it is
+  settled. Signing the firmware: not planned.
 
 ## Ideas for later (not scheduled)
 
