@@ -150,8 +150,9 @@ checked by its chip), and attendance with the same cards
     address so the conversation is complete in that mailbox too.
 - **Later, if wanted:** the portal reading that mailbox (IMAP) and showing
   answers in the conversation; a separate Reply-To address.
-- **Open question:** the copy to the support address (proposed above) -- or
-  not needed.
+- **The copy (decided 2026-10-15):** a setting beside the choice of the
+  sending account, on the same settings page: "you could just make this a
+  setting in the settings page where I set the support email sender."
 
 ## Ideas for later (not scheduled)
 
