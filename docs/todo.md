@@ -126,6 +126,28 @@ maintainer says so).
   side was done first).
 - **What, decided and open:** `docs/attendance-plan.md`.
 
+### Answering contact messages from inside the portal
+
+- **Added:** 2026-10-15 (an idea since 2026-10-09; asked for now, after
+  attendance). Not small: a feature of its own, with a plan in
+  `docs/messages-plan.md` once the questions below are answered.
+- **What:** a *Reply* on a message in Admin › Messages, written there and
+  sent from the portal's mail server -- not from the admin's own mailbox.
+- **Why:** "as I'm using my private email address here, as a login, I would
+  also get this admin notification on my private email and when I reply
+  there, I would reply to this person with my private email. And this
+  doesn't look that good and this doesn't fit our professional attitude."
+- **Decided so far:** the maintainer may create a new address (not
+  *no-reply*; "support or something similar") on the mail server; "we need
+  a way to select from which emails those messages will be sent" -- the mail
+  accounts (Settings › Mail accounts) already have their own sender address
+  and name, so likely a choice of account for replies.
+- **Open questions:** the maintainer's message was cut off ("and also as far
+  as I know …") -- ask how it went on. Do the person's answers come back to
+  that mailbox as normal emails, or does the portal read the mailbox (IMAP)
+  and show them in the conversation? Replies also for messages to a team's
+  leads (from the team's page, by its leads)?
+
 ## Ideas for later (not scheduled)
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
@@ -143,10 +165,6 @@ Talked about, not agreed as work. Not built unless the maintainer brings them up
   copy of Stripe's books (`docs/money-ledger-plan.md`).
 - **Stripe's transfers to the bank, matched to their bookings** --
   2026-10-11. Not needed while nothing has been transferred to the bank.
-- **Answering contact messages from inside the portal** -- 2026-10-09. A
-  reply written in Admin › Messages and sent as a formatted HTML email, with
-  the conversation kept together. "Would be nice … but I think we can stay at
-  the normal email reply for now." See `docs/messages-plan.md`.
 - **The association's Odoo website** -- 2026-10-07. People confuse it with the
   portal and try to sign in there. No decision.
 - **Rounded corners** -- 2026-10-07. Discussed what switching the square look
