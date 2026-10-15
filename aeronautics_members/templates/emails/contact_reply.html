@@ -1,0 +1,17 @@
+{% extends "emails/_layout.html" %}
+{#- An answer to a contact-form message, written in Admin › Messages
+    (services/messages.py): the answer, then what the person wrote. Answering
+    this email answers the mailbox it came from. -#}
+{% block styles %}
+        .content ul, .content ol { margin: 0 0 16px; padding-left: 22px; }
+        .content blockquote { margin: 0; }
+{% endblock %}
+{% block content %}
+    {{ body_html }}
+    <div style="margin:28px 0 0; padding:14px 18px; border-left:3px solid #34383b;">
+        <p class="muted" style="color:#aab4bb; font-size:14px; margin:0 0 8px;">{{ quoted_intro }}</p>
+        {% for paragraph in quoted_text.split('\n\n') %}
+            {% if paragraph.strip() %}<p style="white-space:pre-line; color:#aab4bb; font-size:14px;">{{ paragraph.strip() }}</p>{% endif %}
+        {% endfor %}
+    </div>
+{% endblock %}

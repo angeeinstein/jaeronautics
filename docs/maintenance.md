@@ -575,8 +575,14 @@ The plan and what was decided: `docs/messages-plan.md`. Code:
     answers them.
   - Messages are kept on Admin › Messages or the team's Messages page, to be
     marked done.
-  - An email that could not be sent is tried again by the notification
-    timer, up to six times.
+  - The contact form's are answered with *Reply* on Admin › Messages: sent
+    from the account chosen in Settings › Mailings, *Replies to contact
+    messages* (empty: the mailings' account), optionally with a blind copy to
+    that account's own address. Answers to a reply arrive in that account's
+    mailbox -- set it up in a mail program. A team's messages are answered
+    by email.
+  - An email that could not be sent -- a message or a reply -- is tried
+    again by the notification timer, up to six times.
 - **Spam:** a hidden field, a form sent within three seconds refused, and
   rate limits (`RATELIMIT_CONTACT`, 5 an hour per person or address;
   `RATELIMIT_CONTACT_PER_IP`, 30 an hour per network address).

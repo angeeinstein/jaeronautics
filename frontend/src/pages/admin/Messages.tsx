@@ -1,7 +1,9 @@
 /**
  * Admin › Messages: what came through the contact form (docs/messages-plan.md),
- * for everybody who receives it (messages.receive). Answered by email, then
- * marked done. Data: GET /api/v1/admin/messages, PUT .../<id>.
+ * for everybody who receives it (messages.receive). Answered here -- sent from
+ * the mail account chosen for replies in Settings › Mailings, not one's own
+ * mailbox -- and then done. Data: GET /api/v1/admin/messages, PUT .../<id>,
+ * POST .../<id>/replies.
  */
 import { Text } from '@mantine/core';
 import { useQueryClient } from '@tanstack/react-query';
@@ -17,7 +19,7 @@ export function Messages() {
     <>
       <PageHeader
         title="Messages"
-        description="What people wrote through the contact form. Answer by email, then mark it done."
+        description="What people wrote through the contact form. Reply here; it is then done."
         crumbs={[{ label: 'Admin', to: '/admin' }, { label: 'Messages' }]}
       />
       <MessageList
@@ -33,9 +35,18 @@ export function Messages() {
           )
         }
         onChanged={() => void client.invalidateQueries({ queryKey: meQuery.queryKey })}
+        reply={(id, body) =>
+          call(
+            api.POST('/api/v1/admin/messages/{message_id}/replies', {
+              params: { path: { message_id: id } },
+              body: { body },
+            }),
+          )
+        }
       />
       <Text size="sm" c="dimmed" mt="lg">
-        Every admin receives these by email. Messages done are deleted after a year.
+        Every admin receives these by email. Their answers to a reply arrive in the replies&apos; mailbox
+        (Settings › Mailings). Messages done are deleted after a year, with their answers.
       </Text>
     </>
   );

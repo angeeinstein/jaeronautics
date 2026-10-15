@@ -152,23 +152,96 @@ describe('Admin › Messages', () => {
     delivered: true,
     done_at: null,
     done_by: null,
+    replies: [],
+    can_reply: true,
   };
+  const listed = { items: [message], open_count: 1, reply_from: 'support@example.org' };
 
-  it('answered by email, linked to the account, marked done', async () => {
+  it('answered here, from the support address; the answer kept under the message', async () => {
+    const user = userEvent.setup();
+    const answered = {
+      ...message,
+      done_at: '2026-10-09T09:00:00Z',
+      done_by: 'Ada Admin',
+      replies: [
+        {
+          id: 1,
+          body: 'It was paid.',
+          author: 'Ada Admin',
+          created_at: '2026-10-09T09:00:00Z',
+          sent_at: '2026-10-09T09:00:01Z',
+          error: null,
+        },
+      ],
+    };
+    const { calls } = mockFetch({
+      ...base,
+      'GET /api/v1/admin/messages': { body: listed },
+      'POST /api/v1/admin/messages/4/replies': { status: 201, body: answered },
+    });
+    renderPage(<Messages />);
+    expect(await screen.findByText('My fee')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Answer by email' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Reply' }));
+    const answer = screen.getByRole('textbox', { name: /Answer to Vera Visitor/ });
+    expect(screen.getByText(/From support@example\.org/)).toBeInTheDocument();
+    await user.type(answer, 'It was paid.');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => {
+      expect(calls.some((call) => call.method === 'POST')).toBe(true);
+    });
+    const sent = calls.find((call) => call.method === 'POST');
+    expect(await sent?.clone().json()).toEqual({ body: 'It was paid.' });
+    expect(await screen.findByText('Sent to vera@example.net.')).toBeInTheDocument();
+  });
+
+  it("an answer that has not gone out says so; a team's message is answered by email", async () => {
+    mockFetch({
+      ...base,
+      'GET /api/v1/admin/messages': {
+        body: {
+          ...listed,
+          items: [
+            {
+              ...message,
+              replies: [
+                {
+                  id: 1,
+                  body: 'It was paid.',
+                  author: 'Ada Admin',
+                  created_at: '2026-10-09T09:00:00Z',
+                  sent_at: null,
+                  error: 'SMTP said no',
+                },
+              ],
+            },
+            { ...message, id: 5, subject: 'For the team', can_reply: false },
+          ],
+        },
+      },
+    });
+    renderPage(<Messages />);
+    expect(await screen.findByText('Not sent yet')).toBeInTheDocument();
+    expect(screen.getByText(/SMTP said no/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Answer by email' })).toHaveAttribute(
+      'href',
+      'mailto:vera@example.net?subject=Re%3A%20For%20the%20team',
+    );
+  });
+
+  it('linked to the account, marked done', async () => {
     const user = userEvent.setup();
     const { calls } = mockFetch({
       ...base,
-      'GET /api/v1/admin/messages': { body: { items: [message], open_count: 1 } },
+      'GET /api/v1/admin/messages': { body: listed },
       'PUT /api/v1/admin/messages/4': {
         body: { ...message, done_at: '2026-10-09T09:00:00Z', done_by: 'Ada Admin' },
       },
     });
     renderPage(<Messages />);
     expect(await screen.findByText('My fee')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Answer by email' })).toHaveAttribute(
-      'href',
-      'mailto:vera@example.net?subject=Re%3A%20My%20fee',
-    );
     expect(screen.getByRole('link', { name: 'Account no. 12, active' })).toHaveAttribute(
       'href',
       '/admin/accounts/12',

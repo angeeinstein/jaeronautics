@@ -7,6 +7,7 @@ import { type Answers, mockFetch, renderPage } from '../../../test/render';
 import { Billing } from './Billing';
 import { Forum } from './Forum';
 import { General } from './General';
+import { MailingSettings } from './MailingSettings';
 import { Notifications } from './Notifications';
 
 afterEach(() => {
@@ -237,5 +238,40 @@ describe('forum', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Test the connection' }));
 
     expect(await screen.findByRole('status')).toHaveTextContent('The forum did not answer.');
+  });
+});
+
+describe('mailings', () => {
+  const mailings: Schemas['MailingSettingsOut'] = {
+    sender: '',
+    default_sender: 'office',
+    accounts: ['office', 'support'],
+    per_hour: 100,
+    per_day: 300,
+    reply_sender: '',
+    reply_copy: false,
+    reply_address: 'office@example.org',
+  };
+
+  it('the account replies go out from, and a copy to its own address', async () => {
+    const { calls } = show(<MailingSettings />, {
+      [`${API}/mailings`]: { body: mailings },
+      [`PUT ${API}/mailings`]: { body: { changed: ['contact_reply_sender', 'contact_reply_copy'] } },
+    });
+
+    const replies = await screen.findByRole('region', { name: 'Replies to contact messages' });
+    await userEvent.click(within(replies).getByRole('combobox', { name: 'Mail account' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'support' }));
+    await userEvent.click(within(replies).getByRole('checkbox', { name: /A copy of each reply/ }));
+    expect(within(replies).getByText(/office@example\.org/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await sentBody(calls, 'PUT', `${API}/mailings`)).toEqual({
+      sender: '',
+      per_hour: 100,
+      per_day: 300,
+      reply_sender: 'support',
+      reply_copy: true,
+    });
   });
 });

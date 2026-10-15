@@ -1248,8 +1248,9 @@ class AttendanceStay(db.Model):
 class ContactMessage(db.Model):
     """A message through the contact form, to the site's admins, or to one
     team's leads (``team_id``) -- services/messages.py. Answered by email:
-    the email to the recipients carries the sender as Reply-To. Kept a year
-    after it is marked done.
+    the email to the recipients carries the sender as Reply-To. The contact
+    form's are also answered from the portal (``replies``). Kept a year after
+    it is marked done.
     """
 
     __tablename__ = "contact_messages"
@@ -1275,6 +1276,32 @@ class ContactMessage(db.Model):
     team = db.relationship("Team")
     sender = db.relationship("User", foreign_keys=[sender_user_id])
     done_by = db.relationship("User", foreign_keys=[done_by_user_id])
+    replies = db.relationship("ContactReply", back_populates="message", cascade="all, delete-orphan",
+                              order_by="ContactReply.created_at")
+
+
+class ContactReply(db.Model):
+    """An answer to a contact-form message, written in Admin › Messages and
+    emailed to its sender from the mail account chosen for replies
+    (services/messages.py). Kept, and deleted, with the message.
+    """
+
+    __tablename__ = "contact_replies"
+
+    id = db.Column(db.Integer, primary_key=True)
+    message_id = db.Column(db.Integer, db.ForeignKey("contact_messages.id", ondelete="CASCADE"), nullable=False,
+                           index=True)
+    author_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    body = db.Column(db.Text, nullable=False)
+    #: The mail account it goes out from, as chosen when it was written.
+    account_key = db.Column(db.String(80), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    sent_at = db.Column(db.DateTime, nullable=True)
+    attempts = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    error = db.Column(db.Text, nullable=True)
+
+    message = db.relationship("ContactMessage", back_populates="replies")
+    author = db.relationship("User")
 
 
 class Mailing(db.Model):

@@ -3517,6 +3517,10 @@
             "title": "Body",
             "type": "string"
           },
+          "can_reply": {
+            "title": "Can Reply",
+            "type": "boolean"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
@@ -3573,6 +3577,13 @@
             ],
             "title": "Page"
           },
+          "replies": {
+            "items": {
+              "$ref": "#/components/schemas/ContactReplyOut"
+            },
+            "title": "Replies",
+            "type": "array"
+          },
           "sender_email": {
             "title": "Sender Email",
             "type": "string"
@@ -3622,7 +3633,9 @@
           "created_at",
           "delivered",
           "done_at",
-          "done_by"
+          "done_by",
+          "replies",
+          "can_reply"
         ],
         "title": "ContactMessageOut",
         "type": "object"
@@ -3640,11 +3653,23 @@
           "open_count": {
             "title": "Open Count",
             "type": "integer"
+          },
+          "reply_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply From"
           }
         },
         "required": [
           "items",
-          "open_count"
+          "open_count",
+          "reply_from"
         ],
         "title": "ContactMessagesOut",
         "type": "object"
@@ -3776,6 +3801,66 @@
           "company_name"
         ],
         "title": "ContactOut",
+        "type": "object"
+      },
+      "ContactReplyOut": {
+        "additionalProperties": false,
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "sent_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent At"
+          }
+        },
+        "required": [
+          "id",
+          "body",
+          "author",
+          "created_at",
+          "sent_at",
+          "error"
+        ],
+        "title": "ContactReplyOut",
         "type": "object"
       },
       "CorrectionIn": {
@@ -10028,6 +10113,30 @@
             "title": "Per Hour",
             "type": "integer"
           },
+          "reply_copy": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reply Copy"
+          },
+          "reply_sender": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reply Sender"
+          },
           "sender": {
             "default": "",
             "title": "Sender",
@@ -10063,6 +10172,18 @@
             "title": "Per Hour",
             "type": "integer"
           },
+          "reply_address": {
+            "title": "Reply Address",
+            "type": "string"
+          },
+          "reply_copy": {
+            "title": "Reply Copy",
+            "type": "boolean"
+          },
+          "reply_sender": {
+            "title": "Reply Sender",
+            "type": "string"
+          },
           "sender": {
             "title": "Sender",
             "type": "string"
@@ -10073,7 +10194,10 @@
           "default_sender",
           "accounts",
           "per_hour",
-          "per_day"
+          "per_day",
+          "reply_sender",
+          "reply_copy",
+          "reply_address"
         ],
         "title": "MailingSettingsOut",
         "type": "object"
@@ -13871,6 +13995,21 @@
           "reason"
         ],
         "title": "RemoveIn",
+        "type": "object"
+      },
+      "ReplyIn": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "maxLength": 10000,
+            "title": "Body",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "title": "ReplyIn",
         "type": "object"
       },
       "ResetAskIn": {
@@ -24495,6 +24634,100 @@
         ]
       }
     },
+    "/api/v1/admin/messages/{message_id}/replies": {
+      "post": {
+        "operationId": "admin_message_reply",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactMessageOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Answer a contact message from the portal: emailed to its sender from the",
+        "tags": [
+          "Messages"
+        ],
+        "x-permissions": [
+          "messages.receive"
+        ]
+      }
+    },
     "/api/v1/admin/money": {
       "get": {
         "operationId": "admin_money",
@@ -27434,7 +27667,7 @@
             "description": "Signed in, without the permission."
           }
         },
-        "summary": "The account mailings and messages are sent from, and how many an hour and a day.",
+        "summary": "The account mailings and messages are sent from, how many an hour and a day,",
         "tags": [
           "Admin"
         ],

@@ -17,8 +17,9 @@ card with a reader's QR code, device pairing and firmware updates on
 figures and delete, a device's page slimmer, card or SEPA asked before
 Stripe's page), and the batch after it (a sale switching a reader's
 outputs, tabs on long pages and an icon in every panel, the firmware file
-checked by its chip), and attendance with the same cards
-(`docs/attendance-plan.md`).
+checked by its chip), attendance with the same cards
+(`docs/attendance-plan.md`), and answering contact messages from the portal
+(`docs/messages-plan.md`).
 
 ## Open
 
@@ -106,6 +107,10 @@ checked by its chip), and attendance with the same cards
 - **Also (added 2026-10-14, with linking a card by QR code):** a card not
   linked yet, tapped on a reader with a screen, is kept as its hash for a day
   (§ 20, the cards paragraph). See `docs/cards-plan.md`.
+- **Also (added 2026-10-16, with answering contact messages):** the
+  privacy policy draft says an answer written in the portal is kept with the
+  message, and a copy may go to the association's mailbox (§ 31, the
+  contact form, and the retention table). See `docs/messages-plan.md`.
 - **Also (added 2026-10-15, with attendance):** the privacy policy draft
   names the stays recorded at attendance readers -- who, which team, in and
   out with the reader, corrections and by whom; who sees them; kept with the
@@ -123,36 +128,6 @@ checked by its chip), and attendance with the same cards
 - **Once approved:** `status: "published"` in all four files, with the day
   of publishing as `version`/`effective_from` (and the file names); check
   that nothing refers to the old § 31-36 of the membership terms.
-
-### Answering contact messages from inside the portal
-
-- **Added:** 2026-10-15 (an idea since 2026-10-09; asked for now, after
-  attendance). Not small: a feature of its own, with a plan in
-  `docs/messages-plan.md` once the questions below are answered.
-- **What:** a *Reply* on a message in Admin › Messages, written there and
-  sent from the portal's mail server -- not from the admin's own mailbox.
-- **Why:** "as I'm using my private email address here, as a login, I would
-  also get this admin notification on my private email and when I reply
-  there, I would reply to this person with my private email. And this
-  doesn't look that good and this doesn't fit our professional attitude."
-- **Decided (2026-10-15):**
-  - The maintainer adds a mail account for it (a *support* address, not
-    *no-reply*) in Settings › Mail accounts; a setting chooses which mail
-    account sends replies ("being able to select which is used here").
-  - **Only the main contact form** (Admin › Messages): "when a team leader is
-    contacted, I don't want them to reply from the same support email
-    address." Messages to a team's leads stay answered by email as now.
-  - **Answers to a reply:** the server receives no mail; sent from the
-    support address with no other Reply-To, a person's answer lands in that
-    mailbox, which the maintainer reads in Outlook ("I could just configure
-    this mailbox in Outlook as well"). Proposed: the portal keeps each reply
-    with the message (who, when, the text), and sends a copy to the support
-    address so the conversation is complete in that mailbox too.
-- **Later, if wanted:** the portal reading that mailbox (IMAP) and showing
-  answers in the conversation; a separate Reply-To address.
-- **The copy (decided 2026-10-15):** a setting beside the choice of the
-  sending account, on the same settings page: "you could just make this a
-  setting in the settings page where I set the support email sender."
 
 ## Ideas for later (not scheduled)
 

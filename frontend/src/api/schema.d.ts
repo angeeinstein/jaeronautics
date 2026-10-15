@@ -1345,6 +1345,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/messages/{message_id}/replies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Answer a contact message from the portal: emailed to its sender from the */
+        post: operations["admin_message_reply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/money": {
         parameters: {
             query?: never;
@@ -1971,7 +1988,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The account mailings and messages are sent from, and how many an hour and a day. */
+        /** The account mailings and messages are sent from, how many an hour and a day, */
         get: operations["admin_settings_mailings"];
         /** Choose the account mailings are sent from, and the provider's limits. */
         put: operations["admin_settings_mailings_save"];
@@ -4663,6 +4680,8 @@ export interface components {
             account_id: number | null;
             /** Body */
             body: string;
+            /** Can Reply */
+            can_reply: boolean;
             /** Created At */
             created_at: string;
             /** Delivered */
@@ -4677,6 +4696,8 @@ export interface components {
             membership: string | null;
             /** Page */
             page: string | null;
+            /** Replies */
+            replies: components["schemas"]["ContactReplyOut"][];
             /** Sender Email */
             sender_email: string;
             /** Sender Name */
@@ -4694,6 +4715,8 @@ export interface components {
             items: components["schemas"]["ContactMessageOut"][];
             /** Open Count */
             open_count: number;
+            /** Reply From */
+            reply_from: string | null;
         };
         /** ContactOut */
         ContactOut: {
@@ -4717,6 +4740,21 @@ export interface components {
             postal_code: string | null;
             /** Street */
             street: string | null;
+        };
+        /** ContactReplyOut */
+        ContactReplyOut: {
+            /** Author */
+            author: string | null;
+            /** Body */
+            body: string;
+            /** Created At */
+            created_at: string;
+            /** Error */
+            error: string | null;
+            /** Id */
+            id: number;
+            /** Sent At */
+            sent_at: string | null;
         };
         /** CorrectionIn */
         CorrectionIn: {
@@ -6829,6 +6867,16 @@ export interface components {
             /** Per Hour */
             per_hour: number;
             /**
+             * Reply Copy
+             * @default null
+             */
+            reply_copy?: boolean | null;
+            /**
+             * Reply Sender
+             * @default null
+             */
+            reply_sender?: string | null;
+            /**
              * Sender
              * @default
              */
@@ -6844,6 +6892,12 @@ export interface components {
             per_day: number;
             /** Per Hour */
             per_hour: number;
+            /** Reply Address */
+            reply_address: string;
+            /** Reply Copy */
+            reply_copy: boolean;
+            /** Reply Sender */
+            reply_sender: string;
             /** Sender */
             sender: string;
         };
@@ -8071,6 +8125,11 @@ export interface components {
         RemoveIn: {
             /** Reason */
             reason: string;
+        };
+        /** ReplyIn */
+        ReplyIn: {
+            /** Body */
+            body: string;
         };
         /** ResetAskIn */
         ResetAskIn: {
@@ -14339,6 +14398,77 @@ export interface operations {
         responses: {
             /** @description OK */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactMessageOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_message_reply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplyIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

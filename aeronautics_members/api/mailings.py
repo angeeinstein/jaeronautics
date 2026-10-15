@@ -140,12 +140,20 @@ class MailingSettingsOut(Model):
     accounts: list[str]
     per_hour: int
     per_day: int
+    #: The account answers to contact messages go out from; empty: the one above.
+    reply_sender: str
+    #: Each answer also goes, as a blind copy, to that account's own address.
+    reply_copy: bool
+    #: The address answers go out from now, and the copy goes to.
+    reply_address: str
 
 
 class MailingSettingsIn(Model):
     sender: str = ""
     per_hour: int = Field(ge=1)
     per_day: int = Field(ge=1)
+    reply_sender: str | None = None
+    reply_copy: bool | None = None
 
 
 class MailingSettingsSavedOut(Model):
@@ -299,7 +307,8 @@ def team_mailing_stop(slug, mailing_id):
 @endpoint("GET", "/admin/settings/mailings", response=MailingSettingsOut,
           permissions=[Permission.SETTINGS_GENERAL], tag="Admin")
 def admin_settings_mailings():
-    """The account mailings and messages are sent from, and how many an hour and a day."""
+    """The account mailings and messages are sent from, how many an hour and a day,
+    and the account answers to contact messages go out from."""
     current = mailings_service.settings()
     chosen = current["sender"]
     default = "" if chosen else mailings_service.sender_account()
@@ -308,7 +317,9 @@ def admin_settings_mailings():
 
         default = get_notification_service().get_sender_account() or get_default_sender_account() or ""
     return MailingSettingsOut(sender=chosen, default_sender=default, accounts=sorted(load_mail_accounts_config()),
-                              per_hour=current["per_hour"], per_day=current["per_day"])
+                              per_hour=current["per_hour"], per_day=current["per_day"],
+                              reply_sender=current["reply_sender"], reply_copy=current["reply_copy"],
+                              reply_address=mailings_service.account_address(mailings_service.reply_account()))
 
 
 @endpoint("PUT", "/admin/settings/mailings", response=MailingSettingsSavedOut, body=MailingSettingsIn,
@@ -316,7 +327,8 @@ def admin_settings_mailings():
 def admin_settings_mailings_save(body):
     """Choose the account mailings are sent from, and the provider's limits."""
     changed = mailings_service.save_settings(current_user, sender=body.sender, per_hour=body.per_hour,
-                                             per_day=body.per_day)
+                                             per_day=body.per_day, reply_sender=body.reply_sender,
+                                             reply_copy=body.reply_copy)
     db.session.commit()
     return MailingSettingsSavedOut(changed=sorted(changed or []))
 

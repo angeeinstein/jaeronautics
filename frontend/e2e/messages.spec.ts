@@ -1,7 +1,7 @@
 import { expect, signIn, test } from './fixtures';
 
 test.describe('messages', () => {
-  test('a visitor writes through the contact form; the admins read it and mark it done', async ({
+  test('a visitor writes through the contact form; an admin replies from the portal', async ({
     page,
   }, testInfo) => {
     const subject = `Question ${testInfo.project.name} ${String(Date.now())}`;
@@ -21,12 +21,15 @@ test.describe('messages', () => {
     await page.goto('/admin/messages');
     const message = page.getByRole('region', { name: subject });
     await expect(message).toContainText('Is the workshop open on Fridays?');
-    await expect(message.getByRole('link', { name: 'Answer by email' })).toHaveAttribute(
-      'href',
-      /^mailto:vera@example\.net\?subject=Re/,
-    );
-    await message.getByRole('button', { name: 'Mark done' }).click();
+    // Answered here, not from one's own mailbox.
+    await expect(message.getByRole('link', { name: 'Answer by email' })).toHaveCount(0);
+    await message.getByRole('button', { name: 'Reply' }).click();
+    await message.getByRole('textbox', { name: /^Answer to Vera Visitor/ }).fill('Yes, from 14:00.');
+    await message.getByRole('button', { name: 'Send' }).click();
+    // Answered, it is done: out of the open ones, with its answer kept under it.
     await expect(page.getByRole('region', { name: subject })).toHaveCount(0);
+    await page.getByText('All', { exact: true }).click();
+    await expect(page.getByRole('region', { name: subject })).toContainText('Yes, from 14:00.');
   });
 
   test('the footer leads to the contact form', async ({ page }) => {

@@ -260,7 +260,8 @@ class TestSettings:
         _login(client, admin.id)
         saved = client.put("/api/v1/admin/settings/mailings", json={"sender": "news", "per_hour": 50, "per_day": 200})
         assert saved.status_code == 200, saved.get_json()
-        assert mailings.settings() == {"sender": "news", "per_hour": 50, "per_day": 200}
+        assert mailings.settings() == {"sender": "news", "per_hour": 50, "per_day": 200, "reply_sender": "",
+                                   "reply_copy": False}
         bad = client.put("/api/v1/admin/settings/mailings", json={"sender": "nope", "per_hour": 50, "per_day": 200})
         assert "sender" in bad.get_json()["error"]["fields"]
         bad = client.put("/api/v1/admin/settings/mailings", json={"sender": "", "per_hour": 500, "per_day": 200})

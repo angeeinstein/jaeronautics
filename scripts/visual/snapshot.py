@@ -126,10 +126,34 @@ def _an_update_that_ran(system_update):
     system_update.UPDATE_STATE_DIR = state_dir
 
 
+class _MailServer:
+    """A mail server that takes every email and sends none."""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def __getattr__(self, name):  # ehlo, starttls, login, sendmail, quit
+        return lambda *args, **kwargs: None
+
+
 def go_offline(app_module):
-    """Stripe, the forum and the git remote answer without a network."""
+    """Stripe, the forum, the git remote and the mail server answer without a network."""
+    import types
+
+    from aeronautics_members import mail_utils
     from aeronautics_members.forum_service import DiscourseConnectProvider, ForumProviderError
     from aeronautics_members.services import billing, system_update, workflows
+
+    mail_utils.smtplib = types.SimpleNamespace(**{
+        **{name: getattr(mail_utils.smtplib, name) for name in dir(mail_utils.smtplib) if name.startswith("SMTP")},
+        "SMTP": _MailServer, "SMTP_SSL": _MailServer,
+    })
 
     def offline(self, *args, **kwargs):
         raise ForumProviderError("Offline for screenshots.")
@@ -468,6 +492,26 @@ def seed(app, app_module, subscriptions):
                        created_at=now - timedelta(hours=5)),
     ])
     db.session.commit()
+    # The answered one was answered from the portal (Admin › Messages, Reply),
+    # from the support address, with a copy to it (Settings › Mailings). The
+    # mail server is a stand-in (go_offline): emails "go out" and reach nobody.
+    from aeronautics_members.db_models import ContactReply, MailAccount
+
+    db.session.add_all([
+        MailAccount(account_key="office", host="smtp.example.org", port=465, username="office@example.org",
+                    password="offline", from_name="Joanneum Aeronautics"),
+        MailAccount(account_key="support", host="smtp.example.org", port=465, username="u-4711",
+                    password="offline", from_email="support@example.org", from_name="Joanneum Aeronautics"),
+    ])
+    db.session.add_all([Setting(key="contact_reply_sender", value="support"),
+                        Setting(key="contact_reply_copy", value="1")])
+
+    answered = ContactMessage.query.filter_by(subject="Forum password").one()
+    db.session.add(ContactReply(message=answered, author_user_id=admin_user.id, account_key="support",
+                                body="Use *Forgot password* on the forum's sign-in page, with your private address."
+                                     "\n\nThe link comes within a minute.",
+                                created_at=now - timedelta(days=1), sent_at=now - timedelta(days=1)))
+    db.session.commit()
     announcement = mailings.announce(admin_user, kind="news", audience={"scope": "all"}, subject="Summer party",
                                      body="We meet on **Friday** at the institute.\n\n- Food\n- Drinks")
     for recipient in announcement.recipients[: max(1, len(announcement.recipients) // 2)]:
@@ -706,6 +750,10 @@ def seed(app, app_module, subscriptions):
         {"name": "public--link-card-signed-in", "user": "active@example.org", "path": f"/link/{qr_link.token}",
          "storage": {f"card-link:{qr_link.token}": qr_claim}},
         {"name": "admin--messages", "user": "admin@example.org", "path": "/admin/messages"},
+        {"name": "admin--messages-reply", "user": "admin@example.org", "path": "/admin/messages",
+         "click": "button:has-text('Reply')"},
+        {"name": "admin--messages-all", "user": "admin@example.org", "path": "/admin/messages",
+         "click": "label:has-text('All')"},
         {"name": "admin--announcements", "user": "admin@example.org", "path": "/admin/announcements"},
         {"name": "admin--announcement", "user": "admin@example.org",
          "path": f"/admin/announcements/{announcement.id}"},
