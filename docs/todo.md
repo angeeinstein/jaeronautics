@@ -21,6 +21,30 @@ maintainer says so).
 
 ## Open
 
+### Long pages: tabs, and an icon in every panel's header
+
+- **Added:** 2026-10-15
+- **What:** what the Sales pages got in the 2026-10-15 batch, elsewhere:
+  1. **Tabs** on pages with much on them. After testing the Sales pages: "I
+     like the tabs on those pages where there is much content. We could do
+     this for more pages." Built as there (`frontend/src/components/SalesTabs.tsx`:
+     Mantine tabs, the tab in the address's `#…` so a link and the back
+     button keep it).
+  2. **An icon in every panel's header** (`Panel`'s `icon`, as in the
+     sidebar), agreed 2026-10-14 for "a later batch of its own": "with our
+     current UI design, everything looks rather similar ... it's sometimes a
+     bit hard to see at a glance where something is".
+- **Where (pages with the most panels, as candidates):** a device's page
+  (`pages/admin/settings/Device.tsx`, 9 panels: e.g. *Device* -- state,
+  settings, firmware, backup code, key -- and *Activity* -- requests, events,
+  what it can send); a team's money on Admin › Money
+  (`pages/admin/money/TeamMoney.tsx`, 7); Settings › Updates and Backup (5
+  each); Admin › Legal texts (5); a team's Money and Admin pages (4 each).
+  Already tabbed: an account on Admin › Accounts, the Sales pages, a team's
+  settings.
+- **Open question:** which pages get tabs, and which tabs -- to be shown to
+  the maintainer at the start of the batch.
+
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
 - **Added:** 2026-10-08

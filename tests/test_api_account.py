@@ -295,6 +295,23 @@ class TestPaying:
         assert response.get_json() == {"url": "https://billing.stripe.test/p"}
         assert made[0]["return_url"].endswith("/account")
 
+    def test_stripe_refusing_the_billing_page_says_so_as_503(self, app, client, monkeypatch):
+        """Not 502: Cloudflare swaps an origin's 502 for its own page, and the front end then
+        read the portal's message as an update in progress."""
+        from aeronautics_members.services import billing
+
+        def refuse(**kwargs):
+            raise billing.stripe.InvalidRequestError("No such customer: 'cus_a'", "customer")
+
+        monkeypatch.setattr(billing, "apply_runtime_stripe_config", lambda: {})
+        monkeypatch.setattr(billing.stripe.billing_portal.Session, "create", staticmethod(refuse))
+        member = _anna(stripe_customer_id="cus_a")
+
+        response = send(signed_in(client, member.user), "POST", "/api/v1/account/billing")
+
+        assert response.status_code == 503
+        assert response.get_json()["error"]["message"] == "The billing page is unavailable. Please try again later."
+
     def test_nothing_to_resume_for_a_paid_membership(self, app, client):
         member = _anna(payment_status="paid", is_active=True, membership_ends_on=date(2099, 12, 31))
 

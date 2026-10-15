@@ -78,7 +78,13 @@ class ConflictError(ServiceError):
 
 
 class ExternalServiceError(ServiceError):
-    """A dependency (Stripe, Discourse, SMTP) failed in a way we cannot fix here."""
+    """A dependency (Stripe, Discourse, SMTP) failed in a way we cannot fix here.
+
+    503, not 502: Cloudflare, in front of the portal, replaces an origin's 502
+    and 504 with an error page of its own, and the front end then read the
+    portal's message ("The billing page is unavailable ...") as an update in
+    progress. A 503 with the portal's message passes through it and nginx.
+    """
 
     code = "external_service_unavailable"
-    http_status = 502
+    http_status = 503

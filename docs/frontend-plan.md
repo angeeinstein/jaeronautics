@@ -72,7 +72,7 @@ applications).
 - Errors, always the same shape:
   `{"error": {"code": "team_not_joinable", "message": "...", "fields": {...}}}`.
   The services' errors (`ValidationError` 400, `PermissionError_` 403,
-  `NotFoundError` 404, `ConflictError` 409, `ExternalServiceError` 502)
+  `NotFoundError` 404, `ConflictError` 409, `ExternalServiceError` 503 -- not 502, which Cloudflare replaces with a page of its own)
   already carry a code, a message and a status; one error handler turns them
   into this. `fields` holds per-field messages for forms.
 
