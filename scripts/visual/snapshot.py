@@ -592,10 +592,7 @@ def seed(app, app_module, subscriptions):
                        "submit": "section[aria-label='Contact details'] button[type=submit]"},
                       {"name": "account--delete-confirm", "path": f"/account/delete/{delete_token}"}),
         *member_pages("sepa", {"name": "account--membership-sepa", "path": "/account/membership"}),
-        *member_pages("ended", {"name": "account--membership-ended", "path": "/account/membership"},
-                      # Rejoining asks card or SEPA before Stripe's page.
-                      {"name": "account--rejoin-pay-method", "path": "/account/membership",
-                       "open": "button:has-text('Rejoin')"}),
+        *member_pages("ended", {"name": "account--membership-ended", "path": "/account/membership"}),
         *member_pages("failed"),
         *member_pages("cancelling"),
         *member_pages("returning"),
@@ -617,6 +614,10 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--team-new", "user": "admin@example.org", "path": "/admin/teams/new"},
         {"name": "teams--home", "user": "active@example.org", "path": "/teams"},
         {"name": "teams--home-applicant", "user": "returning@example.org", "path": "/teams"},
+        # A team's fee asks card or SEPA before Stripe's page (a membership does too, but not in
+        # the year's free months, which the screenshots' date may fall in).
+        {"name": "teams--pay-method", "user": "returning@example.org", "path": "/teams/glider-team/about",
+         "open": "button:has-text('Pay and join')"},
         {"name": "teams--team-page", "user": "active@example.org", "path": "/teams/rocket-team"},
         {"name": "teams--about", "user": "photo-needed@example.org", "path": "/teams/rocket-team/about"},
         {"name": "teams--leave", "user": "active@example.org", "path": "/teams/rocket-team/leave"},
