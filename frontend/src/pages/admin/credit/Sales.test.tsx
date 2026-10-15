@@ -41,7 +41,18 @@ function seller(overrides: Partial<Schemas['SellerSalesOut']> = {}): Schemas['Se
     earned_30_days: 600,
     sold: 5,
     earned: 1000,
-    items: [{ name: 'Beer', icon: 'beer', sold_30_days: 3, earned_30_days: 600, sold: 5, earned: 1000 }],
+    items: [
+      {
+        item_id: 1,
+        listed: true,
+        name: 'Beer',
+        icon: 'beer',
+        sold_30_days: 3,
+        earned_30_days: 600,
+        sold: 5,
+        earned: 1000,
+      },
+    ],
     ...overrides,
   };
 }
@@ -125,14 +136,70 @@ describe('a team’s Sales page', () => {
     ).toEqual({ active: false });
   });
 
-  it('what each item sold and made, and each sales point’s menu, sent on its own', async () => {
+  it('each item with what it sold and made, 30 days or ever; what was sold of a deleted item', async () => {
+    showTeam(['team.edit_prices'], {
+      '/api/v1/teams/rocket/manage/sales': {
+        body: seller({
+          items: [
+            ...seller().items,
+            {
+              item_id: 9,
+              listed: false,
+              name: 'Old cola',
+              icon: 'soft_drink',
+              sold_30_days: 0,
+              earned_30_days: 0,
+              sold: 2,
+              earned: 300,
+            },
+          ],
+        }),
+      },
+    });
+
+    const table = await screen.findByRole('table', { name: 'Price list' });
+    await waitFor(() => {
+      expect(within(table).getByRole('row', { name: /^Beer/ })).toHaveTextContent('€2.003€6.00');
+    });
+    await userEvent.click(screen.getByText('Ever'));
+    expect(within(table).getByRole('row', { name: /^Beer/ })).toHaveTextContent('€2.005€10.00');
+    expect(within(table).getByRole('row', { name: /Old cola/ })).toHaveTextContent(
+      'No longer on the list2€3.00',
+    );
+    expect(within(table).getByRole('row', { name: /Together/ })).toHaveTextContent('5€10.00');
+  });
+
+  it('an item deleted after asking once more', async () => {
+    const { calls } = showTeam(['team.edit_prices'], {
+      'DELETE /api/v1/teams/rocket/manage/prices/1': { body: { ...list, items: [list.items[1]] } },
+    });
+
+    const table = await screen.findByRole('table', { name: 'Price list' });
+    await userEvent.click(within(table).getByRole('button', { name: 'Delete Beer' }));
+    await userEvent.click(within(table).getByRole('button', { name: 'Yes, delete' }));
+    await waitFor(() => {
+      expect(calls.some((call) => call.method === 'DELETE')).toBe(true);
+    });
+    await waitFor(() => {
+      expect(within(table).queryByRole('row', { name: /^Beer/ })).not.toBeInTheDocument();
+    });
+  });
+
+  it('an item’s name: at most 20 characters, counted', async () => {
+    showTeam(['team.edit_prices']);
+    const name = await screen.findByLabelText('New item');
+    expect(name).toHaveAttribute('maxlength', '20');
+    await userEvent.type(name, 'Club-Mate');
+    expect(screen.getByText('9/20')).toBeInTheDocument();
+  });
+
+  it('each sales point’s menu, on a tab of its own, sent on its own', async () => {
     const { calls } = showTeam(['team.edit_prices', 'team.devices'], {
       '/api/v1/teams/rocket/manage/devices': { body: { items: [salesPoint()] } },
       'PATCH /api/v1/teams/rocket/manage/devices/7': { body: { items: [salesPoint()] } },
     });
 
-    const sold = await screen.findByRole('table', { name: 'Sold by item' });
-    expect(within(sold).getByRole('row', { name: /Beer/ })).toHaveTextContent('3€6.005€10.00');
+    await userEvent.click(await screen.findByRole('tab', { name: 'Sales points' }));
     const menu = await screen.findByRole('region', { name: 'Rocket fridge' });
     await userEvent.click(within(menu).getByRole('combobox', { name: 'Items' }));
     await userEvent.click(await screen.findByRole('option', { name: 'Beer, €2.00' }));
@@ -147,7 +214,7 @@ describe('a team’s Sales page', () => {
 });
 
 describe('Admin › Sales', () => {
-  it('by seller, then by item for the seller chosen; the association’s price list', async () => {
+  it('by seller; the association’s price list with its figures; no tab without a sales point', async () => {
     mockFetch({
       ...base,
       '/api/v1/admin/sales': {
@@ -158,12 +225,14 @@ describe('Admin › Sales', () => {
               team_slug: null,
               items: [
                 {
-                  name: 'Coffee',
-                  icon: 'coffee',
+                  item_id: 1,
+                  listed: true,
+                  name: 'Beer',
+                  icon: 'beer',
                   sold_30_days: 4,
-                  earned_30_days: 320,
-                  sold: 9,
-                  earned: 720,
+                  earned_30_days: 800,
+                  sold: 4,
+                  earned: 800,
                 },
               ],
             }),
@@ -181,15 +250,9 @@ describe('Admin › Sales', () => {
       'href',
       '/admin/money/rocket',
     );
-    expect(screen.getByRole('table', { name: 'Sold by item: Joanneum Aeronautics' })).toHaveTextContent(
-      'Coffee',
-    );
-    await userEvent.click(screen.getByRole('combobox', { name: 'Seller' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'Rocket' }));
-    expect(screen.getByRole('table', { name: 'Sold by item: Rocket' })).toHaveTextContent('Beer');
-    expect(await screen.findByRole('table', { name: "The association's price list" })).toBeInTheDocument();
-    // No sales point of its own yet: no menus.
-    expect(screen.queryByText('Sales points')).not.toBeInTheDocument();
+    const prices = await screen.findByRole('table', { name: "The association's price list" });
+    expect(within(prices).getByRole('row', { name: /^Beer/ })).toHaveTextContent('4€8.00');
+    expect(screen.queryByRole('tab', { name: 'Sales points' })).not.toBeInTheDocument();
   });
 });
 

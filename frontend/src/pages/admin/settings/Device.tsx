@@ -22,6 +22,7 @@ import {
   Textarea,
   TextInput,
 } from '@mantine/core';
+import { IconTerminal2 } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
@@ -193,7 +194,7 @@ function SettingsForm({
           <TextInput
             label="Name (optional)"
             placeholder={device.code}
-            maxLength={80}
+            maxLength={30}
             value={name}
             error={errors.name ?? null}
             onChange={(event) => {
@@ -381,6 +382,8 @@ function DeviceApi({
   type: DeviceType | undefined;
 }) {
   const client = useQueryClient();
+  // Folded away: rarely needed once the firmware is done, and long.
+  const [open, setOpen] = useState(false);
   const [data, setData] = useState<Record<string, string>>({});
   const [answer, setAnswer] = useState<{ id: string; text: string } | null>(null);
   const send = useMutation({
@@ -415,87 +418,105 @@ function DeviceApi({
   };
 
   return (
-    <Panel title="What the device can send" flush>
-      <Stack gap={0}>
-        <Text size="sm" c="dimmed" p="md">
-          Every request a device of this type can send, with the command to send it from a computer.{' '}
-          <b>Send</b> sends it from here as the device and shows the answer; the device is not counted as
-          seen.
-          {refused ? ` The device itself would be refused now: ${refused}.` : ''}
-        </Text>
-        {requestsOf(server, type).map((request) => (
-          <Stack
-            key={request.id}
-            gap="sm"
-            p="md"
-            style={{ borderTop: '1px solid var(--ja-border)' }}
-            aria-label={request.title}
-            role="group"
-          >
-            <Group justify="space-between" align="flex-start" gap="md">
-              <Stack gap={4} miw={0} style={{ flex: 1 }}>
-                <Group gap="sm">
-                  <Text fw={600}>{request.title}</Text>
-                  <Code>
-                    {request.method} {request.path}
-                  </Code>
-                </Group>
-                {request.description ? (
-                  <Text size="sm" c="dimmed">
-                    {request.description}
-                  </Text>
+    <Panel
+      title="What the device can send"
+      icon={IconTerminal2}
+      flush
+      actions={
+        <Button
+          size="xs"
+          variant="default"
+          aria-expanded={open}
+          onClick={() => {
+            setOpen(!open);
+          }}
+        >
+          {open ? 'Hide' : 'Show'}
+        </Button>
+      }
+    >
+      {open ? (
+        <Stack gap={0}>
+          <Text size="sm" c="dimmed" p="md">
+            Every request a device of this type can send, with the command to send it from a computer.{' '}
+            <b>Send</b> sends it from here as the device and shows the answer; the device is not counted as
+            seen.
+            {refused ? ` The device itself would be refused now: ${refused}.` : ''}
+          </Text>
+          {requestsOf(server, type).map((request) => (
+            <Stack
+              key={request.id}
+              gap="sm"
+              p="md"
+              style={{ borderTop: '1px solid var(--ja-border)' }}
+              aria-label={request.title}
+              role="group"
+            >
+              <Group justify="space-between" align="flex-start" gap="md">
+                <Stack gap={4} miw={0} style={{ flex: 1 }}>
+                  <Group gap="sm">
+                    <Text fw={600}>{request.title}</Text>
+                    <Code>
+                      {request.method} {request.path}
+                    </Code>
+                  </Group>
+                  {request.description ? (
+                    <Text size="sm" c="dimmed">
+                      {request.description}
+                    </Text>
+                  ) : null}
+                  {request.tryBody ? null : (
+                    <Text size="sm" c="dimmed">
+                      {request.untried ?? 'Not sent from here: it would really happen.'}
+                    </Text>
+                  )}
+                </Stack>
+                {request.tryBody ? (
+                  <Button
+                    variant="default"
+                    aria-label={`Send ${request.title}`}
+                    loading={send.isPending && send.variables.id === request.id}
+                    onClick={() => {
+                      sendRequest(request);
+                    }}
+                  >
+                    Send
+                  </Button>
                 ) : null}
-                {request.tryBody ? null : (
-                  <Text size="sm" c="dimmed">
-                    {request.untried ?? 'Not sent from here: it would really happen.'}
-                  </Text>
-                )}
-              </Stack>
-              {request.tryBody ? (
-                <Button
-                  variant="default"
-                  aria-label={`Send ${request.title}`}
-                  loading={send.isPending && send.variables.id === request.id}
-                  onClick={() => {
-                    sendRequest(request);
+              </Group>
+              {request.report && request.tryBody ? (
+                <Textarea
+                  label="Data"
+                  autosize
+                  minRows={1}
+                  styles={{ input: { fontFamily: 'var(--mantine-font-family-monospace)' } }}
+                  value={data[request.id] ?? '{}'}
+                  onChange={(event) => {
+                    setData({ ...data, [request.id]: event.currentTarget.value });
                   }}
-                >
-                  Send
-                </Button>
+                />
               ) : null}
-            </Group>
-            {request.report && request.tryBody ? (
-              <Textarea
-                label="Data"
-                autosize
-                minRows={1}
-                styles={{ input: { fontFamily: 'var(--mantine-font-family-monospace)' } }}
-                value={data[request.id] ?? '{}'}
-                onChange={(event) => {
-                  setData({ ...data, [request.id]: event.currentTarget.value });
-                }}
-              />
-            ) : null}
-            <Code block>{request.curl}</Code>
-            {answer?.id === request.id ? (
-              <Stack gap={4}>
-                <Text size="sm" fw={600}>
-                  Answer
-                </Text>
-                <Code block aria-label="Answer">
-                  {answer.text}
-                </Code>
-              </Stack>
-            ) : null}
-          </Stack>
-        ))}
-        <Text size="sm" c="dimmed" p="md" style={{ borderTop: '1px solid var(--ja-border)' }}>
-          HTTPS only, with the key as a bearer token: no session, no cookies. Every request says what the
-          device is: X-Device-Firmware, X-Device-Hardware (its MAC address), X-Device-Board, X-Device-Types.
-          Refused: 401 for an unknown or revoked key, 403 when switched off, 404 for what its type does not
-          offer, 429 when too often.
-        </Text>
-      </Stack>
+              <Code block>{request.curl}</Code>
+              {answer?.id === request.id ? (
+                <Stack gap={4}>
+                  <Text size="sm" fw={600}>
+                    Answer
+                  </Text>
+                  <Code block aria-label="Answer">
+                    {answer.text}
+                  </Code>
+                </Stack>
+              ) : null}
+            </Stack>
+          ))}
+          <Text size="sm" c="dimmed" p="md" style={{ borderTop: '1px solid var(--ja-border)' }}>
+            HTTPS only, with the key as a bearer token: no session, no cookies. Every request says what the
+            device is: X-Device-Firmware, X-Device-Hardware (its MAC address), X-Device-Board, X-Device-Types.
+            Refused: 401 for an unknown or revoked key, 403 when switched off, 404 for what its type does not
+            offer, 429 when too often.
+          </Text>
+        </Stack>
+      ) : null}
     </Panel>
   );
 }
@@ -867,10 +888,11 @@ function DevicePage({
         <FirmwareCard device={device} />
         <BackupCode device={device} />
       </SimpleGrid>
-      <KeyCard device={device} />
-      <DeviceApi device={device} server={detail.server} type={type} />
+      {/* A paired device's key was handed to it; nobody saw it, so there is none to rotate here. */}
+      {device.paired ? null : <KeyCard device={device} />}
       <Requests requests={detail.requests} />
       <Events events={detail.events} />
+      <DeviceApi device={device} server={detail.server} type={type} />
       <RemoveDevice device={device} />
     </Stack>
   );

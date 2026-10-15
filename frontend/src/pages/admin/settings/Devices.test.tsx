@@ -371,6 +371,12 @@ describe('firmware', () => {
   });
 });
 
+/** The device's requests are folded away until asked for. */
+async function openRequests() {
+  const panel = await screen.findByRole('region', { name: 'What the device can send' });
+  await userEvent.click(within(panel).getByRole('button', { name: 'Show' }));
+}
+
 describe('one device', () => {
   const detail = {
     device: reader,
@@ -398,6 +404,18 @@ describe('one device', () => {
     expect(card).toHaveTextContent('last used');
     expect(within(card).getByRole('button', { name: 'Rotate' })).toBeInTheDocument();
     expect(within(card).getByRole('button', { name: 'Revoke' })).toBeInTheDocument();
+  });
+
+  it('a paired device has no key panel: its key was handed to it, and nobody saw it', async () => {
+    show(
+      <DeviceDetail />,
+      { [`${API}/3`]: { body: { ...detail, device: { ...reader, paired: true } } } },
+      route,
+    );
+
+    expect(await screen.findByRole('region', { name: 'State' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Key' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'What the device can send' })).toBeInTheDocument();
   });
 
   it('a rotated key is shown in the key card itself', async () => {
@@ -443,6 +461,7 @@ describe('one device', () => {
       route,
     );
 
+    await openRequests();
     const ping = await screen.findByRole('group', { name: 'Report “ping”' });
     expect(ping).toHaveTextContent('POST /device/events');
     expect(ping).toHaveTextContent('Answered with what it was sent.');
@@ -459,6 +478,7 @@ describe('one device', () => {
   it('lists the sign of life and what its type offers, each with its command', async () => {
     show(<DeviceDetail />, { [`${API}/3`]: { body: detail } }, route);
 
+    await openRequests();
     const hello = await screen.findByRole('group', { name: 'Sign of life' });
     expect(hello).toHaveTextContent('GET /device');
     expect(hello).toHaveTextContent(`Authorization: Bearer <key>`);
@@ -471,6 +491,7 @@ describe('one device', () => {
   it('a report that would really happen is not sent from here', async () => {
     show(<DeviceDetail />, { [`${API}/3`]: { body: detail } }, route);
 
+    await openRequests();
     const sale = await screen.findByRole('group', { name: 'Report “sale”' });
     expect(within(sale).queryByRole('button')).not.toBeInTheDocument();
     expect(sale).toHaveTextContent('Not sent from here');
@@ -483,6 +504,7 @@ describe('one device', () => {
       route,
     );
 
+    await openRequests();
     expect(
       await screen.findByText(/The device itself would be refused now: it is switched off/),
     ).toBeInTheDocument();
@@ -597,6 +619,7 @@ describe('one device', () => {
 
     expect(await screen.findByRole('link', { name: 'Sales page' })).toHaveAttribute('href', '/admin/sales');
     expect(screen.queryByRole('combobox', { name: 'Items' })).not.toBeInTheDocument();
+    await openRequests();
     const report = screen.getByRole('group', { name: 'Report “card”' });
     expect(report).toHaveTextContent('Not sent from here');
   });

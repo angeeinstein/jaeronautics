@@ -184,7 +184,7 @@ function Approve({ pairing, devices }: { pairing: Pairing; devices: Devices }) {
                 <TextInput
                   label="Name (optional)"
                   description="Its code stands in for it."
-                  maxLength={80}
+                  maxLength={30}
                   value={name}
                   error={errors.name ?? null}
                   onChange={(event) => {

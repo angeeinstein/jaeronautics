@@ -7,7 +7,8 @@
  * device page. Data: the owner's devices (api/device_owners.py), saved with
  * the same PATCH, sending only these settings.
  */
-import { Button, Group, Stack, Text, Title } from '@mantine/core';
+import { Button, Group, Stack, Text } from '@mantine/core';
+import { IconCpu } from '@tabler/icons-react';
 import { type QueryKey, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -51,7 +52,7 @@ function Menu({
   });
   const nothingToChoose = fields.every((field) => !field.choices?.length);
   return (
-    <Panel title={device.label}>
+    <Panel title={device.label} icon={IconCpu}>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -105,9 +106,6 @@ export function SalesPointMenus({
   if (!points.length) return null;
   return (
     <Stack gap="sm">
-      <Title order={2} size="h3">
-        Sales points
-      </Title>
       {points.map((device) => (
         <Menu key={device.id} device={device} owner={owner} queryKey={queryKey} change={change} />
       ))}

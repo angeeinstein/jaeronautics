@@ -191,7 +191,7 @@ function AddDevice({
             label="Name (optional)"
             description="Its code stands in for it."
             placeholder="Fridge reader"
-            maxLength={80}
+            maxLength={30}
             value={name}
             error={errors.name ?? null}
             onChange={(event) => {

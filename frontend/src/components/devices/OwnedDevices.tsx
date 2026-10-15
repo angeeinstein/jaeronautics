@@ -109,7 +109,7 @@ function DeviceCard({
               <TextInput
                 label="Name (optional)"
                 placeholder={device.code}
-                maxLength={80}
+                maxLength={30}
                 value={name}
                 error={errors.name ?? null}
                 onChange={(event) => {
