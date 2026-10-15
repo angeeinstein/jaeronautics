@@ -43,10 +43,14 @@ maintainer says so).
   separate the subdomain with the hyphen between fh and the joanneum" --
   `edu-fh.joanneum.at`, `edu.fh.joanneum.at` and the like, and the answer
   then never arrives.
-- **Decided:** a hint, not a refusal. Suggestion for the check: the domain
-  typed, with its dots and hyphens removed, equals one of the portal's
-  domains with theirs removed, but the domain itself differs (perhaps also
-  one letter off, `edu.fh-joaneum.at`).
+- **Decided:** a hint, not a refusal, and **only for what looks like an
+  accident** (asked 2026-10-15): the domain typed, with its dots and hyphens
+  removed, equals one of the portal's domains with theirs removed, but the
+  domain itself differs (`edu-fh.joanneum.at`, `edu.fh.joanneum.at`,
+  `edufh-joanneum.at`); or it is one letter off one of them
+  (`edu.fh-joaneum.at`). Any other address gets no hint at all: `gmail.com`,
+  another university, and the portal's own domains spelled right -- staff's
+  `fh-joanneum.at` is not taken for a mistyped student address.
 - **Everywhere an address is typed** (2026-10-15: "if it's a very small
   fix, I think this makes sense" -- it is): one check and one hint shown
   under each field, the same wording everywhere --
