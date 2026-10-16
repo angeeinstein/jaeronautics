@@ -19,6 +19,7 @@ import { useDocumentTitle } from '../../components/PageHeader';
 import { Panel } from '../../components/Panel';
 import { ErrorState, LoadingState } from '../../components/States';
 import { notifyFailed } from '../../lib/notify';
+import { EmailHint } from '../../components/EmailHint';
 
 const contactQuery = {
   queryKey: ['contact'] as const,
@@ -126,19 +127,22 @@ export function Contact() {
                       clear('name');
                     }}
                   />
-                  <TextInput
-                    label="Email"
-                    type="email"
-                    autoComplete="email"
-                    required
-                    maxLength={255}
-                    value={email}
-                    error={errors.email}
-                    onChange={(event) => {
-                      setEmail(event.currentTarget.value);
-                      clear('email');
-                    }}
-                  />
+                  <div>
+                    <TextInput
+                      label="Email"
+                      type="email"
+                      autoComplete="email"
+                      required
+                      maxLength={255}
+                      value={email}
+                      error={errors.email}
+                      onChange={(event) => {
+                        setEmail(event.currentTarget.value);
+                        clear('email');
+                      }}
+                    />
+                    <EmailHint value={email} onUse={setEmail} />
+                  </div>
                 </SimpleGrid>
               )}
               <Select

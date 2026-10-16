@@ -352,7 +352,15 @@ page with only the chosen method.
   The Sales pages (*Price list*, *Sales points*), a device (*Device*,
   *Activity*), a team's money on Admin › Money (*Balance*, *History*),
   Updates (*Update*, *History*) and Backup (*Backup*, *Restore*). "I like
-  the tabs on those pages where there is much content."
+  the tabs on those pages where there is much content." Since 2026-10-16
+  also Settings › Email (*Senders*, *What goes out*, *Accounts*, *Test*).
+- **A hint under every email field** (`components/EmailHint.tsx`,
+  `lib/emailHint.ts`, 2026-10-16): when the address typed looks like a
+  mistyped university address -- the domain, dots and hyphens left out, is
+  one of the portal's (`edu-fh.joanneum.at`), or one letter off one --
+  "Did you mean anna@edu.fh-joanneum.at?", a click taking it. A hint only.
+  On the contact form, signing in, *Forgot password*, joining, My Account's
+  contact details and an admin correcting an address.
 
 ## 8. Visual language (a guide)
 

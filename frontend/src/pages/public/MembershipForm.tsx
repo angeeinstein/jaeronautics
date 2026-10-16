@@ -59,6 +59,7 @@ import { type FormOptions, formOptionsQuery } from '../account/shared';
 import { forumName } from './join/forumName';
 import classes from './join/Join.module.css';
 import { wordingFor } from './join/kinds';
+import { EmailHint } from '../../components/EmailHint';
 
 type Profile = Omit<Schemas['MembershipIn'], 'terms_accepted' | 'payment_method'>;
 type Kind = Schemas['MemberCategoryOut'];
@@ -727,6 +728,12 @@ function Form({ door, options }: { door: Door; options: FormOptions }) {
                         maxLength={255}
                         {...text('email_work')}
                       />
+                      <EmailHint
+                        value={workEmail}
+                        onUse={(meant) => {
+                          change('email_work', meant);
+                        }}
+                      />
                       {((whose === 'student' && studentAddress(workEmail)) ||
                         (whose === 'staff' && staffAddress(workEmail))) &&
                       !errors.email_work ? (
@@ -823,6 +830,12 @@ function Form({ door, options }: { door: Door; options: FormOptions }) {
                           setEmail(event.currentTarget.value);
                           clear('email_private');
                         }}
+                        inputContainer={(input) => (
+                          <>
+                            {input}
+                            <EmailHint value={email} onUse={setEmail} />
+                          </>
+                        )}
                       />
                     )
                   ) : (

@@ -16,6 +16,7 @@ import { formatDateTime } from '../../../lib/format';
 import { notifyDone } from '../../../lib/notify';
 import { ACCOUNT_STATE_PILL } from '../accountLabels';
 import { type Account, path, useAccountAction } from './shared';
+import { EmailHint } from '../../../components/EmailHint';
 
 function AccountState({ account }: { account: Account }) {
   const pill = ACCOUNT_STATE_PILL[account.account_state];
@@ -61,6 +62,12 @@ function CorrectEmail({ account }: { account: Account }) {
               setEmail(event.currentTarget.value);
               setProblem(null);
             }}
+            inputContainer={(input) => (
+              <>
+                {input}
+                <EmailHint value={email} onUse={setEmail} />
+              </>
+            )}
             flex="1 1 18rem"
           />
           <ConfirmButton

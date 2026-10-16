@@ -18,6 +18,7 @@ import { emptyToNull } from '../../lib/forms';
 import { notifyFailed } from '../../lib/notify';
 import { AddressState } from './Emails';
 import { type FormOptions, useTakeSaved } from './shared';
+import { EmailHint } from '../../components/EmailHint';
 
 type Contact = Schemas['ContactOut'];
 type ContactIn = Schemas['ContactIn'];
@@ -165,6 +166,12 @@ export function ContactCard({
                 maxLength={255}
                 {...field('email_private')}
               />
+              <EmailHint
+                value={value.email_private}
+                onUse={(meant) => {
+                  setValue({ ...value, email_private: meant });
+                }}
+              />
               {same(value.email_private, email) ? <AddressState address={email} which="private" /> : null}
             </Stack>
             <Stack gap={6}>
@@ -174,6 +181,12 @@ export function ContactCard({
                 type="email"
                 maxLength={255}
                 {...field('email_work')}
+              />
+              <EmailHint
+                value={value.email_work ?? ''}
+                onUse={(meant) => {
+                  setValue({ ...value, email_work: meant });
+                }}
               />
               {same(value.email_work ?? '', workEmail) ? (
                 <AddressState address={workEmail} which="work" />

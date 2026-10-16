@@ -24,6 +24,9 @@ function show(signedIn: boolean) {
         : { topics: TOPICS, signed_in: false, name: null, email: null },
     },
     'POST /api/v1/contact': { body: { message: 'Sent. We answer by email.' } },
+    '/api/v1/forms/options': {
+      body: { student_domains: ['edu.fh-joanneum.at'], staff_domains: ['fh-joanneum.at'] },
+    },
   });
   renderPage(<Contact />);
   return fetched;
@@ -35,6 +38,21 @@ async function sent(calls: Request[]) {
 }
 
 describe('the contact form', () => {
+  it('a university address that looks mistyped gets a hint, the likely one a click away', async () => {
+    const user = userEvent.setup();
+    show(false);
+
+    const email = await screen.findByRole('textbox', { name: /^Email/ });
+    await user.type(email, 'anna.muster@edu-fh.joanneum.at');
+    await user.click(await screen.findByRole('button', { name: 'anna.muster@edu.fh-joanneum.at' }));
+
+    expect(email).toHaveValue('anna.muster@edu.fh-joanneum.at');
+    expect(screen.queryByText(/Did you mean/)).not.toBeInTheDocument();
+    await user.clear(email);
+    await user.type(email, 'anna@gmail.com');
+    expect(screen.queryByText(/Did you mean/)).not.toBeInTheDocument();
+  });
+
   it('a visitor gives a name and address, chooses what it is about, and sends', async () => {
     const user = userEvent.setup();
     const { calls } = show(false);

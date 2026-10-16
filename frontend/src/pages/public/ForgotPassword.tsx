@@ -13,6 +13,7 @@ import { AppLink } from '../../app/AppLink';
 import { useDocumentTitle } from '../../components/PageHeader';
 import { Panel } from '../../components/Panel';
 import { notifyFailed } from '../../lib/notify';
+import { EmailHint } from '../../components/EmailHint';
 
 export function ForgotPassword() {
   useDocumentTitle('A new password');
@@ -51,6 +52,7 @@ export function ForgotPassword() {
                   setEmail(event.currentTarget.value);
                 }}
               />
+              <EmailHint value={email} onUse={setEmail} />
               <Button type="submit" loading={ask.isPending} fullWidth>
                 Send the link
               </Button>

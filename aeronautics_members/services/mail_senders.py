@@ -16,12 +16,12 @@ left empty, the default.
 
 Until 2026-10 there was no default: the welcome email's sender served as one,
 and each other kind fell back to another. The migration ``a4c7e2f9b1d6``
-made that sender the default.
+made that sender the default. Saved on Settings › Email
+(settings_sections.save_senders).
 """
 
 from ..db_models import Setting, db
 from ..mail_utils import load_mail_accounts_config
-from . import ValidationError
 from .settings import get_settings_map
 
 DEFAULT = "mail_default_sender"
@@ -71,25 +71,6 @@ def address_of(key):
     """The address an account sends as: its sender address, else its login."""
     config = load_mail_accounts_config().get(key) or {}
     return (config.get("from") or config.get("user") or "").strip()
-
-
-def save(actor, *, default, welcome, notifications, mailings, replies, reply_copy):
-    """Choose the accounts. Each must exist; empty is the default (for the default: the first account)."""
-    from .settings_sections import _write
-
-    available = set(accounts())
-    chosen = {"default": default, "welcome": welcome, "notifications": notifications, "mailings": mailings,
-              "replies": replies}
-    for field, value in chosen.items():
-        value = (value or "").strip()
-        if value and value not in available:
-            message = "No such mail account (the Accounts tab)."
-            raise ValidationError(message, code="settings_invalid", details={"fields": {field: message}})
-        chosen[field] = value
-    values = {DEFAULT: chosen["default"] or None}
-    values.update({key: chosen[kind] or None for kind, key in KINDS.items()})
-    values[REPLY_COPY] = "1" if reply_copy else None
-    return _write(actor, "email_senders", values)
 
 
 def forget_account(key):

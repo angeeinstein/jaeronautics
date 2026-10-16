@@ -82,9 +82,9 @@ def admin_email_senders():
           tag=TAG)
 def admin_email_senders_save(body):
     """Choose the default account, and an account of its own for each kind of email."""
-    changed = mail_senders.save(current_user, default=body.default, welcome=body.welcome,
-                                notifications=body.notifications, mailings=body.mailings, replies=body.replies,
-                                reply_copy=body.reply_copy)
+    changed = sections.save_senders(current_user, default=body.default, welcome=body.welcome,
+                                    notifications=body.notifications, mailings=body.mailings, replies=body.replies,
+                                    reply_copy=body.reply_copy)
     db.session.commit()
     return SettingsChangedOut(changed=changed)
 
@@ -175,6 +175,8 @@ def admin_email_sending_save(body):
         current_user, automatic_emails=body.automatic_emails,
         legal_pdfs_in_welcome_emails=body.legal_pdfs_in_welcome_emails,
         automatic_email_template=body.automatic_email_template, admin_general=body.admin_general,
-        admin_error=body.admin_error, user_status=body.user_status, per_hour=body.per_hour, per_day=body.per_day)
+        admin_error=body.admin_error, user_status=body.user_status)
+    changed = sorted(set(changed) | set(mailings_service.save_settings(current_user, per_hour=body.per_hour,
+                                                                      per_day=body.per_day) or []))
     db.session.commit()
     return SettingsChangedOut(changed=changed)

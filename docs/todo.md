@@ -18,8 +18,11 @@ figures and delete, a device's page slimmer, card or SEPA asked before
 Stripe's page), and the batch after it (a sale switching a reader's
 outputs, tabs on long pages and an icon in every panel, the firmware file
 checked by its chip), attendance with the same cards
-(`docs/attendance-plan.md`), and answering contact messages from the portal
-(`docs/messages-plan.md`).
+(`docs/attendance-plan.md`), answering contact messages from the portal
+(`docs/messages-plan.md`), and the batch of 2026-10-16 (Settings › Email
+with its tabs, Admin › Attendance always in the menu, a hint under every
+email field when a university address looks mistyped). The price-list
+proposal below waits for the maintainer's answer.
 
 ## Open
 
@@ -40,103 +43,6 @@ checked by its chip), attendance with the same cards
   deleted item never sold stays out of the list, as now.
 - **Open question:** the proposal above, offered 2026-10-15 (the maintainer
   named hiding, removing, a collapsed section or another list as options).
-
-### Contact form: a hint when a university address looks mistyped
-
-- **Added:** 2026-10-15
-- **What:** on the contact form, when the address typed looks like a
-  university or institute address but does not match one exactly, a small
-  hint under the field that it may be wrong -- best with the likely right
-  one: "Did you mean anna.muster@edu.fh-joanneum.at?". A hint only: the
-  message can still be sent as typed.
-- **Where:** `frontend/src/pages/public/Contact.tsx`, the *Email* field
-  (visitors not signed in; a signed-in person's address is their account's).
-  The domains to compare with are the portal's own, not written into the
-  code: Admin › Settings › General, *University email domains*
-  (`services/institutional_email.py`, `get_student_domains` /
-  `get_staff_domains`; the front end has them from `GET /api/v1/forms/options`,
-  `student_domains`, `staff_domains`).
-- **Why:** "A common mistake that people make is that the email address is
-  edu.fh-joanneum.at but people sometimes switch the point that's meant to
-  separate the subdomain with the hyphen between fh and the joanneum" --
-  `edu-fh.joanneum.at`, `edu.fh.joanneum.at` and the like, and the answer
-  then never arrives.
-- **Decided:** a hint, not a refusal, and **only for what looks like an
-  accident** (asked 2026-10-15): the domain typed, with its dots and hyphens
-  removed, equals one of the portal's domains with theirs removed, but the
-  domain itself differs (`edu-fh.joanneum.at`, `edu.fh.joanneum.at`,
-  `edufh-joanneum.at`); or it is one letter off one of them
-  (`edu.fh-joaneum.at`). Any other address gets no hint at all: `gmail.com`,
-  another university, and the portal's own domains spelled right -- staff's
-  `fh-joanneum.at` is not taken for a mistyped student address.
-- **Everywhere an address is typed** (2026-10-15: "if it's a very small
-  fix, I think this makes sense" -- it is): one check and one hint shown
-  under each field, the same wording everywhere --
-  - the contact form (`pages/public/Contact.tsx`);
-  - signing in (`pages/public/SignIn.tsx`) and *Forgot password*
-    (`pages/public/ForgotPassword.tsx`), where a mistyped address otherwise
-    only reads as "wrong address or password" / no email arriving;
-  - joining (`pages/public/MembershipForm.tsx`): the sign-in address, and
-    the university/institute address, whose refusal ("Please use your
-    student address") then also says which one was likely meant;
-  - My Account › Contact details (`pages/account/Contact.tsx`) and an
-    admin correcting someone's address (`pages/admin/account/ProfileTab.tsx`).
-
-  Not the test email in Settings. The domains come from
-  `GET /api/v1/forms/options`, which the joining form already loads.
-
-### Admin › Attendance always in the admin menu, its switch there only
-
-- **Added:** 2026-10-16
-- **What:** the admin side menu's *Attendance* (People group) shown always to
-  whoever runs the teams (`teams.manage`), not only while the association's
-  attendance is on or stays are kept. The switch lives on that page only (it
-  already shows at the top while off, at the bottom while on); the
-  *Attendance* panel in Settings › General goes.
-- **Where:** `api/session.py` (`_attendance_admin`: `teams.manage` alone),
-  `frontend/src/frame/adminNavigation.ts`,
-  `frontend/src/pages/admin/settings/General.tsx` (drop `AttendanceSwitch`;
-  remove it from `components/attendance/AttendanceBoard.tsx` if unused),
-  `docs/attendance-plan.md` ("As built", Admin › Attendance),
-  `docs/frontend-structure.md` (the admin sidebar).
-- **Why:** "it would be more consistent if we have this sidebar menu for
-  attendance always shown, and the switch to turn on and off attendance is
-  in this sidebar [page], because this would then match how the teams see
-  this." A team's *Attendance* is always in its menu for those who run it
-  (under People while on, under Settings while off), with the switch on the
-  page.
-- **Decided:** as above; the off page shows only the switch (and the hours
-  while stays are kept), as the team's does.
-
-### Settings › Email: one page with tabs for everything about sending email
-
-- **Added:** 2026-10-16; **agreed as proposed** the same day ("I like this
-  proposal as is"): General keeps its name.
-- **What the maintainer asked:** "we could merge all of those mailing
-  settings … at least … which sender account something is sent from. So the
-  notification emails, the mailings, and the replies … and the welcome
-  emails … maybe like we already did for some other sites with the tabs."
-  Today they are spread over Settings › General (welcome email), Settings ›
-  Notifications, Settings › Mailings, Settings › Mail accounts and Settings
-  › Test email; each "From" falls back to another (replies → mailings →
-  notifications → the welcome email's sender).
-- **Proposal:** one entry, **Settings › Email**, replacing Notifications,
-  Mailings, Mail accounts and Test email, with tabs (`PageTabs`):
-  1. **Senders** -- one panel, *Which account sends what*: a **default
-     account**, then Welcome emails, Notifications (to admins and members),
-     Announcements and team mailings, Replies to contact messages -- each
-     "Empty: the default" -- and the reply copy setting.
-  2. **What goes out** -- the welcome email (sent by itself, template, legal
-     PDFs attached), the notifications (which kinds go out, how each channel
-     stands), the mailings' limits an hour and a day.
-  3. **Accounts** -- the mail accounts (add, test, remove, import and
-     export); only with `settings.credentials`, as now.
-  4. **Test** -- send a test email; only with `notifications.manage`.
-- **The university email domains stay in General**: they decide who counts
-  as a student or staff (the membership kinds, confirming a university
-  address), not how email is sent. General then holds *Signing up* (paying
-  by invoice) and *University email domains* (its attendance switch goes to
-  Admin › Attendance, the item above).
 
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 

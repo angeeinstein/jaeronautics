@@ -9,7 +9,7 @@ import pytest
 
 from conftest import db
 from aeronautics_members.db_models import AuditLog, ContactReply, MailAccount
-from aeronautics_members.services import mail_senders, messages
+from aeronautics_members.services import messages, settings_sections
 from aeronautics_members.services.privacy import erase_account, export_account_data
 from api_helpers import send
 from test_messages import FORM, _verified, admins  # noqa: F401
@@ -58,8 +58,8 @@ def written(app, admins, accounts, mail):  # noqa: F811
 
 
 def _reply_settings(sender="support", copy=False):
-    mail_senders.save(None, default="", welcome="", notifications="", mailings="office", replies=sender,
-                      reply_copy=copy)
+    settings_sections.save_senders(None, default="", welcome="", notifications="", mailings="office",
+                                   replies=sender, reply_copy=copy)
     db.session.commit()
 
 

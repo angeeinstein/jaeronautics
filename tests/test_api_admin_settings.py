@@ -108,11 +108,11 @@ class TestEmailSenders:
         assert response.status_code == 400 and "welcome" in response.get_json()["error"]["fields"]
 
     def test_an_account_removed_hands_what_it_sent_to_the_default(self, app):
-        from aeronautics_members.services import mail_senders
+        from aeronautics_members.services import mail_senders, settings_sections
 
         _accounts()
-        mail_senders.save(None, default="office", welcome="support", notifications="", mailings="support",
-                          replies="", reply_copy=False)
+        settings_sections.save_senders(None, default="office", welcome="support", notifications="",
+                                       mailings="support", replies="", reply_copy=False)
         db.session.commit()
 
         assert mail_senders.forget_account("support") == ["welcome", "mailings"]
