@@ -89,7 +89,7 @@ def account_attendance():
 
 
 class PeriodQuery(Model):
-    #: Local days, both included; default: this month up to today.
+    #: Attendance days (03:15 to 03:15), both included; default: this month up to today.
     start: date | None = None
     end: date | None = None
 
@@ -151,7 +151,7 @@ class SwitchOut(Model):
 
 
 def _period(query):
-    today = attendance.local(get_now_utc()).date()
+    today = attendance.day_of(get_now_utc())
     start = query.start or today.replace(day=1)
     end = query.end or today
     if end < start:

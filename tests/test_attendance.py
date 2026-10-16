@@ -129,6 +129,37 @@ class TestCounting:
         reason, today = attendance.check_in(hangar, anna, now=_at(15, 9, 0))
         assert reason is None and today.id != forgotten.id
 
+    def test_a_late_night_is_one_stay_on_the_evening_it_began(self, app, anna, doors, rocket):
+        """The day runs from 03:15 to 03:15 (found in review, PR #39: at
+        midnight a stay begun at 22:00 was closed and the check-out refused)."""
+        (hangar, _key), _workshop = doors
+        team, _lead = rocket
+        _reason, stay = attendance.check_in(hangar, anna, now=_at(14, 22, 0))
+
+        assert attendance.close_forgotten(now=_at(15, 0, 30)) == 0
+        reason, out = attendance.check_out(hangar, anna, now=_at(15, 1, 30))
+
+        assert reason is None and out.id == stay.id and attendance.minutes(stay) == 210
+        # Begun after midnight, it is the evening before's too.
+        attendance.check_in(hangar, anna, now=_at(15, 2, 0))
+        attendance.check_out(hangar, anna, now=_at(15, 3, 0))
+        day = _at(14, 12, 0).date()
+        assert len(attendance.stays(team, user=anna, start=day, end=day)) == 2
+        rows = {row["user"].id: row["minutes"] for row in attendance.hours(team, day, day)}
+        assert rows[anna.id] == 270
+
+    def test_open_at_03_15_it_is_closed(self, app, anna, doors):
+        (hangar, _key), _workshop = doors
+        attendance.check_in(hangar, anna, now=_at(15, 1, 0))
+
+        assert attendance.close_forgotten(now=_at(15, 3, 14)) == 0
+        assert attendance.close_forgotten(now=_at(15, 3, 15)) == 1
+
+    def test_the_attendance_day_of_a_moment(self, app):
+        assert attendance.day_of(_at(15, 3, 14)) == _at(14, 12, 0).date()
+        assert attendance.day_of(_at(15, 3, 15)) == _at(15, 12, 0).date()
+        assert attendance.day_start(_at(15, 12, 0).date()) == _at(15, 3, 15).replace(tzinfo=None)
+
     def test_checking_in_closes_yesterdays_open_stay_itself(self, app, anna, doors):
         (hangar, _key), _workshop = doors
         attendance.check_in(hangar, anna, now=_at(14, 16, 0))

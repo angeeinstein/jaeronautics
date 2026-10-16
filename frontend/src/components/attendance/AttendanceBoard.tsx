@@ -34,7 +34,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { ApiError, type Schemas } from '../../api/client';
-import { formatDate, formatMinutes, formatTime, fromVienna, viennaParts } from '../../lib/format';
+import {
+  attendanceDay,
+  formatDate,
+  formatMinutes,
+  formatTime,
+  fromVienna,
+  viennaParts,
+} from '../../lib/format';
 import { EVERY_30_SECONDS, useLiveRefresh } from '../../lib/live';
 import { notifyDone, notifyFailed } from '../../lib/notify';
 import { ConfirmButton } from '../ConfirmButton';
@@ -71,8 +78,9 @@ interface Period {
   end: string;
 }
 
+/** Today's attendance day: until 03:15 still yesterday's. */
 function today(): string {
-  return viennaParts(new Date().toISOString()).day;
+  return attendanceDay(new Date().toISOString());
 }
 
 function lastDayOf(year: number, month: number): string {
@@ -147,7 +155,9 @@ interface StayFormProps {
 
 function StayForm({ api, stay, userId, people, onDone }: StayFormProps) {
   const client = useQueryClient();
-  const started = stay ? viennaParts(stay.started_at) : { day: today(), time: '' };
+  const started = stay
+    ? viennaParts(stay.started_at)
+    : { day: viennaParts(new Date().toISOString()).day, time: '' };
   const ended = stay?.ended_at ? viennaParts(stay.ended_at) : { day: started.day, time: '' };
   const [who, setWho] = useState<string | null>(userId !== undefined ? String(userId) : null);
   const [inDay, setInDay] = useState(started.day);

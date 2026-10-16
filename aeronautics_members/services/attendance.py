@@ -13,10 +13,13 @@ from 11:15).
   a team's by its leads or an admin, the association's by admins.
 - Who may check in (:func:`may_check_in`): at a team's reader its active
   members, at the association's any active member -- one rule, in one place.
+- An attendance **day** runs from 03:15 to 03:15 (:data:`DAY_DIVIDE`): a stay
+  belongs to the day it started on, one begun after midnight to the evening
+  before, and is never split. Checked in at 22:00, out at 01:30 is one stay.
 - A stay still open from a day before is closed **not checked out**
-  (:func:`close_forgotten`: every night at 03:15, and whenever that person
-  checks in again) and counts nothing until somebody of the team sets when
-  it ended (:func:`change_stay`). Corrections keep who made them; each is in
+  (:func:`close_forgotten`: every night at 03:15, on every page that shows
+  stays, and whenever that person checks in or out) and counts nothing until
+  somebody of the team sets when it ended (:func:`change_stay`). Corrections keep who made them; each is in
   the audit log with what it was before.
 """
 
@@ -66,9 +69,22 @@ def _minute(moment):
     return _aware(moment).replace(second=0, microsecond=0)
 
 
+#: Where one attendance day ends and the next begins, local time: late nights
+#: in the workshop stay on the evening they began. The night's run is at this
+#: time too (``reconcile-billing``); Vienna's clock changes at 02:00/03:00, so
+#: 03:15 is there every day.
+DAY_DIVIDE = time(3, 15)
+
+
 def day_start(day):
-    """The first moment of a local day, as stored (UTC)."""
-    return _stored(datetime.combine(day, time.min, tzinfo=MEMBERSHIP_TIMEZONE))
+    """The first moment of an attendance day -- 03:15 local -- as stored (UTC)."""
+    return _stored(datetime.combine(day, DAY_DIVIDE, tzinfo=MEMBERSHIP_TIMEZONE))
+
+
+def day_of(moment):
+    """The attendance day a moment belongs to: before 03:15, the day before."""
+    moment = local(moment)
+    return moment.date() - timedelta(days=1) if moment.time() < DAY_DIVIDE else moment.date()
 
 
 def minutes(stay):
@@ -130,13 +146,14 @@ def _owner_filter(query, owner):
 
 
 def close_forgotten(now=None, user=None):
-    """Stays still open from a day before (local time) closed as not checked
-    out. Every night at 03:15, and for ``user`` when they check in again.
-    Returns how many."""
+    """Stays still open from an attendance day before closed as not checked
+    out: at 03:15 the stays begun before it. Every night at 03:15, on pages
+    that show stays, and for ``user`` when they check in or out. Returns how
+    many."""
     now = now or get_now_utc()
     query = db.select(AttendanceStay).where(
         AttendanceStay.ended_at.is_(None), AttendanceStay.closed_at.is_(None),
-        AttendanceStay.started_at < day_start(local(now).date()),
+        AttendanceStay.started_at < day_start(day_of(now)),
     )
     if user is not None:
         query = query.where(AttendanceStay.user_id == user.id)
@@ -256,7 +273,7 @@ def stay_of(owner, stay_id):
 
 def stays(owner, *, user=None, start=None, end=None):
     """An owner's stays, newest first: of one person, and starting between the
-    local days ``start`` and ``end`` (both included), if given."""
+    attendance days ``start`` and ``end`` (both included), if given."""
     query = _owner_filter(db.select(AttendanceStay), owner)
     if user is not None:
         query = query.where(AttendanceStay.user_id == user.id)
@@ -296,7 +313,7 @@ def eligible(owner):
 
 
 def hours(owner, start, end):
-    """Per person between two local days: minutes counted, stays, how many
+    """Per person between two attendance days: minutes counted, stays, how many
     not checked out -- every member of a team, with a stay or not, and anyone
     else with a stay in that time (a former member). Sorted by name."""
     rows = {user.id: {"user": user, "minutes": 0, "stays": 0, "not_checked_out": 0} for user in members_of(owner)}

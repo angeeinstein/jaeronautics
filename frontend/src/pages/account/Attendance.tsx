@@ -20,7 +20,7 @@ import { type Stay, StayTable, totalMinutes } from '../../components/attendance/
 import { PageHeader } from '../../components/PageHeader';
 import { Panel } from '../../components/Panel';
 import { EmptyState, ErrorState, LoadingState } from '../../components/States';
-import { formatDayOf, formatMinutes, formatTime, viennaParts } from '../../lib/format';
+import { attendanceDay, formatDayOf, formatMinutes, formatTime } from '../../lib/format';
 import { EVERY_30_SECONDS, useLiveRefresh } from '../../lib/live';
 import { MessageLeads } from '../teams/MessageLeads';
 
@@ -30,9 +30,9 @@ const attendanceKey = ['account', 'attendance'] as const;
 
 const monthName = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
-/** "2026-10" of a stay, in Vienna. */
+/** "2026-10" of a stay: of its attendance day, so a night after the 31st stays in its month. */
 function monthOf(stay: Stay): string {
-  return viennaParts(stay.started_at).day.slice(0, 7);
+  return attendanceDay(stay.started_at).slice(0, 7);
 }
 
 function monthLabel(month: string): string {
@@ -40,7 +40,7 @@ function monthLabel(month: string): string {
 }
 
 function thisMonth(): string {
-  return viennaParts(new Date().toISOString()).day.slice(0, 7);
+  return attendanceDay(new Date().toISOString()).slice(0, 7);
 }
 
 /** What the request says: the stay, and room for when they left. */

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  attendanceDay,
   formatDate,
   formatDateTime,
   formatDayOf,
@@ -43,5 +44,13 @@ describe('dates and times', () => {
     expect(fromVienna('2026-03-29', '01:30')).toBe('2026-03-29T00:30:00.000Z');
     expect(viennaParts('2026-07-01T12:05:00Z')).toEqual({ day: '2026-07-01', time: '14:05' });
     expect(formatTime('2026-12-31T23:30:00Z')).toBe('00:30');
+  });
+
+  it('an attendance day runs from 03:15 to 03:15 in Vienna', () => {
+    expect(attendanceDay('2026-10-14T20:00:00Z')).toBe('2026-10-14'); // 22:00
+    expect(attendanceDay('2026-10-15T01:14:00Z')).toBe('2026-10-14'); // 03:14 the night after
+    expect(attendanceDay('2026-10-15T01:15:00Z')).toBe('2026-10-15'); // 03:15
+    expect(attendanceDay('2027-02-28T23:30:00Z')).toBe('2027-02-28'); // 00:30 on 1 March
+    expect(attendanceDay('2026-12-31T23:30:00Z')).toBe('2026-12-31'); // 00:30 on New Year's Day
   });
 });

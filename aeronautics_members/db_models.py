@@ -1216,9 +1216,10 @@ class AttendanceStay(db.Model):
     one of its readers and out at another is one stay. The exact times are
     kept; they count in full minutes.
 
-    Open while ``ended_at`` and ``closed_at`` are both empty. A stay left open
-    overnight is closed at 03:15 as *not checked out* (``closed_at``) and
-    counts nothing until somebody of the team sets when it ended.
+    Open while ``ended_at`` and ``closed_at`` are both empty. A stay still
+    open at 03:15, where one attendance day ends, is closed as *not checked
+    out* (``closed_at``) and counts nothing until somebody of the team sets
+    when it ended.
     """
 
     __tablename__ = "attendance_stays"

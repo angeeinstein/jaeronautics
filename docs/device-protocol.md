@@ -587,8 +587,10 @@ card is tapped. What the portal keeps, for whom, and who sees it:
 - A stay belongs to the reader's owner -- a team, or the association -- not
   to the reader: checked in at one of the team's readers, out at another, is
   one stay.
-- A stay still open at 03:15 the next night is closed as not checked out; the
-  next `check_in` simply starts a new one.
+- A day runs from 03:15 to 03:15: in at 22:00, out at 01:30 is one stay, on
+  the evening it began. A stay still open at 03:15 is closed as not checked
+  out; the next `check_in` simply starts a new one, and a `check_out` then
+  is `not_checked_in`.
 
 Refusals besides the card's (section 8.1: `card_unknown` with its `link`,
 `card_disabled`, `card_blocked`, `account_off`), each with `first_name`:

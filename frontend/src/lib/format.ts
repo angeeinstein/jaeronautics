@@ -87,6 +87,17 @@ export function viennaParts(iso: string): { day: string; time: string } {
   };
 }
 
+/**
+ * The attendance day of a moment ("2026-10-14"): it runs from 03:15 to 03:15 in Vienna, so a stay begun
+ * after midnight belongs to the evening before (services/attendance.py, ``DAY_DIVIDE``).
+ */
+export function attendanceDay(iso: string): string {
+  const { day, time } = viennaParts(iso);
+  if (time >= '03:15') return day;
+  const [year = 0, month = 1, date = 1] = day.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, date - 1)).toISOString().slice(0, 10);
+}
+
 /** How far Vienna's clock is ahead of UTC at ``moment``, in milliseconds. */
 function viennaOffset(moment: number): number {
   const parts = dateTimeParts.formatToParts(new Date(moment));

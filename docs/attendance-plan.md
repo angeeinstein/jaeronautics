@@ -21,9 +21,17 @@ team's members earn ECTS and must be there for a number of hours.
   at the association's, any active member. Kept as a rule in one place, so
   another one can be chosen later without changing what is stored ("If we
   need some different behavior, we could change this in the future").
-- **A forgotten check-out:** every night at 03:15 a stay still open from the
-  day before is closed as **not checked out**, and counts **0 h until it is
-  corrected**. The next check-in then simply starts a new stay.
+- **The day runs from 03:15 to 03:15** (agreed 2026-10-16, after Codex's
+  review of PR #39: at midnight a stay begun at 22:00 was closed and its
+  check-out refused). Like the "day divide" of shift software: a stay belongs
+  to the day it began on -- one begun after midnight to the evening before
+  -- and is never split; periods, months and totals count by that day.
+  Rejected: closing at midnight (late nights in the workshop happen), a
+  maximum length (does not answer "who is here today"), a setting for the
+  time (nobody needs another).
+- **A forgotten check-out:** a stay still open at 03:15 is closed as **not
+  checked out**, and counts **0 h until it is corrected**. The next check-in
+  then simply starts a new stay.
 - **Corrections by whoever runs attendance for the team** (below): add a stay
   forgotten altogether, set or change a check-out (or check-in), delete a
   stay. Each keeps who made it, when, and what it was before; the member sees
@@ -71,9 +79,11 @@ team's members earn ECTS and must be there for a number of hours.
 - **The reader:** device type *Attendance*, reports `check_in` and
   `check_out` (`docs/device-protocol.md`, 8.2). A reader belongs to a team, or
   to nobody -- the association.
-- **The night:** `reconcile-billing` at 03:15 closes the stays started before
-  that day; every page that shows stays does the same first, so nothing waits
-  for the night.
+- **The night:** `reconcile-billing` at 03:15 closes the stays begun before
+  it; every page that shows stays, and each check-in and check-out, does the
+  same first, so nothing waits for the night. The time is
+  `attendance.DAY_DIVIDE`; the front end's `attendanceDay` (`lib/format.ts`)
+  says the same.
 - **Pages:**
   - My Account › Attendance (`/account/attendance`): a panel per team, a
     month at a time, the month's total and the total altogether; *Ask for a
