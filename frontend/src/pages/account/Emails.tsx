@@ -7,6 +7,7 @@
  */
 import { Button, Group, Stack, Text } from '@mantine/core';
 import { useMutation } from '@tanstack/react-query';
+import { IconMail } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../api/client';
 import { Panel } from '../../components/Panel';
@@ -78,7 +79,7 @@ function AddressLine({ label, address }: { label: string; address: Address }) {
 /** For an account without a membership: its login address, which there are no contact details to show. */
 export function EmailsCard({ email }: { email: Address }) {
   return (
-    <Panel title="Email address">
+    <Panel icon={IconMail} title="Email address">
       <AddressLine label="Your login" address={email} />
     </Panel>
   );

@@ -152,6 +152,37 @@ What the maintainer asked for (2026-10-09):
 - **The association's sales** stay with it. Admin › Credit › *Sold* shows
   each seller's last 30 days and total.
 
+## Where it is shown (agreed and built 2026-10-14)
+
+The maintainer, of Admin › Credit holding tiles, *Sold*, the price list, the
+devices, balances and the latest entries: "this is all a bit mixed up ...
+make it clear what is about a device, what is about some history or some
+logs, and where do they belong". Now:
+
+- **Admin › Credit:** members' money only -- the totals, *Balances*, *Latest*.
+- **Admin › Sales:** what was sold, by seller (the association and each
+  team); then, as tabs, the association's **price list** and its **sales
+  points**' menus.
+- **A team's Sales page** (was *Prices*): the same tabs for the team.
+- **The price list holds its figures** (2026-10-15, replacing a separate
+  *Sold by item* table): Item, Price, Sold, Made, On sale -- how many of each
+  and what it made, "to see what beverages ... are liked by the members and
+  how much money they made with each item", with a *30 days / Ever* switch in
+  the panel's header and a *Together* row. An item can be **deleted** (asked
+  once more): past sales keep its name, and sales points' menus lose it at
+  once; one sold before is shown below, greyed, "No longer on the list".
+  Item names are at most **20** characters (four fit on a small screen),
+  with a counter; a longer one saved before stays until edited.
+- Each panel on the Sales pages has an icon in its header, so the pages are
+  easier to find one's way in ("everything looks rather similar"). Icons on
+  every panel elsewhere: a later batch of its own.
+- **Device pages** (Settings › Devices, a team's *Devices*): technical only.
+  What a sales point sells is a setting marked `with_prices`
+  (`services/device_types.py`), shown and saved only on the Sales pages --
+  before, an owner change could not be saved while the form still sent the
+  old owner's items.
+- The admin sidebar has a *Money* group: *Money*, *Credit*, *Sales*.
+
 ## Who carries Stripe's fees (built 2026-10-09, changed 2026-10-11)
 
 The board had not decided ("they were not fully convinced that … the

@@ -38,9 +38,9 @@ like you proposed."
   - signed in, the form is filled in and the account is attached (member
     number, membership status, the page they came from);
   - visitors give a name and an email address.
-- **Answering:** by normal email. The email to the admins has Reply-To set
-  to the sender. A reply from inside the portal, as formatted HTML, "would be
-  nice" -- later (ideas for later in `docs/todo.md`).
+- **Answering:** from the portal since 2026-10-16 (below, "Answering from
+  the portal"). The email to the admins still has Reply-To set to the
+  sender, so answering it by email still works.
 - **Kept** under Admin › Messages, marked *done* when answered, deleted a
   year after.
 - **Spam:**
@@ -101,6 +101,43 @@ like you proposed."
 - **Privacy policy:** contact messages (what, who sees them, a year), team
   messages, announcements and team mailings (recipients, the record,
   unsubscribing). Added to the 2026-10-08 draft, which is not in force yet.
+
+## Answering from the portal (agreed and built 2026-10-15/16)
+
+> "it's possible to answer a message from within the system … as I'm using
+> my private email address here, as a login, I would also get this admin
+> notification on my private email and when I reply there, I would reply to
+> this person with my private email. And this doesn't look that good and this
+> doesn't fit our professional attitude here."
+
+- **Where:** Admin › Messages, *Reply* on a contact-form message: written
+  there (Markdown: bold, lists, links), sent as HTML and plain text in the
+  portal's email layout, the person's message quoted below it. The message
+  is then *done*; the answer is kept under it -- who wrote it, when, and
+  whether it went out (one that could not is tried again by the
+  notification timer and says so).
+- **Only the contact form's:** "when a team leader is contacted, I don't want
+  them to reply from the same support email address." Messages to a team's
+  leads keep *Answer by email*.
+- **From which account:** Settings › Email, *Senders*, *Replies to contact
+  messages* -- a mail account of its own (a *support* address the
+  maintainer adds on the *Accounts* tab), or, left empty, the default.
+- **The person's answer:** the server receives no mail. A reply goes out
+  with no other Reply-To, so an answer to it lands in that account's mailbox,
+  read in a mail program ("I could just configure this mailbox in Outlook").
+- **A copy:** a setting beside the account -- each reply also goes, as a
+  blind copy, to the account's own address, so the whole conversation is in
+  that mailbox ("you could just make this a setting in the settings page
+  where I set the support email sender").
+- **Later, if wanted:** the portal reading that mailbox (IMAP) and showing
+  answers in the conversation; a separate Reply-To address.
+- **Kept and deleted with the message**; in the sender's data export with
+  their message. The privacy policy draft (2026-10-08) says so.
+- Code: `services/messages.py` (`reply`), `db_models.ContactReply`,
+  `api/messages.py` (`POST /admin/messages/<id>/replies`),
+  `services/mail_senders.py` (the two settings),
+  `frontend/src/components/MessageList.tsx`,
+  `frontend/src/pages/admin/settings/Email.tsx`.
 
 ## Order of building
 

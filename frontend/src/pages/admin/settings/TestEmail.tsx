@@ -1,5 +1,5 @@
 /**
- * Settings -> Test email: one email from a template, filled in as a member's
+ * Settings › Email, *Test*: one email from a template, filled in as a member's
  * would be, from one of the mail accounts -- to see a template, or that an
  * account sends. Data: GET|POST /api/v1/admin/settings/test-email
  * (aeronautics_members/api/admin_mail.py).
@@ -7,13 +7,14 @@
 import { Alert, Button, Group, Select, Stack, TextInput } from '@mantine/core';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconMailForward } from '@tabler/icons-react';
 
 import { api, ApiError, call, type Schemas } from '../../../api/client';
 import { useMe } from '../../../api/session';
 import { Panel } from '../../../components/Panel';
 import { LoadingState } from '../../../components/States';
 import { notifyDone, notifyFailed } from '../../../lib/notify';
-import { SettingsPage } from './shared';
+import { SettingsLoaded } from './shared';
 
 type TestEmailIn = Schemas['TestEmailIn'];
 
@@ -56,7 +57,7 @@ function Form({ data, email }: { data: Schemas['TestEmailOut']; email: string })
     );
   }
   return (
-    <Panel title="Send a test email">
+    <Panel icon={IconMailForward} title="Send a test email">
       <Stack gap="md" maw={520}>
         <Select
           label="From"
@@ -105,16 +106,13 @@ function Form({ data, email }: { data: Schemas['TestEmailOut']; email: string })
   );
 }
 
-export function TestEmail() {
+/** Settings › Email, *Test*: one email from a template, as a member would get it. */
+export function TestEmailTab() {
   // To the person sending it, so the form waits for who that is.
   const me = useMe();
   return (
-    <SettingsPage
-      title="Test email"
-      description="One email from a template, as a member would get it."
-      query={testEmailQuery}
-    >
+    <SettingsLoaded query={testEmailQuery}>
       {(data) => (me.data ? <Form data={data} email={me.data.email} /> : <LoadingState />)}
-    </SettingsPage>
+    </SettingsLoaded>
   );
 }

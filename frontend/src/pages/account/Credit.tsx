@@ -8,7 +8,7 @@
  * (aeronautics_members/api/credit.py).
  */
 import { Alert, Anchor, Button, Group, Loader, NumberInput, Stack, Table, Text } from '@mantine/core';
-import { IconDownload, IconReceipt } from '@tabler/icons-react';
+import { IconDownload, IconHistory, IconReceipt, IconWallet } from '@tabler/icons-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
@@ -75,7 +75,7 @@ function TopUp({ credit }: { credit: MyCredit }) {
 
   if (topUp.refused) {
     return (
-      <Panel title="Top up">
+      <Panel icon={IconWallet} title="Top up">
         <Text c="dimmed">{topUp.refused}</Text>
       </Panel>
     );
@@ -84,7 +84,7 @@ function TopUp({ credit }: { credit: MyCredit }) {
   const otherFits = otherCents !== null && otherCents >= topUp.least_cents && otherCents <= topUp.most_cents;
   const amount = picked === 'other' ? (otherFits ? otherCents : null) : picked;
   return (
-    <Panel title="Top up">
+    <Panel icon={IconWallet} title="Top up">
       <Stack gap="md">
         <Group gap="xs" role="radiogroup" aria-label="How much">
           {topUp.choices.map((cents) => (
@@ -162,6 +162,7 @@ export function History({
 }) {
   return (
     <Panel
+      icon={IconHistory}
       title="History"
       flush
       actions={

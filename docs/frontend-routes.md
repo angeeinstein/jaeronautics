@@ -88,7 +88,8 @@ Status: `[ ]` to do, `[x]` done.
 - `GET /admin/credit/export.csv` (download: every entry, accounts by number), `GET /admin/credit/receipt/<entry_id>` (out: Stripe's receipt)
 - [x] `GET /admin/settings/credit` (page) → `GET|PUT /api/v1/admin/settings/credit`
 - [x] new (2026-10-09): the association's price list on `/admin/credit` → `GET|POST /api/v1/admin/credit/items`, `PUT .../items/<id>`; a sale `POST /api/v1/admin/credit/<user_id>/sale`, taken back `POST .../entries/<entry_id>/take-back`
-- [x] new (2026-10-09): `GET /teams/<slug>/manage/prices` (page) → `GET|POST /api/v1/teams/<slug>/manage/prices`, `PUT .../prices/<id>`
+- [x] new (2026-10-09): `GET /teams/<slug>/manage/prices` (page) → `GET|POST /api/v1/teams/<slug>/manage/prices`, `PUT .../prices/<id>`; since 2026-10-14 the page is `/teams/<slug>/manage/sales` (the old address leads there), with `GET /api/v1/teams/<slug>/manage/sales`
+- [x] new (2026-10-14): `GET /admin/sales` (page) → `GET /api/v1/admin/sales`, the association's price list and devices as before
 - [x] new (2026-10-09): who carries Stripe's fees, on `/admin/money` → `GET|PUT /api/v1/admin/money/settings`
 
 ### 4.6 Logs

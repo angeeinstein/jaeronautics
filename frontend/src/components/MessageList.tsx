@@ -1,20 +1,23 @@
 /**
  * Messages from one person, as their readers see them (docs/messages-plan.md):
  * the admins' (Admin › Messages) or one team's leads' (the team's Messages
- * page). Open ones first; each answered by email -- a reply opens one's own
- * mail program, addressed to the sender -- and marked done once answered.
- * Done ones are kept a year.
+ * page). Open ones first. The contact form's are answered here (``reply``):
+ * written under the message, sent from the mail account chosen for replies,
+ * and kept with it; a team's are answered by email -- a reply opens one's own
+ * mail program, addressed to the sender. Marked done once answered; done ones
+ * are kept a year.
  */
-import { Anchor, Button, Group, SegmentedControl, Stack, Text } from '@mantine/core';
-import { IconMail } from '@tabler/icons-react';
+import { Anchor, Box, Button, Group, SegmentedControl, Stack, Text, Textarea } from '@mantine/core';
+import { IconArrowBackUp, IconMail } from '@tabler/icons-react';
 import { type QueryKey, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import type { Schemas } from '../api/client';
 import { AppLink } from '../app/AppLink';
+import { ApiError } from '../api/client';
 import { formatDateTime } from '../lib/format';
 import { EVERY_MINUTE, useLiveRefresh } from '../lib/live';
-import { notifyFailed } from '../lib/notify';
+import { notifyDone, notifyFailed } from '../lib/notify';
 import { Panel } from './Panel';
 import { Pill } from './Pill';
 import { EmptyState, ErrorState, LoadingState } from './States';
@@ -31,6 +34,103 @@ interface MessageListProps {
   accountLinks?: boolean;
   /** After one is marked: the menu's count, say. */
   onChanged?: () => void;
+  /** Answering from the portal, for the messages that allow it (``can_reply``). */
+  reply?: (id: number, body: string) => Promise<ContactMessage>;
+}
+
+type Reply = ContactMessage['replies'][number];
+
+/** The answers written here, under the message: who, when, and whether it went out. */
+function Replies({ replies }: { replies: Reply[] }) {
+  return (
+    <Stack gap="sm">
+      {replies.map((answer) => (
+        <Box
+          key={answer.id}
+          pl="md"
+          style={{ borderLeft: '2px solid var(--mantine-color-brand-6)' }}
+          aria-label={`Answer of ${formatDateTime(answer.created_at)}`}
+        >
+          <Group gap="xs" wrap="wrap">
+            <Text size="xs" c="dimmed">
+              {`Answered ${formatDateTime(answer.created_at)}${answer.author ? ` by ${answer.author}` : ''}`}
+            </Text>
+            {answer.sent_at ? null : <Pill tone="pending">Not sent yet</Pill>}
+          </Group>
+          <Text size="sm" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+            {answer.body}
+          </Text>
+          {answer.sent_at || !answer.error ? null : (
+            <Text size="xs" c="dimmed">
+              {`Tried again shortly. ${answer.error}`}
+            </Text>
+          )}
+        </Box>
+      ))}
+    </Stack>
+  );
+}
+
+function ReplyForm({
+  message,
+  replyFrom,
+  send,
+  onDone,
+}: {
+  message: ContactMessage;
+  replyFrom: string | null;
+  send: (body: string) => Promise<ContactMessage>;
+  onDone: () => void;
+}) {
+  const [body, setBody] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const sending = useMutation({
+    mutationFn: () => send(body),
+    onSuccess: (answered) => {
+      const last = answered.replies.at(-1);
+      notifyDone(
+        last?.sent_at ? `Sent to ${message.sender_email}.` : 'Saved. It goes out as soon as it can.',
+      );
+      onDone();
+    },
+    onError: (failed) => {
+      if (failed instanceof ApiError && failed.fields.body) setError(failed.fields.body);
+      else notifyFailed(failed);
+    },
+  });
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        sending.mutate();
+      }}
+    >
+      <Stack gap="xs">
+        <Textarea
+          label={`Answer to ${message.sender_name}`}
+          description={`From ${replyFrom ?? 'the mailings account'}. **Bold**, lists and [links](https://…) work.`}
+          autosize
+          minRows={5}
+          maxLength={5000}
+          value={body}
+          error={error}
+          autoFocus
+          onChange={(event) => {
+            setBody(event.currentTarget.value);
+            setError(null);
+          }}
+        />
+        <Group gap="sm">
+          <Button type="submit" size="xs" loading={sending.isPending} disabled={!body.trim()}>
+            Send
+          </Button>
+          <Button size="xs" variant="default" onClick={onDone}>
+            Cancel
+          </Button>
+        </Group>
+      </Stack>
+    </form>
+  );
 }
 
 function replyHref(message: ContactMessage) {
@@ -45,12 +145,18 @@ function MessageCard({
   accountLinks,
   onDone,
   busy,
+  reply,
+  replyFrom,
 }: {
   message: ContactMessage;
   accountLinks: boolean;
   onDone: (done: boolean) => void;
   busy: boolean;
+  reply?: (body: string) => Promise<ContactMessage>;
+  replyFrom: string | null;
 }) {
+  const [writing, setWriting] = useState(false);
+  const answersHere = reply !== undefined && message.can_reply;
   const facts = [
     message.topic_label,
     formatDateTime(message.created_at),
@@ -58,6 +164,7 @@ function MessageCard({
   ].filter(Boolean);
   return (
     <Panel
+      icon={IconMail}
       title={message.subject}
       actions={message.done_at ? <Pill tone="neutral">Done</Pill> : <Pill tone="pending">Open</Pill>}
     >
@@ -82,15 +189,40 @@ function MessageCard({
         <Text size="sm" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
           {message.body}
         </Text>
+        {message.replies.length ? <Replies replies={message.replies} /> : null}
+        {writing && reply ? (
+          <ReplyForm
+            message={message}
+            replyFrom={replyFrom}
+            send={reply}
+            onDone={() => {
+              setWriting(false);
+            }}
+          />
+        ) : null}
         <Group gap="sm">
-          <Button
-            component="a"
-            href={replyHref(message)}
-            size="xs"
-            leftSection={<IconMail size={14} aria-hidden />}
-          >
-            Answer by email
-          </Button>
+          {answersHere ? (
+            writing ? null : (
+              <Button
+                size="xs"
+                leftSection={<IconArrowBackUp size={14} aria-hidden />}
+                onClick={() => {
+                  setWriting(true);
+                }}
+              >
+                Reply
+              </Button>
+            )
+          ) : (
+            <Button
+              component="a"
+              href={replyHref(message)}
+              size="xs"
+              leftSection={<IconMail size={14} aria-hidden />}
+            >
+              Answer by email
+            </Button>
+          )}
           <Button
             size="xs"
             variant="default"
@@ -112,7 +244,14 @@ function MessageCard({
   );
 }
 
-export function MessageList({ queryKey, load, markDone, accountLinks = false, onChanged }: MessageListProps) {
+export function MessageList({
+  queryKey,
+  load,
+  markDone,
+  accountLinks = false,
+  onChanged,
+  reply,
+}: MessageListProps) {
   const [state, setState] = useState<MessageState>('open');
   const client = useQueryClient();
   const key = [...queryKey, state];
@@ -164,6 +303,17 @@ export function MessageList({ queryKey, load, markDone, accountLinks = false, on
             onDone={(value) => {
               done.mutate({ id: message.id, value });
             }}
+            replyFrom={list.data.reply_from ?? null}
+            reply={
+              reply
+                ? async (body) => {
+                    const answered = await reply(message.id, body);
+                    void client.invalidateQueries({ queryKey });
+                    onChanged?.();
+                    return answered;
+                  }
+                : undefined
+            }
           />
         ))
       ) : (

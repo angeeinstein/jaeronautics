@@ -61,6 +61,16 @@ class MessageSentOut(Model):
     message: str
 
 
+class ContactReplyOut(Model):
+    id: int
+    body: str
+    author: str | None
+    created_at: UtcDateTime
+    #: None while its email has not gone out; ``error`` says why.
+    sent_at: UtcDateTime | None
+    error: str | None
+
+
 class ContactMessageOut(Model):
     id: int
     topic: str | None
@@ -78,11 +88,21 @@ class ContactMessageOut(Model):
     delivered: bool
     done_at: UtcDateTime | None
     done_by: str | None
+    #: Answers written in the portal (the contact form's only), oldest first.
+    replies: list[ContactReplyOut]
+    #: Whether it can be answered from the portal: the contact form's can.
+    can_reply: bool
 
 
 class ContactMessagesOut(Model):
     items: list[ContactMessageOut]
     open_count: int
+    #: The address answers written here go out from (Settings › Email, Senders).
+    reply_from: str | None
+
+
+class ReplyIn(Model):
+    body: str = Field(max_length=10000)
 
 
 class MessagesQuery(Model):
@@ -117,13 +137,20 @@ def message_out(message):
         delivered=message.delivered_at is not None,
         done_at=message.done_at,
         done_by=_name(message.done_by),
+        replies=[ContactReplyOut(id=answer.id, body=answer.body, author=_name(answer.author),
+                                 created_at=answer.created_at, sent_at=answer.sent_at, error=answer.error)
+                 for answer in message.replies],
+        can_reply=message.team_id is None,
     )
 
 
 def _list(team, state):
+    from ..services import mailings
+
     return ContactMessagesOut(
         items=[message_out(message) for message in messages_service.messages(team=team, state=state)],
         open_count=messages_service.open_count(team),
+        reply_from=(mailings.account_address(mailings.reply_account()) or None) if team is None else None,
     )
 
 
@@ -176,6 +203,16 @@ def admin_message_done(message_id, body):
     """Mark a message done (answered), or open again."""
     message = messages_service.message_of(message_id)
     return message_out(messages_service.mark_done(current_user, message, body.done))
+
+
+@endpoint("POST", "/admin/messages/<int:message_id>/replies", response=ContactMessageOut, body=ReplyIn,
+          status=201, permissions=[Permission.MESSAGES_RECEIVE], tag="Messages")
+def admin_message_reply(message_id, body):
+    """Answer a contact message from the portal: emailed to its sender from the
+    account chosen for replies; the message is then done."""
+    message = messages_service.message_of(message_id)
+    messages_service.reply(current_user, message, body.body)
+    return message_out(message)
 
 
 @endpoint("GET", "/teams/<slug>/manage/messages", response=ContactMessagesOut, query=MessagesQuery, tag="Messages")

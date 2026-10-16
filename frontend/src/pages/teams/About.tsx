@@ -12,6 +12,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type SyntheticEvent, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
+import { IconDoorEnter } from '@tabler/icons-react';
 
 import { api, ApiError, call } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
@@ -145,6 +146,7 @@ function Joining({ team }: { team: Team }) {
   const joining = team.joining;
   return (
     <Panel
+      icon={IconDoorEnter}
       title={
         active
           ? 'Membership'

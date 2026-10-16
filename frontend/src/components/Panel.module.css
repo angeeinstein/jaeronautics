@@ -16,3 +16,8 @@
 .body {
   padding: 1rem;
 }
+
+.icon {
+  flex: none;
+  color: var(--ja-accent);
+}

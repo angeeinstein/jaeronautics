@@ -40,7 +40,6 @@ const overview: Schemas['CreditOverviewOut'] = {
   people: [{ user_id: 3, name: 'Anna Berger', picture_url: null, balance_cents: 1500, erased: false }],
   recent: [entry],
   mismatched: [],
-  sellers: [{ name: 'Joanneum Aeronautics', team_slug: null, earned_30_days: 120, earned: 120, items: 1 }],
 };
 
 const holder: Schemas['CreditHolderOut'] = {

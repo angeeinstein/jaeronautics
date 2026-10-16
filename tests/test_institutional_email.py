@@ -296,8 +296,7 @@ class TestTheAdminSetting:
         from api_helpers import send
 
         response = send(admin, "PUT", "/api/v1/admin/settings/general", {
-            "invoice_payments": False, "automatic_emails": False, "legal_pdfs_in_welcome_emails": False,
-            "institutional_email_domains": "partner.example, other.example",
+            "invoice_payments": False, "institutional_email_domains": "partner.example, other.example",
         })
 
         assert response.status_code == 200 and "institutional_email_domains" in response.get_json()["changed"]

@@ -11,16 +11,17 @@ Two sides:
 
 from typing import Any, Literal
 
-from flask import current_app, request
+from flask import Response, current_app, jsonify, request, send_file
 from flask_login import current_user
 from pydantic import Field
 
 from ..app import limiter, rate_limit_network
-from ..config import RATELIMIT_DEVICE, RATELIMIT_DEVICE_PER_IP
+from ..config import RATELIMIT_DEVICE, RATELIMIT_DEVICE_PAIR, RATELIMIT_DEVICE_PER_IP
 from ..db_models import Team, db
 from ..permissions import Permission
 from ..security_utils import build_public_url
-from ..services import ServiceError, ValidationError, credit_sales, device_starter, device_types
+from ..services import NotFoundError, ServiceError, ValidationError, credit_sales, device_firmware, device_pairing
+from ..services import card_links, device_crashes, device_factory, device_starter, device_types
 from ..services import devices as devices_service
 from ._core import Model, UtcDateTime, endpoint
 
@@ -37,18 +38,26 @@ def device_rate_key():
     return f"device-unknown:{rate_limit_network()}"
 
 
-def _as_device(answer):
+def _as_device(answer, *, listed=True):
     """Sign the request's device in, answer it with ``answer(device)``, and
     record the request and its answer on the device -- a refusal too, when
-    the key named a device -- for watching it from its page."""
+    the key named a device -- for watching it from its page. ``listed=False``:
+    a question it asks every few seconds is listed only when refused."""
     device = None
     try:
         device = devices_service.authenticate(request.headers.get("Authorization"))
         devices_service.seen(device, address=request.remote_addr,
                              firmware=request.headers.get("X-Device-Firmware"),
-                             hardware=request.headers.get("X-Device-Hardware"))
+                             hardware=request.headers.get("X-Device-Hardware"),
+                             board=request.headers.get("X-Device-Board"),
+                             types=devices_service.parse_types(request.headers.get("X-Device-Types")),
+                             outputs=devices_service.parse_outputs(request.headers.get("X-Device-Outputs")))
         result = answer(device)
-        _record_request(device, 200)
+        status = result.status_code if isinstance(result, Response) else 200
+        # "Nothing new" to a device asking every few seconds is not listed: its
+        # last sign of life says it is there, and the list keeps what happened.
+        if status != 304 and listed:
+            _record_request(device, status)
         db.session.commit()
         return result
     except ServiceError as exc:
@@ -96,6 +105,14 @@ def _record_request(device, status, code=None):
 # --- The device API ---------------------------------------------------------------------------
 
 
+class DeviceFirmwareOfferOut(Model):
+    #: The version to install, as its app description names it.
+    version: str
+    size: int
+    #: Of the whole file: check it before installing.
+    sha256: str
+
+
 class DeviceHelloOut(Model):
     device_id: int
     #: Its random ID: "K7MQ-2X9A".
@@ -112,6 +129,14 @@ class DeviceHelloOut(Model):
     #: What it may fetch (GET /device/resources/<name>) and report (POST /device/events).
     resources: list[str]
     reports: list[str]
+    #: SHA-256 of "<code>:<backup code>": the backup code opens the settings on
+    #: the device when the portal cannot be reached.
+    backup_code_hash: str | None
+    #: Firmware to install (GET /device/firmware/file), or none.
+    firmware: DeviceFirmwareOfferOut | None
+    #: Ask for the sign of life this often, in seconds, with If-None-Match:
+    #: the answer is 304 when nothing changed.
+    poll_every: int
     #: The portal's clock, UTC: "2026-10-12T07:38:11Z".
     server_time: str
 
@@ -149,8 +174,20 @@ def _limited(view):
 @endpoint("GET", "/device", response=DeviceHelloOut, public=True, tag="Device")
 @_limited
 def device_hello():
-    """A device's sign of life: who it is, its settings, the time. Bearer key."""
-    return _as_device(lambda device: DeviceHelloOut(**devices_service.hello(device)))
+    """A device's sign of life: who it is, its settings, firmware to install, the
+    time. Bearer key. With ``If-None-Match`` (the ETag of the last answer):
+    304 when nothing but the time changed."""
+
+    def answer(device):
+        body = devices_service.hello(device)
+        tag = devices_service.hello_tag(body)
+        if tag in [part.strip() for part in (request.headers.get("If-None-Match") or "").split(",")]:
+            return Response(status=304, headers={"ETag": tag})
+        response = jsonify(DeviceHelloOut(**body).model_dump(mode="json"))
+        response.headers["ETag"] = tag
+        return response
+
+    return _as_device(answer)
 
 
 @endpoint("GET", "/device/resources/<name>", response=DeviceResourceOut, public=True, tag="Device")
@@ -158,6 +195,23 @@ def device_hello():
 def device_resource(name):
     """Something the device's type offers it, such as a dispenser's items. Bearer key."""
     return _as_device(lambda device: DeviceResourceOut(resource=name, data=devices_service.resource(device, name)))
+
+
+class DeviceCardLinkOut(Model):
+    #: "waiting" (keep the QR code), "opened" (a phone has it), "linked", "expired".
+    state: Literal["waiting", "opened", "linked", "expired"]
+    #: Once linked: whom to greet. May be null.
+    first_name: str | None = None
+
+
+@endpoint("GET", "/device/card-links/<int:link_id>", response=DeviceCardLinkOut, public=True, tag="Device")
+@_limited
+def device_card_link(link_id):
+    """Where the link of a QR code the device shows stands: asked every few
+    seconds while it shows it (services/card_links.py). Bearer key; not
+    listed on the device's page unless refused."""
+    return _as_device(lambda device: DeviceCardLinkOut(**card_links.state_for_device(device, link_id)),
+                      listed=False)
 
 
 @endpoint("POST", "/device/events", response=DeviceReportOut, body=DeviceReportIn, public=True, tag="Device")
@@ -170,8 +224,234 @@ def device_report(body):
     ))
 
 
+class DeviceCrashIn(Model):
+    #: The dump's SHA-256, hex: the same crash sent again has the same.
+    crash_id: str = Field(min_length=64, max_length=64)
+    #: The first 16 hex characters of the crashed program file's SHA-256.
+    build: str = Field(min_length=16, max_length=16)
+    #: The task that crashed: "portal".
+    task: str = Field(max_length=32)
+    #: Where it stopped: "0x4209F87C".
+    pc: str = Field(max_length=10)
+    #: The call path, up to 16 addresses.
+    backtrace: list[str] = Field(default_factory=list, max_length=16)
+    backtrace_corrupted: bool = False
+    reset_reason: Literal["panic", "task_watchdog", "interrupt_watchdog"]
+    #: The dump's size in bytes, at most 128 KB.
+    size: int
+
+
+class DeviceCrashAnswerOut(Model):
+    #: Send the dump now (``PUT /api/v1/device/crash/<crash_id>/file``); false: the portal has it.
+    upload: bool
+
+
+@endpoint("POST", "/device/crash", response=DeviceCrashAnswerOut, body=DeviceCrashIn, public=True, status=201,
+          tag="Device")
+@_limited
+def device_crash(body):
+    """A crash the device had, as ESP-IDF read it from the core dump after the
+    restart (docs/device-protocol.md, 6.5). Bearer key. 201 with ``upload``
+    true: send the dump; 200 with false: the portal has it already. The same
+    ``crash_id`` again is answered as the first time."""
+
+    def answer(device):
+        _crash, upload = device_crashes.report(
+            device, crash_id=body.crash_id, build=body.build, task=body.task, pc=body.pc, backtrace=body.backtrace,
+            backtrace_corrupted=body.backtrace_corrupted, reset_reason=body.reset_reason, size=body.size,
+            firmware=request.headers.get("X-Device-Firmware"))
+        response = jsonify(DeviceCrashAnswerOut(upload=upload).model_dump(mode="json"))
+        response.status_code = 201 if upload else 200
+        return response
+
+    return _as_device(answer)
+
+
+@endpoint("PUT", "/device/crash/<crash_id>/file", public=True, tag="Device")
+@_limited
+def device_crash_file(crash_id):
+    """The core dump of a crash reported before: the raw ELF as the body
+    (``application/octet-stream``), at most 128 KB, checked by its SHA-256.
+    Bearer key. 204; the device may then delete it."""
+
+    def answer(device):
+        if (request.content_length or 0) > device_crashes.MAX_SIZE:
+            raise ValidationError(f"A core dump is at most {device_crashes.MAX_SIZE} bytes.",
+                                  code="crash_file_too_large")
+        device_crashes.store_file(device, crash_id, request.get_data(cache=False)[:device_crashes.MAX_SIZE + 1])
+        return Response(status=204)
+
+    return _as_device(answer)
+
+
+class DeviceFirmwareFileOut(Model):
+    version: str
+    size: int
+    sha256: str
+    #: When it was built, as the file says.
+    built: str | None
+    #: Where to download it, signed in with the device's key.
+    url: str
+
+
+class DeviceFirmwareOut(Model):
+    #: The version the device said it runs (``X-Device-Firmware``).
+    running: str | None
+    #: The firmware it should run; none when none is chosen.
+    wanted: DeviceFirmwareFileOut | None
+    #: Install ``wanted`` now: it runs another version, and has not reported
+    #: that it could not install this one.
+    install: bool
+
+
+class DeviceFirmwareReportIn(Model):
+    #: The version it is about.
+    version: str = Field(min_length=1, max_length=32)
+    #: "started" (installing) or "failed" -- then that version is not offered
+    #: again until an admin asks. That it worked shows with its next request.
+    result: Literal["started", "failed"]
+    #: Why it failed, in words.
+    detail: str | None = Field(default=None, max_length=500)
+
+
+class DeviceManagerIn(Model):
+    #: The card's ID as read: hex.
+    card: str = Field(min_length=1, max_length=40)
+
+
+class DeviceManagerOut(Model):
+    #: Whether this card's holder may open the device's settings.
+    allowed: bool
+    #: Their first name, to greet them; none when not allowed.
+    name: str | None
+
+
+def _firmware_out(device):
+    release = device_firmware.wanted(device)
+    wanted = None
+    if release is not None:
+        wanted = DeviceFirmwareFileOut(version=release.version, size=release.size, sha256=release.sha256,
+                                       built=release.built, url=build_public_url("api.device_firmware_file"))
+    return DeviceFirmwareOut(running=device.firmware, wanted=wanted,
+                             install=device_firmware.offer(device) is not None)
+
+
+@endpoint("GET", "/device/firmware", response=DeviceFirmwareOut, public=True, tag="Device")
+@_limited
+def device_firmware_info():
+    """The firmware the device should run, and whether to install it now. Bearer key."""
+    return _as_device(_firmware_out)
+
+
+@endpoint("GET", "/device/firmware/file", public=True, tag="Device", produces="application/octet-stream")
+@_limited
+def device_firmware_file():
+    """The firmware file the device should run, to install over the air. Bearer
+    key; ``Range`` requests resume a download."""
+
+    def answer(device):
+        release = device_firmware.wanted(device)
+        path = device_firmware.path_of(release) if release is not None else None
+        if path is None or not path.is_file():
+            raise NotFoundError("No firmware is chosen for this device.", code="firmware_none")
+        if (request.headers.get("Range") or "bytes=0-").replace(" ", "").startswith("bytes=0-"):
+            device_firmware.downloading(device, release)
+        response = send_file(path, mimetype="application/octet-stream", conditional=True, etag=release.sha256,
+                             download_name=f"firmware-{release.version}.bin", max_age=0)
+        response.headers["X-Firmware-Version"] = release.version
+        response.headers["X-Firmware-SHA256"] = release.sha256
+        return response
+
+    return _as_device(answer)
+
+
+@endpoint("POST", "/device/firmware", response=DeviceFirmwareOut, body=DeviceFirmwareReportIn, public=True,
+          tag="Device")
+@_limited
+def device_firmware_report(body):
+    """How an update goes: started, or failed. Bearer key."""
+
+    def answer(device):
+        device_firmware.reported(device, result=body.result, version=body.version, detail=body.detail)
+        return _firmware_out(device)
+
+    return _as_device(answer)
+
+
+@endpoint("POST", "/device/manager", response=DeviceManagerOut, body=DeviceManagerIn, public=True, tag="Device")
+@_limited
+def device_manager(body):
+    """Whether a card tapped on the device opens its settings there: its holder
+    manages devices in the portal (admins). Asked each time. Bearer key."""
+    return _as_device(lambda device: DeviceManagerOut(**devices_service.manager(device, body.card)))
+
+
+class DevicePairingStartOut(Model):
+    #: For people: show it on the screen, "K7Q-4X9".
+    code: str
+    #: The device's alone: never shown. Ask with it (POST /device/pair/poll).
+    pairing_id: str
+    #: The approval page with the code filled in: show it as a QR code.
+    url: str
+    #: Seconds the code works.
+    expires_in: int
+    #: Ask this often, in seconds.
+    poll_every: int
+
+
+class DevicePairingPollIn(Model):
+    pairing_id: str = Field(min_length=10, max_length=100)
+
+
+class DevicePairingPollOut(Model):
+    #: "waiting", "refused" (start again only if asked to), or "paired".
+    status: Literal["waiting", "refused", "paired"]
+    poll_every: int | None = None
+    expires_in: int | None = None
+    #: Once paired: the device's key, this once. Keep it; nobody else has it.
+    key: str | None = None
+    #: Once paired: what its sign of life (GET /device) answers.
+    device: DeviceHelloOut | None = None
+
+
+@endpoint("POST", "/device/pair/start", response=DevicePairingStartOut, public=True, status=201, tag="Device")
+@limiter.limit(RATELIMIT_DEVICE_PAIR, key_func=rate_limit_network)
+def device_pair_start():
+    """An unpaired device asks to be paired. No key: it says what it is with the
+    usual headers (X-Device-Hardware, -Firmware, -Board, -Types)."""
+    pairing, secret = device_pairing.start(
+        hardware=request.headers.get("X-Device-Hardware"), firmware=request.headers.get("X-Device-Firmware"),
+        board=request.headers.get("X-Device-Board"),
+        types=devices_service.parse_types(request.headers.get("X-Device-Types")), address=request.remote_addr,
+    )
+    db.session.commit()
+    code = device_pairing.shown(pairing.code)
+    return DevicePairingStartOut(
+        code=code, pairing_id=secret, url=build_public_url("admin.admin_settings_device_pair", code=code),
+        expires_in=int(device_pairing.LASTS.total_seconds()),
+        poll_every=int(device_pairing.POLL_EVERY.total_seconds()))
+
+
+@endpoint("POST", "/device/pair/poll", response=DevicePairingPollOut, body=DevicePairingPollIn, public=True,
+          tag="Device")
+@_limited
+def device_pair_poll(body):
+    """How the pairing stands; once approved, the device's key, this once."""
+    try:
+        answer = device_pairing.poll(body.pairing_id)
+    except ServiceError:
+        db.session.commit()  # an expired pairing is deleted either way
+        raise
+    db.session.commit()
+    if answer.get("device") is not None:
+        answer = {**answer, "device": DeviceHelloOut(**answer["device"])}
+    return DevicePairingPollOut(**answer)
+
+
 #: The device API's views, exempt from CSRF in app.py: devices have no session.
-DEVICE_VIEWS = (device_hello, device_resource, device_report)
+DEVICE_VIEWS = (device_hello, device_resource, device_report, device_firmware_info, device_firmware_file,
+                device_firmware_report, device_manager, device_pair_start, device_pair_poll, device_card_link,
+                device_crash, device_crash_file)
 DEVICE_ENDPOINTS = frozenset(f"api.{view.__name__}" for view in DEVICE_VIEWS)
 
 
@@ -190,7 +470,9 @@ class DeviceChoiceOut(Model):
 class DeviceSettingOut(Model):
     name: str
     label: str
-    kind: Literal["text", "number", "switch", "choice"]
+    #: Or a kind of the type's own, drawn by the front end ("actions": a
+    #: sales point's outputs after a sale).
+    kind: Literal["text", "number", "switch", "choice", "choices", "actions"]
     default: Any
     help: str
     max_length: int
@@ -200,6 +482,10 @@ class DeviceSettingOut(Model):
     choices: list[DeviceChoiceOut] | None = None
     #: Its owner changes it on their own page; otherwise only admins.
     owner_may_change: bool = False
+    #: For "choices": at most this many.
+    most: int | None = None
+    #: Set with the owner's price list, on their Sales page, not on the device's pages.
+    with_prices: bool = False
 
 
 class DeviceResourceInfoOut(Model):
@@ -248,8 +534,26 @@ class DeviceOut(Model):
     last_seen_at: UtcDateTime | None
     last_address: str | None
     firmware: str | None
+    #: The board, as its firmware names it.
+    board: str | None
+    #: The types its firmware can be used as; none when it has not said (then any).
+    supported_types: list[str] | None
+    #: How many outputs it can switch; none when it has not said.
+    outputs: int | None = None
+    #: Opens its settings on the device when the portal cannot be reached.
+    backup_code: str | None
+    #: The firmware it should run, and how that stands: "none" chosen,
+    #: "current", "waiting" (not installed yet), "failed" (it could not).
+    firmware_wanted: str | None
+    firmware_state: Literal["none", "current", "waiting", "failed"]
+    #: The firmware chosen for this device alone; none: what every device runs.
+    firmware_release_id: int | None
+    #: Why it could not install ``firmware_wanted``, as it said.
+    firmware_failed_detail: str | None
     #: Its key as it may be shown: "jadev_3f9a1c2b7d10_…AbCd"; none when revoked.
     key_hint: str | None
+    #: Its key came from pairing: nobody saw it, so there is none to rotate or revoke.
+    paired: bool = False
     key_created_at: UtcDateTime
     #: When the present key was last used (its last sign of life since the key was made).
     key_last_used_at: UtcDateTime | None
@@ -285,8 +589,23 @@ class DeviceOwnerOut(Model):
     label: str
 
 
+class DevicePairingOut(Model):
+    #: As the device shows it: "K7Q-4X9".
+    code: str
+    #: The board's MAC address, its firmware and board, what it can be used as.
+    hardware_id: str | None
+    firmware: str | None
+    board: str | None
+    supported_types: list[str] | None
+    address: str | None
+    created_at: UtcDateTime
+    expires_at: UtcDateTime
+
+
 class DevicesOut(Model):
     items: list[DeviceOut]
+    #: Devices waiting to be paired, the oldest first.
+    pairings: list[DevicePairingOut]
     types: list[DeviceTypeOut]
     #: Who a device can belong to: the association, and each active team.
     owners: list[DeviceOwnerOut]
@@ -319,6 +638,8 @@ class DeviceChangeIn(Model):
     place: str | None = Field(default=None, max_length=300)
     description: str | None = Field(default=None, max_length=600)
     owner: str | None = Field(default=None, max_length=60)
+    #: Another type: its settings start afresh. Only one its firmware can be.
+    type: str | None = Field(default=None, max_length=40)
     enabled: bool | None = None
     settings: dict[str, Any] | None = None
 
@@ -384,7 +705,8 @@ def setting_out(setting, owners):
                    for owner in owners for c in setting.choices(owner)]
     return DeviceSettingOut(name=setting.name, label=setting.label, kind=setting.kind, default=setting.default,
                             help=setting.help, max_length=setting.max_length, minimum=setting.minimum,
-                            maximum=setting.maximum, choices=choices, owner_may_change=setting.owner_may_change)
+                            maximum=setting.maximum, choices=choices, owner_may_change=setting.owner_may_change,
+                            most=setting.most, with_prices=setting.with_prices)
 
 
 def _type_out(device_type, owners=None):
@@ -399,8 +721,15 @@ def _type_out(device_type, owners=None):
     )
 
 
+def pairing_out(pairing):
+    return DevicePairingOut(code=device_pairing.shown(pairing.code), hardware_id=pairing.hardware_id,
+                            firmware=pairing.firmware, board=pairing.board, supported_types=pairing.supported_types,
+                            address=pairing.address, created_at=pairing.created_at, expires_at=pairing.expires_at)
+
+
 def device_out(device):
     device_type = device_types.get(device.type)
+    wanted = device_firmware.wanted(device)
     return DeviceOut(
         id=device.id, code=device.code, name=device.name, label=devices_service.label(device), type=device.type,
         type_label=device_type.label if device_type is not None else device.type,
@@ -408,8 +737,13 @@ def device_out(device):
         place=device.place, description=device.description, hardware_id=device.hardware_id,
         settings=device.settings or {}, enabled=device.enabled,
         online=devices_service.is_online(device), last_seen_at=device.last_seen_at,
-        last_address=device.last_address, firmware=device.firmware,
-        key_hint=devices_service.key_hint(device), key_created_at=device.key_created_at,
+        last_address=device.last_address, firmware=device.firmware, board=device.board,
+        supported_types=device.supported_types, outputs=device.outputs, backup_code=device.backup_code,
+        firmware_wanted=wanted.version if wanted is not None else None,
+        firmware_state=device_firmware.state(device), firmware_release_id=device.firmware_release_id,
+        firmware_failed_detail=device.firmware_failed_detail if device_firmware.state(device) == "failed" else None,
+        key_hint=devices_service.key_hint(device), paired=device.paired_at is not None,
+        key_created_at=device.key_created_at,
         key_last_used_at=devices_service.key_last_used(device), key_revoked_at=device.key_revoked_at,
         created_at=device.created_at,
     )
@@ -436,6 +770,7 @@ def admin_devices():
     """Every device, the types there are, and where devices talk to."""
     owners = _owners()
     return DevicesOut(items=[device_out(device) for device in devices_service.devices()],
+                      pairings=[pairing_out(pairing) for pairing in device_pairing.waiting()],
                       types=[_type_out(t, owners) for t in device_types.all_types()],
                       owners=[DeviceOwnerOut(value=owner_value(o), label=credit_sales.seller_name(o)) for o in owners],
                       server=_server())
@@ -474,7 +809,43 @@ def admin_device_change(device_id, body):
         current_user, devices_service.device_of(device_id),
         name=keep if body.name is None else body.name, place=keep if body.place is None else body.place,
         description=keep if body.description is None else body.description,
-        owner=keep if body.owner is None else owner_of(body.owner), enabled=body.enabled, settings=body.settings)
+        owner=keep if body.owner is None else owner_of(body.owner), enabled=body.enabled, settings=body.settings,
+        type=body.type)
+    db.session.commit()
+    return device_out(device)
+
+
+@endpoint("POST", "/admin/devices/<int:device_id>/backup-code", response=DeviceOut, permissions=MANAGE, tag="Admin")
+def admin_device_backup_code(device_id):
+    """Another backup code: the device gets it with its next sign of life."""
+    device = devices_service.device_of(device_id)
+    devices_service.new_backup_code(current_user, device)
+    db.session.commit()
+    return device_out(device)
+
+
+class DeviceFirmwareChoiceIn(Model):
+    #: The firmware this device runs; none: what every device runs.
+    release_id: int | None = None
+
+
+@endpoint("PUT", "/admin/devices/<int:device_id>/firmware", response=DeviceOut, body=DeviceFirmwareChoiceIn,
+          permissions=MANAGE, tag="Admin")
+def admin_device_firmware(device_id, body):
+    """Which firmware this device runs: one of its own -- to try a version on one device first -- or every device's."""
+    device = devices_service.device_of(device_id)
+    release = device_firmware.release_of(body.release_id) if body.release_id is not None else None
+    device_firmware.choose_for_device(current_user, device, release)
+    db.session.commit()
+    return device_out(device)
+
+
+@endpoint("POST", "/admin/devices/<int:device_id>/firmware/retry", response=DeviceOut, permissions=MANAGE,
+          tag="Admin")
+def admin_device_firmware_retry(device_id):
+    """Offer the firmware the device could not install once more."""
+    device = devices_service.device_of(device_id)
+    device_firmware.try_again(current_user, device)
     db.session.commit()
     return device_out(device)
 
@@ -501,6 +872,81 @@ def admin_device_remove(device_id):
     """Remove a device, its key and its events."""
     devices_service.remove(current_user, devices_service.device_of(device_id))
     db.session.commit()
+
+
+# --- Crash reports: on the device's page, admins only ------------------------------------------
+# (services/device_crashes.py, docs/devices-plan.md, "Crash reports".)
+
+
+class DeviceCrashOut(Model):
+    id: int
+    received_at: UtcDateTime
+    #: The crashed firmware's version, found by its build; none for a build never uploaded.
+    version: str | None
+    #: The first 16 hex of the crashed program file's SHA-256.
+    build: str
+    #: What the device ran when it reported.
+    reported_by: str | None
+    task: str
+    pc: str
+    backtrace: list[str]
+    backtrace_corrupted: bool
+    reset_reason: Literal["panic", "task_watchdog", "interrupt_watchdog"]
+    size: int
+    #: The dump can be downloaded.
+    has_file: bool
+
+
+class DeviceCrashesOut(Model):
+    crashes: list[DeviceCrashOut]
+
+
+def _crashes_out(device):
+    builds = {**device_firmware.builds(), **device_factory.builds()}
+    out = []
+    for crash in device_crashes.crashes(device):
+        version = next((name for elf, name in builds.items() if elf.startswith(crash.build)), None)
+        out.append(DeviceCrashOut(
+            id=crash.id, received_at=crash.received_at, version=version, build=crash.build,
+            reported_by=crash.reported_by, task=crash.task, pc=crash.pc, backtrace=list(crash.backtrace or []),
+            backtrace_corrupted=crash.backtrace_corrupted, reset_reason=crash.reset_reason, size=crash.size,
+            has_file=device_crashes.has_file(crash),
+        ))
+    # Build hashes read from files uploaded before they were kept: kept now.
+    db.session.commit()
+    return DeviceCrashesOut(crashes=out)
+
+
+@endpoint("GET", "/admin/devices/<int:device_id>/crashes", response=DeviceCrashesOut, permissions=MANAGE,
+          tag="Admin")
+def admin_device_crashes(device_id):
+    """The device's crash reports, the newest first."""
+    return _crashes_out(devices_service.device_of(device_id))
+
+
+@endpoint("GET", "/admin/devices/<int:device_id>/crashes/<int:crash_id>/file", permissions=MANAGE, tag="Admin",
+          produces="application/octet-stream")
+def admin_device_crash_file(device_id, crash_id):
+    """A crash's core dump (ELF), for ``espcoredump.py info_corefile``."""
+    device = devices_service.device_of(device_id)
+    crash = device_crashes.crash_of(device, crash_id)
+    if not device_crashes.has_file(crash):
+        raise NotFoundError("The dump of this crash is not here.", code="crash_file_missing")
+    name = f"crash-{device.code}-{crash.received_at:%Y-%m-%d-%H%M}.elf"
+    response = send_file(device_crashes.path_of(crash), mimetype="application/octet-stream", download_name=name,
+                         as_attachment=True, max_age=0)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@endpoint("DELETE", "/admin/devices/<int:device_id>/crashes/<int:crash_id>", response=DeviceCrashesOut,
+          permissions=MANAGE, tag="Admin")
+def admin_device_crash_remove(device_id, crash_id):
+    """Delete a crash report and its dump."""
+    device = devices_service.device_of(device_id)
+    device_crashes.remove(current_user, device_crashes.crash_of(device, crash_id))
+    db.session.commit()
+    return _crashes_out(device)
 
 
 @endpoint("POST", "/admin/devices/<int:device_id>/try", response=DeviceTryOut, body=DeviceTryIn,

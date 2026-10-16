@@ -43,8 +43,21 @@ test.describe('settings', () => {
     await expect(page.getByText(/None set yet\.|One is set\./).first()).toBeVisible();
   });
 
+  test('email: which account sends what, and the old addresses lead to its tabs', async ({ page }) => {
+    await page.goto('/admin/settings/mailings');
+    await expect(page).toHaveURL(/\/admin\/settings\/email#sending$/);
+    await expect(page.getByRole('region', { name: 'Welcome email' })).toBeVisible();
+
+    await page.getByRole('tab', { name: 'Senders' }).click();
+    const senders = page.getByRole('region', { name: 'Which account sends what' });
+    await expect(senders.getByRole('combobox', { name: 'Replies to contact messages' })).toHaveValue(
+      'support',
+    );
+  });
+
   test('a mail account: added, listed without its password, removed', async ({ page }) => {
     await page.goto('/admin/settings/mail');
+    await expect(page).toHaveURL(/\/admin\/settings\/email#accounts$/);
     const form = page.getByRole('region', { name: 'Add an account' });
     await form.getByRole('textbox', { name: 'Key', exact: true }).fill('e2e-office');
     await form.getByRole('textbox', { name: 'SMTP server' }).fill('smtp.example.org');
@@ -78,6 +91,8 @@ test.describe('settings', () => {
     await page.goto('/admin/settings/updates');
 
     await expect(page.getByRole('region', { name: 'Version', exact: true })).toContainText('Installed');
+    // How the last one went is on the second tab.
+    await page.getByRole('tab', { name: 'History' }).click();
     const steps = page.getByRole('list', { name: 'Steps of the last update' });
     await expect(steps.getByRole('listitem')).toHaveCount(12);
     await expect(steps).toContainText('Fetching the front end built by CI: Done');
@@ -88,9 +103,10 @@ test.describe('settings', () => {
   });
 
   test('backup and restore: the steps of a backup, made in the background', async ({ page }) => {
-    await page.goto('/admin/settings/backup');
+    await page.goto('/admin/settings/backup#restore');
 
     await expect(page.getByRole('region', { name: 'Restore' })).toContainText('install.sh --restore');
+    await page.getByRole('tab', { name: 'Backup' }).click();
     await page.getByLabel('Passphrase', { exact: true }).fill('a long enough passphrase');
     await page.getByLabel('Passphrase again').fill('a long enough passphrase');
     await page.getByRole('button', { name: 'Back up' }).click();
@@ -108,10 +124,11 @@ test.describe('settings', () => {
     test.skip(!isMobile, 'phones only');
     for (const path of [
       '/admin/settings/general',
-      '/admin/settings/notifications',
+      '/admin/settings/email',
+      '/admin/settings/email#sending',
+      '/admin/settings/email#accounts',
+      '/admin/settings/email#test',
       '/admin/settings/forum',
-      '/admin/settings/mail',
-      '/admin/settings/test-email',
       '/admin/settings/health',
       '/admin/settings/updates',
       '/admin/settings/backup',

@@ -4,6 +4,7 @@
  */
 import { Box, Text, UnstyledButton } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { IconActivity } from '@tabler/icons-react';
 
 import { AppLink } from '../../../app/AppLink';
 import { AuditPayload, hasPayload } from '../../../components/AuditPayload';
@@ -45,6 +46,7 @@ function ActivityEntry({ entry }: { entry: Entry }) {
 export function ActivityTab({ account }: { account: Account }) {
   return (
     <Panel
+      icon={IconActivity}
       title="Recent activity"
       flush
       actions={<AppLink to={`/admin/logs?user=${String(account.id)}`}>All of it in the log</AppLink>}

@@ -6,6 +6,7 @@ import { Button, Group, PasswordInput, Stack } from '@mantine/core';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { IconLock } from '@tabler/icons-react';
 
 import { api, ApiError, call } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
@@ -44,7 +45,7 @@ export function Password() {
         title="Change password"
         crumbs={[{ label: 'My Account', to: '/account' }, { label: 'Password' }]}
       />
-      <Panel title="Your password">
+      <Panel icon={IconLock} title="Your password">
         <form
           onSubmit={(event) => {
             event.preventDefault();

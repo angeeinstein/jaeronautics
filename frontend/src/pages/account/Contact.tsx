@@ -9,6 +9,7 @@
 import { Button, Group, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconAddressBook } from '@tabler/icons-react';
 
 import { api, ApiError, call, type Schemas } from '../../api/client';
 import { type Detail, Details } from '../../components/Details';
@@ -17,6 +18,7 @@ import { emptyToNull } from '../../lib/forms';
 import { notifyFailed } from '../../lib/notify';
 import { AddressState } from './Emails';
 import { type FormOptions, useTakeSaved } from './shared';
+import { EmailHint } from '../../components/EmailHint';
 
 type Contact = Schemas['ContactOut'];
 type ContactIn = Schemas['ContactIn'];
@@ -117,6 +119,7 @@ export function ContactCard({
   if (!editing)
     return (
       <Panel
+        icon={IconAddressBook}
         title="Contact details"
         actions={
           <Button
@@ -145,7 +148,7 @@ export function ContactCard({
     );
 
   return (
-    <Panel title="Contact details">
+    <Panel icon={IconAddressBook} title="Contact details">
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -163,6 +166,12 @@ export function ContactCard({
                 maxLength={255}
                 {...field('email_private')}
               />
+              <EmailHint
+                value={value.email_private}
+                onUse={(meant) => {
+                  setValue({ ...value, email_private: meant });
+                }}
+              />
               {same(value.email_private, email) ? <AddressState address={email} which="private" /> : null}
             </Stack>
             <Stack gap={6}>
@@ -172,6 +181,12 @@ export function ContactCard({
                 type="email"
                 maxLength={255}
                 {...field('email_work')}
+              />
+              <EmailHint
+                value={value.email_work ?? ''}
+                onUse={(meant) => {
+                  setValue({ ...value, email_work: meant });
+                }}
               />
               {same(value.email_work ?? '', workEmail) ? (
                 <AddressState address={workEmail} which="work" />

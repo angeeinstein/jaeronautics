@@ -7,6 +7,7 @@
  * dialog over a form.
  */
 import { Alert, Anchor, List, Stack, Text, Title } from '@mantine/core';
+import { IconFileText, IconListDetails, IconVersions } from '@tabler/icons-react';
 
 import type { Schemas } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
@@ -93,13 +94,13 @@ export function LegalTextPage({ text }: { text: LegalTextData }) {
     <Stack gap="lg">
       <Head text={text} order={1} />
       <div className={classes.layout}>
-        <Panel title={text.is_translation ? 'English translation' : 'Text'}>
+        <Panel icon={IconFileText} title={text.is_translation ? 'English translation' : 'Text'}>
           <Html text={text} />
         </Panel>
         {text.contents.length || text.others.length ? (
           <Stack gap="lg" className={classes.aside}>
             {text.contents.length ? (
-              <Panel title="Contents">
+              <Panel icon={IconListDetails} title="Contents">
                 <List listStyleType="none" spacing={4} size="sm">
                   {text.contents.map((section) => (
                     <List.Item
@@ -115,7 +116,7 @@ export function LegalTextPage({ text }: { text: LegalTextData }) {
               </Panel>
             ) : null}
             {text.others.length ? (
-              <Panel title="Other versions">
+              <Panel icon={IconVersions} title="Other versions">
                 <List listStyleType="none" spacing={4} size="sm">
                   {text.others.map((other) => (
                     <List.Item key={other.version}>

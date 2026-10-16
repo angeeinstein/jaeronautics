@@ -13,33 +13,40 @@ import { PageHeader } from '../../../components/PageHeader';
 import { ErrorState, LoadingState } from '../../../components/States';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
 
+interface Loads<T> {
+  query: { queryKey: readonly unknown[]; queryFn: () => Promise<T> };
+  children: (data: T) => ReactNode;
+}
+
+/** A section's settings, loaded: waiting, the error, or the form -- a page's, or a tab's. */
+export function SettingsLoaded<T>({ query, children }: Loads<T>) {
+  const loaded = useQuery(query);
+  if (loaded.isPending) return <LoadingState />;
+  if (loaded.isError) return <ErrorState error={loaded.error} onRetry={() => void loaded.refetch()} />;
+  // Keyed by what was loaded, so the form starts afresh from what was saved.
+  return <div key={JSON.stringify(loaded.data)}>{children(loaded.data)}</div>;
+}
+
+export function SettingsHeader({ title, description }: { title: string; description: string }) {
+  return (
+    <PageHeader
+      title={title}
+      description={description}
+      crumbs={[{ label: 'Admin', to: '/admin' }, { label: 'Settings' }, { label: title }]}
+    />
+  );
+}
+
 export function SettingsPage<T>({
   title,
   description,
   query,
   children,
-}: {
-  title: string;
-  description: string;
-  query: { queryKey: readonly unknown[]; queryFn: () => Promise<T> };
-  children: (data: T) => ReactNode;
-}) {
-  const loaded = useQuery(query);
+}: Loads<T> & { title: string; description: string }) {
   return (
     <>
-      <PageHeader
-        title={title}
-        description={description}
-        crumbs={[{ label: 'Admin', to: '/admin' }, { label: 'Settings' }, { label: title }]}
-      />
-      {loaded.isPending ? (
-        <LoadingState />
-      ) : loaded.isError ? (
-        <ErrorState error={loaded.error} onRetry={() => void loaded.refetch()} />
-      ) : (
-        // Keyed by what was loaded, so the form starts afresh from what was saved.
-        <div key={JSON.stringify(loaded.data)}>{children(loaded.data)}</div>
-      )}
+      <SettingsHeader title={title} description={description} />
+      <SettingsLoaded query={query}>{children}</SettingsLoaded>
     </>
   );
 }

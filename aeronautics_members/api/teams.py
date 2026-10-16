@@ -71,6 +71,7 @@ TeamPermissionName = Literal[
     "team.view_members", "team.review_applications", "team.remove_members", "team.write_notes", "team.export",
     "team.edit_settings", "team.send_access_list", "team.view_money", "team.edit_bank_details",
     "team.appoint_treasurer", "team.appoint_leads", "team.edit_prices", "team.messages", "team.devices",
+    "team.attendance",
 ]
 
 #: Applications still to be decided or completed: applied, invited, or approved and paying.
@@ -182,6 +183,8 @@ class TeamPageOut(Model):
     sells_for_credit: bool = False
     #: The team owns devices (a reader at its fridge): its Devices page.
     has_devices: bool = False
+    #: Attendance is switched on for the team: its Attendance page.
+    attendance_enabled: bool = False
     #: For whoever reads the team's messages: those not marked done.
     messages_open: int | None = None
     #: Signed in and the team takes messages: "Message the leads" is shown.
@@ -469,6 +472,7 @@ def _team_out(team, just_paid=None):
         applications_waiting=_waiting(team), access_list_enabled=bool(team.access_list_enabled),
         sells_for_credit=_credit_on(),
         has_devices=P.DEVICES in held and bool(devices_service.devices(team)),
+        attendance_enabled=bool(team.attendance_enabled),
         messages_open=_messages_open(team) if P.MESSAGES in held else None,
         may_message=team.status == teams_service.STATUS_ACTIVE,
         lead_missing=_manages_people(team) and not teams_service.has_lead_in_force(team),

@@ -10,6 +10,7 @@
 import { Alert, Button, Group, Stack, Text, TextInput } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconArchive, IconCoin, IconInfoCircle } from '@tabler/icons-react';
 
 import { api, ApiError, call } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
@@ -65,7 +66,7 @@ function DetailsForm({ team }: { team: TeamOut }) {
     },
   );
   return (
-    <Panel title="Details">
+    <Panel icon={IconInfoCircle} title="Details">
       <Stack gap="md">
         <DetailsFields value={value} onChange={setValue} />
         <Text size="sm" c="dimmed">
@@ -112,7 +113,7 @@ function FeeForm({ team }: { team: TeamOut }) {
     },
   );
   return (
-    <Panel title="Fee">
+    <Panel icon={IconCoin} title="Fee">
       <Stack gap="md">
         <Facts items={[['Now', team.fee.display ?? 'Free']]} />
         <FeeFieldsEditor value={value} onChange={setValue} />
@@ -177,7 +178,7 @@ function ArchiveForm({ team }: { team: TeamOut }) {
 
   if (team.status === 'archived') {
     return (
-      <Panel title="Archived">
+      <Panel icon={IconArchive} title="Archived">
         <Group justify="space-between" gap="sm">
           <Text size="sm" c="dimmed">
             Nobody can join, and leads cannot open it. Restoring makes it available again.
@@ -196,7 +197,7 @@ function ArchiveForm({ team }: { team: TeamOut }) {
     );
   }
   return (
-    <Panel title="Archive">
+    <Panel icon={IconArchive} title="Archive">
       <Stack gap="sm">
         <Text size="sm">
           Its members lose the team at once: its pages, its forum group and the access list. Nothing is

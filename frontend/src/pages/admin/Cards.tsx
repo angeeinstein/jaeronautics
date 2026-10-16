@@ -7,7 +7,7 @@
  * Data: GET /api/v1/admin/cards (aeronautics_members/api/cards.py).
  */
 import { Avatar, Group, Stack, Table, Text, TextInput } from '@mantine/core';
-import { IconSearch } from '@tabler/icons-react';
+import { IconNfc, IconSearch } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -49,6 +49,7 @@ export function Cards() {
         <ErrorState error={cards.error} onRetry={() => void cards.refetch()} />
       ) : (
         <Panel
+          icon={IconNfc}
           title={`${String(cards.data.items.length)} ${cards.data.items.length === 1 ? 'card' : 'cards'}`}
           flush
           actions={

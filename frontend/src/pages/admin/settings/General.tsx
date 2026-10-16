@@ -1,10 +1,13 @@
 /**
- * Settings -> General: how members can pay at signup, the welcome email, and
- * the domains a student's address must be on. Data: GET|PUT
- * /api/v1/admin/settings/general (aeronautics_members/api/admin_settings.py).
+ * Settings -> General: how members can pay at signup, and the domains a
+ * student's or staff member's address must be on. Email -- the welcome email
+ * among it -- is on Settings › Email; the association's attendance switch on
+ * Admin › Attendance. Data: GET|PUT /api/v1/admin/settings/general
+ * (aeronautics_members/api/admin_settings.py).
  */
-import { Checkbox, Select, Stack, Text, TextInput } from '@mantine/core';
+import { Checkbox, Stack, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
+import { IconAt, IconUserPlus } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
 import { Panel } from '../../../components/Panel';
@@ -21,10 +24,6 @@ const generalQuery = {
 function Form({ data }: { data: GeneralOut }) {
   const [value, setValue] = useState<GeneralIn>({
     invoice_payments: data.invoice_payments,
-    automatic_emails: data.automatic_emails,
-    legal_pdfs_in_welcome_emails: data.legal_pdfs_in_welcome_emails,
-    welcome_email_sender: data.welcome_email_sender,
-    automatic_email_template: data.automatic_email_template,
     institutional_email_domains: data.institutional_email_domains,
     staff_email_domains: data.staff_email_domains,
   });
@@ -38,7 +37,7 @@ function Form({ data }: { data: GeneralOut }) {
 
   return (
     <Stack gap="lg">
-      <Panel title="Signing up">
+      <Panel icon={IconUserPlus} title="Signing up">
         <Checkbox
           label="Paying by invoice"
           description="Offered beside paying online when somebody joins."
@@ -48,51 +47,7 @@ function Form({ data }: { data: GeneralOut }) {
           }}
         />
       </Panel>
-      <Panel title="Welcome email">
-        <Stack gap="md">
-          <Checkbox
-            label="Send it by itself"
-            description="To every new member once their membership starts. Off, it is sent only by hand."
-            checked={value.automatic_emails}
-            onChange={(event) => {
-              change('automatic_emails', event.currentTarget.checked);
-            }}
-          />
-          <Select
-            label="From"
-            placeholder="No sender: no welcome email"
-            data={data.senders}
-            clearable
-            value={value.welcome_email_sender ?? null}
-            error={errors.welcome_email_sender}
-            onChange={(sender) => {
-              change('welcome_email_sender', sender);
-            }}
-            maw={420}
-          />
-          <Select
-            label="Template"
-            placeholder="No template"
-            data={data.templates}
-            clearable
-            value={value.automatic_email_template ?? null}
-            error={errors.automatic_email_template}
-            onChange={(template) => {
-              change('automatic_email_template', template);
-            }}
-            maw={420}
-          />
-          <Checkbox
-            label="Attach the legal texts as PDFs"
-            description="The texts the member accepted at signup, in the version they accepted. A team's welcome email gets that team's rules."
-            checked={value.legal_pdfs_in_welcome_emails}
-            onChange={(event) => {
-              change('legal_pdfs_in_welcome_emails', event.currentTarget.checked);
-            }}
-          />
-        </Stack>
-      </Panel>
-      <Panel title="University email domains">
+      <Panel icon={IconAt} title="University email domains">
         <Stack gap="md">
           <Stack gap="xs">
             <TextInput
@@ -144,7 +99,7 @@ export function General() {
   return (
     <SettingsPage
       title="General"
-      description="Signing up, the welcome email, and the students' email domains."
+      description="Signing up, and the university email domains."
       query={generalQuery}
     >
       {(data) => <Form data={data} />}

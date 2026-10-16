@@ -857,6 +857,9 @@ class Team(db.Model):
     # Every team has an access list (migration e5b8d3f1a2c4); nothing is sent
     # until somebody sends it or sets the automatic sending up.
     access_list_enabled = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    #: Its readers record who is there (services/attendance.py): switched on by
+    #: its leads or an admin; off, its readers refuse check-ins.
+    attendance_enabled = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     access_list_recipients = db.Column(db.Text, nullable=True)
     access_list_dates = db.Column(db.String(255), nullable=True)
     access_list_auto_send = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
@@ -1164,8 +1167,8 @@ class CreditEntry(db.Model):
 
 class CreditItem(db.Model):
     """Something sold for credit, at its price: the association's own (no
-    team) or a team's. Never deleted once sold -- switched off instead, so
-    the sales still name it.
+    team) or a team's. Deleting one keeps its row (``deleted_at``), off every
+    list and menu, so what was sold still names it and shows its icon.
     """
 
     __tablename__ = "credit_items"
@@ -1174,19 +1177,81 @@ class CreditItem(db.Model):
     team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True, index=True)
     name = db.Column(db.String(60), nullable=False)
     price_cents = db.Column(db.Integer, nullable=False)
+    #: Its picture on a device's screen: a name of ``credit_sales.ICONS``.
+    icon = db.Column(db.String(30), nullable=False, default="other", server_default="other")
     active = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
     position = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+    #: Deleted from its price list: on no list or menu any more.
+    deleted_at = db.Column(db.DateTime, nullable=True)
 
     team = db.relationship("Team")
+
+
+class SaleTicket(db.Model):
+    """A card tapped on a sales point (services/sales_points.py): the device
+    showed its menu, and may buy one item with this ticket for a few seconds.
+    It belongs to the card, the device and one purchase. Deleted the next day."""
+
+    __tablename__ = "sale_tickets"
+
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(40), nullable=False, unique=True)
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    card_id = db.Column(db.Integer, db.ForeignKey("cards.id", ondelete="CASCADE"), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    #: Bought with: the sale it made.
+    used_at = db.Column(db.DateTime, nullable=True)
+    entry_id = db.Column(db.Integer, db.ForeignKey("credit_entries.id", ondelete="SET NULL"), nullable=True)
+
+    card = db.relationship("Card")
+
+
+class AttendanceStay(db.Model):
+    """Somebody there, from checking in to checking out (services/attendance.py,
+    docs/attendance-plan.md). It belongs to the reader's owner -- a team, or
+    the association (``team_id`` none) -- not to the reader: checked in at
+    one of its readers and out at another is one stay. The exact times are
+    kept; they count in full minutes.
+
+    Open while ``ended_at`` and ``closed_at`` are both empty. A stay still
+    open at 03:15, where one attendance day ends, is closed as *not checked
+    out* (``closed_at``) and counts nothing until somebody of the team sets
+    when it ended.
+    """
+
+    __tablename__ = "attendance_stays"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id", ondelete="CASCADE"), nullable=True, index=True)
+    started_at = db.Column(db.DateTime, nullable=False)
+    ended_at = db.Column(db.DateTime, nullable=True)
+    #: Closed by the nightly step, not checked out: counts nothing until corrected.
+    closed_at = db.Column(db.DateTime, nullable=True)
+    #: Where it was tapped; none when it was entered by hand (or the reader is gone).
+    in_device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)
+    out_device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)
+    #: Who last corrected it -- or entered it by hand -- and when.
+    corrected_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    corrected_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    user = db.relationship("User", foreign_keys=[user_id])
+    team = db.relationship("Team")
+    in_device = db.relationship("Device", foreign_keys=[in_device_id])
+    out_device = db.relationship("Device", foreign_keys=[out_device_id])
+    corrected_by = db.relationship("User", foreign_keys=[corrected_by_user_id])
 
 
 class ContactMessage(db.Model):
     """A message through the contact form, to the site's admins, or to one
     team's leads (``team_id``) -- services/messages.py. Answered by email:
-    the email to the recipients carries the sender as Reply-To. Kept a year
-    after it is marked done.
+    the email to the recipients carries the sender as Reply-To. The contact
+    form's are also answered from the portal (``replies``). Kept a year after
+    it is marked done.
     """
 
     __tablename__ = "contact_messages"
@@ -1212,6 +1277,32 @@ class ContactMessage(db.Model):
     team = db.relationship("Team")
     sender = db.relationship("User", foreign_keys=[sender_user_id])
     done_by = db.relationship("User", foreign_keys=[done_by_user_id])
+    replies = db.relationship("ContactReply", back_populates="message", cascade="all, delete-orphan",
+                              order_by="ContactReply.created_at")
+
+
+class ContactReply(db.Model):
+    """An answer to a contact-form message, written in Admin › Messages and
+    emailed to its sender from the mail account chosen for replies
+    (services/messages.py). Kept, and deleted, with the message.
+    """
+
+    __tablename__ = "contact_replies"
+
+    id = db.Column(db.Integer, primary_key=True)
+    message_id = db.Column(db.Integer, db.ForeignKey("contact_messages.id", ondelete="CASCADE"), nullable=False,
+                           index=True)
+    author_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    body = db.Column(db.Text, nullable=False)
+    #: The mail account it goes out from, as chosen when it was written.
+    account_key = db.Column(db.String(80), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    sent_at = db.Column(db.DateTime, nullable=True)
+    attempts = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    error = db.Column(db.Text, nullable=True)
+
+    message = db.relationship("ContactMessage", back_populates="replies")
+    author = db.relationship("User")
 
 
 class Mailing(db.Model):
@@ -1424,13 +1515,35 @@ class Device(db.Model):
     key_created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     #: Revoked, and no new one made yet: the device cannot sign in.
     key_revoked_at = db.Column(db.DateTime, nullable=True)
+    #: When its key was last handed to it by pairing: nobody saw that key, so
+    #: its page shows no key to rotate or revoke.
+    paired_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     last_seen_at = db.Column(db.DateTime, nullable=True)
     last_address = db.Column(db.String(45), nullable=True)
     firmware = db.Column(db.String(60), nullable=True)
+    #: The board, as its firmware names it (``X-Device-Board``).
+    board = db.Column(db.String(60), nullable=True)
+    #: The types its firmware can be used as (``X-Device-Types``); none when
+    #: it has not said, and then any type may be chosen.
+    supported_types = db.Column(db.JSON, nullable=True)
+    #: How many outputs it can switch -- relays, a lock -- as its firmware says
+    #: (``X-Device-Outputs``); none until it says.
+    outputs = db.Column(db.Integer, nullable=True)
+    #: Opens its settings on the device when the portal cannot be reached: six
+    #: digits, shown to admins on its page. The device gets only a hash.
+    backup_code = db.Column(db.String(12), nullable=True)
+    #: The firmware it should run instead of what every device runs; none: the same.
+    firmware_release_id = db.Column(db.Integer, db.ForeignKey("firmware_releases.id", ondelete="SET NULL"),
+                                    nullable=True, index=True)
+    #: The version it last said it could not install, and why: not offered
+    #: again until an admin asks (*Try again*).
+    firmware_failed_version = db.Column(db.String(32), nullable=True)
+    firmware_failed_detail = db.Column(db.String(255), nullable=True)
 
     team = db.relationship("Team")
+    firmware_release = db.relationship("FirmwareRelease")
     events = db.relationship("DeviceEvent", backref="device", cascade="all, delete-orphan",
                              passive_deletes=True, order_by="DeviceEvent.id.desc()", lazy="dynamic")
 
@@ -1469,12 +1582,130 @@ class DeviceEvent(db.Model):
     at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
     #: "reported", "refused", "error", "key", "tried", ...
     kind = db.Column(db.String(30), nullable=False)
-    #: For a report: what was reported ("ping", "tap").
+    #: For a report: what was reported ("ping", "card").
     name = db.Column(db.String(40), nullable=True)
     event_id = db.Column(db.String(64), nullable=True)
     detail = db.Column(db.String(255), nullable=True)
     data = db.Column(db.JSON, nullable=True)
     answer = db.Column(db.JSON, nullable=True)
+
+
+class DevicePairing(db.Model):
+    """A device asking to be paired (services/device_pairing.py): it shows
+    ``code`` on its screen; an admin enters it and says what the device is; the
+    device, asking with ``secret`` (kept as its hash), then gets its key once.
+    Gone after that, or after ten minutes unanswered."""
+
+    __tablename__ = "device_pairings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    #: For people, shown on the device: "K7Q4X9" (shown as K7Q-4X9).
+    code = db.Column(db.String(6), nullable=False, unique=True)
+    #: The SHA-256 of the long pairing id only the device knows.
+    secret_hash = db.Column(db.String(64), nullable=False, unique=True)
+    hardware_id = db.Column(db.String(17), nullable=True)
+    firmware = db.Column(db.String(60), nullable=True)
+    board = db.Column(db.String(60), nullable=True)
+    supported_types = db.Column(db.JSON, nullable=True)
+    address = db.Column(db.String(45), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    last_poll_at = db.Column(db.DateTime, nullable=True)
+    #: Approved: the device it is now (a new one, or the one it replaces).
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="CASCADE"), nullable=True, index=True)
+    approved_at = db.Column(db.DateTime, nullable=True)
+    approved_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    refused_at = db.Column(db.DateTime, nullable=True)
+
+    device = db.relationship("Device")
+
+
+class FirmwareRelease(db.Model):
+    """A firmware file uploaded for the devices (services/device_firmware.py).
+    What it is was read from the file itself: ESP-IDF's app description. The
+    file is ``storage/firmware/<sha256>.bin``."""
+
+    __tablename__ = "firmware_releases"
+
+    id = db.Column(db.Integer, primary_key=True)
+    version = db.Column(db.String(32), nullable=False, unique=True)
+    project = db.Column(db.String(32), nullable=False)
+    #: When it was built, as the file says: "Oct 14 2026 09:12:44".
+    built = db.Column(db.String(40), nullable=True)
+    idf_version = db.Column(db.String(32), nullable=True)
+    #: The chip it was built for: "esp32s3".
+    chip = db.Column(db.String(20), nullable=True)
+    sha256 = db.Column(db.String(64), nullable=False, unique=True)
+    #: The SHA-256 of the program file (ELF) it was made from, as its app
+    #: description has it: a crash report names its build by this. Filled in
+    #: from the file for those uploaded before 2026-10-16.
+    elf_sha256 = db.Column(db.String(64), nullable=True)
+    size = db.Column(db.Integer, nullable=False)
+    file_name = db.Column(db.String(200), nullable=True)
+    notes = db.Column(db.String(300), nullable=True)
+    uploaded_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    uploaded_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    uploaded_by = db.relationship("User")
+
+
+class FactoryImage(db.Model):
+    """What a fresh board is flashed with from the browser: bootloader, partition
+    table and app in one file, written from address 0 (services/device_factory.py,
+    docs/devices-plan.md, "A fresh board flashed from the portal"). One per chip,
+    a new one replacing the old. The file is ``storage/firmware/factory/<sha256>.bin``."""
+
+    __tablename__ = "firmware_factory_images"
+
+    id = db.Column(db.Integer, primary_key=True)
+    #: The chip its bootloader and app are for: "esp32s3".
+    chip = db.Column(db.String(20), nullable=False, unique=True)
+    #: The app in it, as its app description names it.
+    version = db.Column(db.String(32), nullable=False)
+    project = db.Column(db.String(32), nullable=False)
+    built = db.Column(db.String(40), nullable=True)
+    idf_version = db.Column(db.String(32), nullable=True)
+    sha256 = db.Column(db.String(64), nullable=False)
+    #: The app's program file's SHA-256, as on :class:`FirmwareRelease`.
+    elf_sha256 = db.Column(db.String(64), nullable=True)
+    size = db.Column(db.Integer, nullable=False)
+    file_name = db.Column(db.String(200), nullable=True)
+    uploaded_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    uploaded_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    uploaded_by = db.relationship("User")
+
+
+class DeviceCrash(db.Model):
+    """A crash a device reported after restarting (services/device_crashes.py,
+    docs/devices-plan.md, "Crash reports"): what ESP-IDF read from its core
+    dump, and the dump itself once sent -- ``storage/devices/crashes/<device
+    id>/<crash_id>.elf``. Seen only by admins, on the device's page. Kept 90
+    days; at most 20 dump files a device."""
+
+    __tablename__ = "device_crashes"
+    __table_args__ = (UniqueConstraint("device_id", "crash_id", name="uq_device_crashes_device_crash"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    #: The dump's SHA-256: the same crash sent again has the same.
+    crash_id = db.Column(db.String(64), nullable=False)
+    received_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
+    #: The version the device ran when it reported (``X-Device-Firmware``); the crashed one is found by ``build``.
+    reported_by = db.Column(db.String(32), nullable=True)
+    #: The first 16 hex of the crashed program file's SHA-256.
+    build = db.Column(db.String(16), nullable=False)
+    task = db.Column(db.String(32), nullable=False)
+    pc = db.Column(db.String(10), nullable=False)
+    #: Up to 16 addresses, "0x4209F879".
+    backtrace = db.Column(db.JSON, nullable=False)
+    backtrace_corrupted = db.Column(db.Boolean, nullable=False, default=False)
+    #: "panic", "task_watchdog" or "interrupt_watchdog".
+    reset_reason = db.Column(db.String(24), nullable=False)
+    #: The dump's size, as the device said.
+    size = db.Column(db.Integer, nullable=False)
+    #: When the dump arrived; none while it has not, or once it was let go for room.
+    file_received_at = db.Column(db.DateTime, nullable=True)
 
 
 class Card(db.Model):
@@ -1520,19 +1751,32 @@ class Card(db.Model):
     last_used_device = db.relationship("Device")
 
 
-class CardLinkWait(db.Model):
-    """An admin waiting at a reader for the next unknown card, to link it to
-    someone (services/cards.py). One per reader; it ends after a minute, or
-    with the card it linked."""
+class CardLink(db.Model):
+    """An unknown card tapped on a reader, offered to be linked by its owner's
+    phone through a QR code (services/card_links.py, docs/cards-plan.md). It
+    keeps the card as cards do -- its keyed hash and end, never its ID -- and
+    a random ``token``, which the QR code's address holds. The first phone to
+    open it keeps it (``claim``); it works once, for a few minutes. Deleted
+    the next day."""
 
-    __tablename__ = "card_link_waits"
+    __tablename__ = "card_links"
 
     id = db.Column(db.Integer, primary_key=True)
-    device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, unique=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    requested_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    token = db.Column(db.String(40), nullable=False, unique=True)
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    card_hash = db.Column(db.String(64), nullable=False, index=True)
+    card_tail = db.Column(db.String(8), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     expires_at = db.Column(db.DateTime, nullable=False)
+    #: When a phone first opened it, and that phone's secret.
+    opened_at = db.Column(db.DateTime, nullable=True)
+    claim = db.Column(db.String(40), nullable=True)
+    #: Over before its time: the same card tapped again started a new one.
+    ended_at = db.Column(db.DateTime, nullable=True)
+    #: Used: the card it linked.
+    linked_at = db.Column(db.DateTime, nullable=True)
+    card_id = db.Column(db.Integer, db.ForeignKey("cards.id", ondelete="SET NULL"), nullable=True)
 
     device = db.relationship("Device")
-    user = db.relationship("User", foreign_keys=[user_id])
+    card = db.relationship("Card")
+

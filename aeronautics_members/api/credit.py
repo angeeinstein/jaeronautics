@@ -174,40 +174,9 @@ class AdminCreditEntryOut(CreditEntryOut):
     may_take_back: bool = False
 
 
-class SellerOut(Model):
-    name: str
-    #: None for the association itself.
-    team_slug: str | None
-    #: Sold, less what was taken back, the last 30 days and ever.
-    earned_30_days: int
-    earned: int
-    items: int
-
-
-def _sellers():
-    from datetime import timedelta
-
-    from ..services.clock import get_now_utc
-    from ..services.teams import all_teams
-
-    since = get_now_utc() - timedelta(days=30)
-    rows = []
-    for team in [None, *all_teams()]:
-        listed = credit_sales.items(team)
-        ever = credit_sales.sales_summary(team)["earned"]
-        if team is not None and not listed and not ever:
-            continue
-        rows.append(SellerOut(name=credit_sales.seller_name(team), team_slug=team.slug if team else None,
-                              earned_30_days=credit_sales.sales_summary(team, since)["earned"], earned=ever,
-                              items=len(listed)))
-    return rows
-
-
 class CreditOverviewOut(Model):
     enabled: bool
     totals: CreditTotalsOut
-    #: Who sells for credit -- the association first -- and what they sold.
-    sellers: list[SellerOut]
     people: list[CreditPersonOut]
     recent: list[AdminCreditEntryOut]
     #: Balances that are not the sum of their entries: should never be any.
@@ -239,7 +208,6 @@ def admin_credit():
                                 erased=account.user.deleted_at is not None)
                 for account in accounts],
         recent=_admin_entries(credit.recent_entries(limit=50)),
-        sellers=_sellers(),
         mismatched=credit.mismatched_balances(),
     )
 
@@ -371,24 +339,36 @@ class PriceItemOut(Model):
     id: int
     name: str
     price_cents: int
+    #: Its picture on a device's screen: one of ``icons``.
+    icon: str
     #: Switched off: not sold, still named by the sales made.
     active: bool
+
+
+class ItemIconOut(Model):
+    #: The name the device knows it by: "coffee".
+    value: str
+    label: str
 
 
 class PriceListOut(Model):
     #: Credit is on: what is set here can be sold.
     enabled: bool
     items: list[PriceItemOut]
+    #: The icons an item can have.
+    icons: list[ItemIconOut]
 
 
 class PriceItemIn(Model):
     name: str = Field(max_length=200)
     price_cents: int
+    icon: str = Field(max_length=30)
 
 
 class PriceItemChangeIn(Model):
     name: str | None = Field(None, max_length=200)
     price_cents: int | None = None
+    icon: str | None = Field(None, max_length=30)
     active: bool | None = None
     #: One place up (-1) or down (1).
     move: Literal[-1, 1] | None = None
@@ -396,14 +376,15 @@ class PriceItemChangeIn(Model):
 
 def _price_list(team):
     return PriceListOut(enabled=credit.enabled(), items=[
-        PriceItemOut(id=item.id, name=item.name, price_cents=item.price_cents, active=item.active)
+        PriceItemOut(id=item.id, name=item.name, price_cents=item.price_cents, icon=item.icon, active=item.active)
         for item in credit_sales.items(team, include_inactive=True)
-    ])
+    ], icons=[ItemIconOut(value=value, label=label) for value, label in credit_sales.ICONS])
 
 
 def _change(team, item_id, body):
     item = credit_sales.item_of(item_id, team)
-    credit_sales.update_item(current_user, item, name=body.name, price_cents=body.price_cents, active=body.active)
+    credit_sales.update_item(current_user, item, name=body.name, price_cents=body.price_cents, active=body.active,
+                             icon=body.icon)
     if body.move:
         credit_sales.move_item(current_user, item, body.move)
     db.session.commit()
@@ -420,7 +401,7 @@ def admin_credit_items():
           tag=TAG)
 def admin_credit_item_add(body):
     """Add an item to the association's price list, at the end."""
-    credit_sales.add_item(current_user, name=body.name, price_cents=body.price_cents)
+    credit_sales.add_item(current_user, name=body.name, price_cents=body.price_cents, icon=body.icon)
     db.session.commit()
     return _price_list(None)
 
@@ -430,6 +411,18 @@ def admin_credit_item_add(body):
 def admin_credit_item_change(item_id, body):
     """Rename, reprice, switch off or on, or move one place."""
     return _change(None, item_id, body)
+
+
+def _delete(team, item_id):
+    credit_sales.delete_item(current_user, credit_sales.item_of(item_id, team))
+    db.session.commit()
+    return _price_list(team)
+
+
+@endpoint("DELETE", "/admin/credit/items/<int:item_id>", response=PriceListOut, permissions=MANAGE, tag=TAG)
+def admin_credit_item_delete(item_id):
+    """Delete an item from the association's price list: what was sold still names it."""
+    return _delete(None, item_id)
 
 
 def _priced_team(slug):
@@ -459,7 +452,7 @@ def team_prices(slug):
 def team_price_add(slug, body):
     """Add an item to the team's price list, at the end."""
     team = _priced_team(slug)
-    credit_sales.add_item(current_user, team=team, name=body.name, price_cents=body.price_cents)
+    credit_sales.add_item(current_user, team=team, name=body.name, price_cents=body.price_cents, icon=body.icon)
     db.session.commit()
     return _price_list(team)
 
@@ -469,6 +462,86 @@ def team_price_add(slug, body):
 def team_price_change(slug, item_id, body):
     """Rename, reprice, switch off or on, or move one place."""
     return _change(_priced_team(slug), item_id, body)
+
+
+@endpoint("DELETE", "/teams/<slug>/manage/prices/<int:item_id>", response=PriceListOut, tag=TAG)
+def team_price_delete(slug, item_id):
+    """Delete an item from the team's price list: what was sold still names it."""
+    return _delete(_priced_team(slug), item_id)
+
+
+# --- What was sold, by seller and item (Admin › Sales, a team's Sales page) -------------
+
+
+class ItemSalesOut(Model):
+    #: The item sold; None for a sale of an item from before items were kept.
+    item_id: int | None
+    #: Still on its price list (not deleted).
+    listed: bool
+    name: str
+    #: The icon it has on a device's screen; "other" for a sale of an item since deleted.
+    icon: str
+    #: Sales that stand (a sale taken back counts for neither), and what they made for the seller.
+    sold_30_days: int
+    earned_30_days: int
+    sold: int
+    earned: int
+
+
+class SellerSalesOut(Model):
+    name: str
+    #: None for the association itself.
+    team_slug: str | None
+    #: Items on its price list now.
+    listed: int
+    sold_30_days: int
+    earned_30_days: int
+    sold: int
+    earned: int
+    #: Each item sold, what made most first.
+    items: list[ItemSalesOut]
+
+
+class SalesOverviewOut(Model):
+    #: The association first, then every team that sells or sold.
+    sellers: list[SellerSalesOut]
+
+
+def _seller_sales(team):
+    from datetime import timedelta
+
+    from ..services.clock import get_now_utc
+
+    ever = credit_sales.sales_summary(team)
+    recent = credit_sales.sales_summary(team, get_now_utc() - timedelta(days=30))
+    lately = {row["key"]: row for row in recent["by_item"]}
+    items = [ItemSalesOut(item_id=row["item_id"], listed=row["listed"], name=row["name"], icon=row["icon"],
+                          sold=row["count"], earned=row["earned"],
+                          sold_30_days=lately.get(row["key"], {}).get("count", 0),
+                          earned_30_days=lately.get(row["key"], {}).get("earned", 0))
+             for row in ever["by_item"]]
+    return SellerSalesOut(name=credit_sales.seller_name(team), team_slug=team.slug if team else None,
+                          listed=len(credit_sales.items(team)), sold_30_days=recent["count"],
+                          earned_30_days=recent["earned"], sold=ever["count"], earned=ever["earned"], items=items)
+
+
+@endpoint("GET", "/admin/sales", response=SalesOverviewOut, permissions=MANAGE, tag=TAG)
+def admin_sales():
+    """What was sold for credit, by seller and by item: the last 30 days and ever."""
+    from ..services.teams import all_teams
+
+    rows = [_seller_sales(None)]
+    for team in all_teams():
+        row = _seller_sales(team)
+        if row.listed or row.sold or row.earned:
+            rows.append(row)
+    return SalesOverviewOut(sellers=rows)
+
+
+@endpoint("GET", "/teams/<slug>/manage/sales", response=SellerSalesOut, tag=TAG)
+def team_sales(slug):
+    """What the team sold for credit, by item: the last 30 days and ever."""
+    return _seller_sales(_priced_team(slug))
 
 
 class SaleIn(Model):

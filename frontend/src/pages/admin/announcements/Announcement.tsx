@@ -8,6 +8,7 @@
 import { Code, Stack, Table, Text } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router';
+import { IconFileText, IconMailOff, IconSend } from '@tabler/icons-react';
 
 import { api, call } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
@@ -72,7 +73,7 @@ export function Announcement() {
         }
       />
       <Stack gap="lg">
-        <Panel title="Sending" actions={<MailingStatus mailing={data} />}>
+        <Panel icon={IconSend} title="Sending" actions={<MailingStatus mailing={data} />}>
           <Stack gap="md">
             <MailingProgress mailing={data} />
             <Details
@@ -96,13 +97,13 @@ export function Announcement() {
             ) : null}
           </Stack>
         </Panel>
-        <Panel title="Text">
+        <Panel icon={IconFileText} title="Text">
           <Code block style={{ whiteSpace: 'pre-wrap' }}>
             {data.body}
           </Code>
         </Panel>
         {data.failed_addresses.length ? (
-          <Panel title="Not delivered" flush>
+          <Panel icon={IconMailOff} title="Not delivered" flush>
             <Table.ScrollContainer minWidth={420} type="native">
               <Table verticalSpacing="sm" aria-label="Not delivered">
                 <Table.Thead>

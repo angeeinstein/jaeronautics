@@ -66,6 +66,8 @@ def build_app(db_path):
         "PUBLIC_BASE_URL": BASE,
         # Beside the throwaway database, never the repository's storage.
         "TEAM_LOGO_DIR": str(Path(db_path).parent / "team_logos"),
+        "FIRMWARE_DIR": str(Path(db_path).parent / "firmware"),
+        "DEVICE_CRASH_DIR": str(Path(db_path).parent / "crashes"),
         "BACKUP_STORAGE_DIR": str(Path(db_path).parent / "storage"),
         # In this process, against the throwaway database -- not a second one.
         "BACKUP_RUN_INLINE": True,
@@ -125,10 +127,34 @@ def _an_update_that_ran(system_update):
     system_update.UPDATE_STATE_DIR = state_dir
 
 
+class _MailServer:
+    """A mail server that takes every email and sends none."""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def __getattr__(self, name):  # ehlo, starttls, login, sendmail, quit
+        return lambda *args, **kwargs: None
+
+
 def go_offline(app_module):
-    """Stripe, the forum and the git remote answer without a network."""
+    """Stripe, the forum, the git remote and the mail server answer without a network."""
+    import types
+
+    from aeronautics_members import mail_utils
     from aeronautics_members.forum_service import DiscourseConnectProvider, ForumProviderError
     from aeronautics_members.services import billing, system_update, workflows
+
+    mail_utils.smtplib = types.SimpleNamespace(**{
+        **{name: getattr(mail_utils.smtplib, name) for name in dir(mail_utils.smtplib) if name.startswith("SMTP")},
+        "SMTP": _MailServer, "SMTP_SSL": _MailServer,
+    })
 
     def offline(self, *args, **kwargs):
         raise ForumProviderError("Offline for screenshots.")
@@ -409,10 +435,10 @@ def seed(app, app_module, subscriptions):
     credit.book_cash(admin_user, active.user, 500, note="Handed over at the office")
     from aeronautics_members.services import credit_sales
 
-    coffee = credit_sales.add_item(admin_user, name="Coffee", price_cents=120)
-    credit_sales.add_item(admin_user, name="Tea", price_cents=100)
-    beer = credit_sales.add_item(active.user, team=rocket, name="Beer", price_cents=200)
-    credit_sales.add_item(active.user, team=rocket, name="Mate", price_cents=250)
+    coffee = credit_sales.add_item(admin_user, name="Coffee", price_cents=120, icon="coffee")
+    credit_sales.add_item(admin_user, name="Tea", price_cents=100, icon="tea")
+    beer = credit_sales.add_item(active.user, team=rocket, name="Beer", price_cents=200, icon="beer")
+    credit_sales.add_item(active.user, team=rocket, name="Mate", price_cents=250, icon="mate")
     credit_sales.sell(active.user, coffee, by=admin_user)
     credit.book_cash(admin_user, carla, 1500)
     carla_beer = credit_sales.sell(carla, beer, by=admin_user)
@@ -467,6 +493,26 @@ def seed(app, app_module, subscriptions):
                        created_at=now - timedelta(hours=5)),
     ])
     db.session.commit()
+    # The answered one was answered from the portal (Admin › Messages, Reply),
+    # from the support address, with a copy to it (Settings › Mailings). The
+    # mail server is a stand-in (go_offline): emails "go out" and reach nobody.
+    from aeronautics_members.db_models import ContactReply, MailAccount
+
+    db.session.add_all([
+        MailAccount(account_key="office", host="smtp.example.org", port=465, username="office@example.org",
+                    password="offline", from_name="Joanneum Aeronautics"),
+        MailAccount(account_key="support", host="smtp.example.org", port=465, username="u-4711",
+                    password="offline", from_email="support@example.org", from_name="Joanneum Aeronautics"),
+    ])
+    db.session.add_all([Setting(key="contact_reply_sender", value="support"),
+                        Setting(key="contact_reply_copy", value="1")])
+
+    answered = ContactMessage.query.filter_by(subject="Forum password").one()
+    db.session.add(ContactReply(message=answered, author_user_id=admin_user.id, account_key="support",
+                                body="Use *Forgot password* on the forum's sign-in page, with your private address."
+                                     "\n\nThe link comes within a minute.",
+                                created_at=now - timedelta(days=1), sent_at=now - timedelta(days=1)))
+    db.session.commit()
     announcement = mailings.announce(admin_user, kind="news", audience={"scope": "all"}, subject="Summer party",
                                      body="We meet on **Friday** at the institute.\n\n- Food\n- Drinks")
     for recipient in announcement.recipients[: max(1, len(announcement.recipients) // 2)]:
@@ -499,10 +545,17 @@ def seed(app, app_module, subscriptions):
     from aeronautics_members.services import cards as cards_service
 
     sales_point, _key = devices_service.add(admin_user, name="Rocket fridge", type="sales_point", owner=rocket,
-                                            place="Workshop", settings={"item": beer.id})
+                                            place="Workshop", settings={"items": [beer.id]})
     devices_service.seen(sales_point, address="10.0.0.22", firmware="1.0.0", hardware="24:6F:28:AA:BB:CC",
                          now=now)
     devices_service.add(admin_user, type="sales_point", owner=rocket)
+    # A card tapped there that nobody has linked yet, its QR code opened on a
+    # phone: the page it leads to. Lasts the whole run, not its 10 minutes.
+    from aeronautics_members.services import card_links
+
+    qr_link = card_links.offer(sales_point, "04C0FFEE0000A1")
+    qr_link.expires_at = now + timedelta(days=1)
+    _opened, qr_claim = card_links.open_link(qr_link.token)
     student_card = cards_service.link(active.user, "04A1B2C3D4E5F6", name="Student card", by=active.user,
                                       how=cards_service.BY_PHONE)
     fob = cards_service.link(active.user, "04112233445566", name="Key fob", by=admin_user,
@@ -517,6 +570,91 @@ def seed(app, app_module, subscriptions):
         credit_sales.READER, None, carlas, sales_point)
     for card in (student_card, carlas):
         card.last_used_at, card.last_used_device_id = now, sales_point.id
+
+    # One device for everything (docs/devices-plan.md): what the boards say they
+    # are, a firmware version tried on the fridge first -- the Fridge reader
+    # could not install it -- and a device waiting to be paired.
+    from aeronautics_members.services import device_firmware, device_pairing, firmware_image
+
+    devices_service.seen(sales_point, board="jae-terminal-s3", types=["sales_point", "test"], outputs=2, now=now)
+    # The fridge's lock opens for five seconds after any sale; output 2 rings a bell for a beer.
+    devices_service.change(admin_user, sales_point, settings={"actions": {"on": True, "lines": [
+        {"item": None, "output": 1, "seconds": 5}, {"item": beer.id, "output": 2, "seconds": 0.5}]}})
+    devices_service.seen(fridge, board="jae-terminal-s3", types=["sales_point", "test"],
+                         hardware="98:A3:16:E5:06:3C", now=now)
+    release = device_firmware.upload(admin_user, firmware_image.example("1.1.0"), file_name="jae-terminal.bin",
+                                     notes="Shows the balance after each sale")
+    device_firmware.choose_for_device(admin_user, sales_point, release)
+    device_firmware.choose_for_device(admin_user, fridge, release)
+    device_firmware.reported(fridge, result="failed", version="1.1.0", detail="Not enough space for the update")
+    # What a fresh board is flashed with (the Firmware page's New device tab).
+    from aeronautics_members.services import device_factory
+
+    device_factory.upload(admin_user, firmware_image.factory_example("1.0.0"), file_name="jae-terminal-factory.bin")
+    # A crash the fridge reported: one with its dump, by the version tried on it; one older, of a build never uploaded.
+    import hashlib
+
+    from aeronautics_members.services import device_crashes
+
+    for seed, build, reason, days in ((b"a", release.elf_sha256[:16], "panic", 0),
+                                      (b"b", "0123456789abcdef", "task_watchdog", 3)):
+        dump = b"\x7fELF\x01\x01\x01" + b"\0" * 9 + seed * 41000
+        crash, _upload = device_crashes.report(
+            fridge, crash_id=hashlib.sha256(dump).hexdigest(), build=build, task="portal", pc="0x4209F87C",
+            backtrace=["0x4209F879", "0x4209FB05", "0x4209D2EA", "0x42008809", "0x4037D5A1"],
+            backtrace_corrupted=False, reset_reason=reason, size=len(dump), firmware="1.0.0")
+        crash.received_at = now - timedelta(days=days, hours=2)
+        if days == 0:
+            device_crashes.store_file(fridge, crash.crash_id, dump)
+    pairing, _secret = device_pairing.start(hardware="24:6F:28:12:34:56", firmware="1.0.0", board="jae-terminal-s3",
+                                            types=["sales_point", "test"], address="10.0.0.40", now=now)
+    # Waiting all day: the screenshots of its page come later than ten minutes.
+    pairing.expires_at = now + timedelta(days=1)
+
+    # Attendance (docs/attendance-plan.md): on for the Rocket Team, with its
+    # two readers; Anna's stays this month -- one not checked out, one
+    # corrected by hand -- and Carla checked in now. One stay of Anna's at the
+    # association's reader, kept while the association's attendance is off.
+    from aeronautics_members.db_models import AttendanceStay
+
+    rocket.attendance_enabled = True
+    hangar, _key = devices_service.add(admin_user, name="Hangar door", type="attendance", owner=rocket,
+                                       place="Hangar")
+    workshop, _key = devices_service.add(admin_user, name="Workshop", type="attendance", owner=rocket,
+                                         place="Workshop")
+    clubroom, _key = devices_service.add(admin_user, name="Club room", type="attendance", place="Club room")
+    morning = now.replace(hour=7, minute=12, second=41, microsecond=0)
+
+    def stay(user, team, days, hours, minutes=0, *, at=hangar, out=workshop, closed=False, corrected=False,
+             open_=False):
+        started = morning - timedelta(days=days)
+        record = AttendanceStay(user_id=user.id, team_id=team.id if team else None, started_at=started,
+                                in_device_id=at.id, created_at=started)
+        if closed:
+            record.closed_at = min(started + timedelta(hours=20), now)
+        elif not open_:
+            record.ended_at = started + timedelta(hours=hours, minutes=minutes, seconds=17)
+            record.out_device_id = out.id if not corrected else None
+        if corrected:
+            record.corrected_by_user_id, record.corrected_at = active.user.id, now - timedelta(days=1)
+        db.session.add(record)
+
+    for days, hours, minutes in ((1, 3, 25), (3, 5, 2), (6, 2, 48), (8, 4, 0)):
+        stay(active.user, rocket, days, hours, minutes)
+    # Not checked out on the day of her newest stay, so the two are always in the same month.
+    stay(active.user, rocket, 1 - 5 / 24, 0, closed=True)
+    stay(active.user, rocket, 5, 6, 30, corrected=True)
+    stay(carla, rocket, 2, 4, 12, at=workshop, out=hangar)
+    stay(carla, rocket, 4, 1, 50)
+    # Checked in today, never before the day began: the night would close it.
+    from aeronautics_members.services import attendance
+
+    since = max(now - timedelta(hours=2),
+                attendance.day_start(attendance.local(now).date()).replace(tzinfo=timezone.utc) + timedelta(minutes=1))
+    db.session.add(AttendanceStay(user_id=carla.id, team_id=rocket.id, started_at=since, in_device_id=workshop.id,
+                                  created_at=since))
+    stay(active.user, None, 9, 2, 15, at=clubroom, out=clubroom)
+    db.session.commit()
 
     reset_token = build_password_reset_token(new.user)
     delete_token = build_account_deletion_token(active.user)
@@ -560,6 +698,9 @@ def seed(app, app_module, subscriptions):
                       {"name": "account--data", "path": "/account/data"},
                       {"name": "account--credit", "path": "/account/credit"},
                       {"name": "account--cards", "path": "/account/cards"},
+                      {"name": "account--attendance", "path": "/account/attendance"},
+                      {"name": "account--attendance-ask", "path": "/account/attendance",
+                       "click": "button:has-text('Ask for a correction')"},
                       # Saving the profile: the success message with its tick.
                       {"name": "account--saved", "path": "/account/profile",
                        "open": "section[aria-label='Contact details'] button:has-text('Edit')",
@@ -581,6 +722,8 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--logs", "user": "admin@example.org", "path": "/admin/logs"},
         {"name": "admin--settings", "user": "admin@example.org", "path": "/admin/settings"},
         {"name": "admin--settings-updates", "user": "admin@example.org", "path": "/admin/settings/updates"},
+        {"name": "admin--settings-updates-history", "user": "admin@example.org",
+         "path": "/admin/settings/updates#history"},
         {"name": "admin--teams", "user": "admin@example.org", "path": "/admin/teams"},
         {"name": "admin--team-detail", "user": "admin@example.org", "path": "/teams/rocket-team/manage/details"},
         {"name": "admin--team-fee", "user": "admin@example.org", "path": "/teams/rocket-team/manage/fee"},
@@ -588,6 +731,10 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--team-new", "user": "admin@example.org", "path": "/admin/teams/new"},
         {"name": "teams--home", "user": "active@example.org", "path": "/teams"},
         {"name": "teams--home-applicant", "user": "returning@example.org", "path": "/teams"},
+        # A team's fee asks card or SEPA before Stripe's page (a membership does too, but not in
+        # the year's free months, which the screenshots' date may fall in).
+        {"name": "teams--pay-method", "user": "returning@example.org", "path": "/teams/glider-team/about",
+         "open": "button:has-text('Pay and join')"},
         {"name": "teams--team-page", "user": "active@example.org", "path": "/teams/rocket-team"},
         {"name": "teams--about", "user": "photo-needed@example.org", "path": "/teams/rocket-team/about"},
         {"name": "teams--leave", "user": "active@example.org", "path": "/teams/rocket-team/leave"},
@@ -602,26 +749,61 @@ def seed(app, app_module, subscriptions):
         {"name": "teams--money-treasurer", "user": "admin@example.org", "path": "/teams/rocket-team/money"},
         {"name": "admin--money", "user": "admin@example.org", "path": "/admin/money"},
         {"name": "admin--money-team", "user": "admin@example.org", "path": "/admin/money/rocket-team"},
+        {"name": "admin--money-team-history", "user": "admin@example.org", "path": "/admin/money/rocket-team#history"},
         {"name": "admin--dashboard-treasurer", "user": "treasurer@example.org", "path": "/admin"},
         {"name": "admin--credit", "user": "admin@example.org", "path": "/admin/credit"},
         {"name": "admin--credit-holder", "user": "treasurer@example.org", "path": f"/admin/credit/{active.user.id}"},
         {"name": "admin--settings-credit", "user": "admin@example.org", "path": "/admin/settings/credit"},
-        {"name": "teams--prices", "user": "active@example.org", "path": "/teams/rocket-team/manage/prices"},
+        {"name": "teams--sales", "user": "active@example.org", "path": "/teams/rocket-team/manage/sales"},
+        {"name": "teams--sales-points", "user": "active@example.org",
+         "path": "/teams/rocket-team/manage/sales#sales-points"},
+        # What a sale switches: behind the reader's Actions button.
+        {"name": "teams--sales-actions", "user": "active@example.org",
+         "path": "/teams/rocket-team/manage/sales#sales-points", "open": "button:has-text('Actions')"},
+        {"name": "admin--sales", "user": "admin@example.org", "path": "/admin/sales"},
         {"name": "public--contact", "path": "/contact"},
         {"name": "public--contact-signed-in", "user": "active@example.org", "path": "/contact"},
         {"name": "public--unsubscribe", "path": f"/unsubscribe/{mailings.unsubscribe_token(active.user)}"},
+        # The phone that opened the reader's QR code keeps its claim in the browser.
+        {"name": "public--link-card", "path": f"/link/{qr_link.token}",
+         "storage": {f"card-link:{qr_link.token}": qr_claim}},
+        {"name": "public--link-card-signed-in", "user": "active@example.org", "path": f"/link/{qr_link.token}",
+         "storage": {f"card-link:{qr_link.token}": qr_claim}},
         {"name": "admin--messages", "user": "admin@example.org", "path": "/admin/messages"},
+        {"name": "admin--messages-reply", "user": "admin@example.org", "path": "/admin/messages",
+         "click": "button:has-text('Reply')"},
+        {"name": "admin--messages-all", "user": "admin@example.org", "path": "/admin/messages",
+         "click": "label:has-text('All')"},
         {"name": "admin--announcements", "user": "admin@example.org", "path": "/admin/announcements"},
         {"name": "admin--announcement", "user": "admin@example.org",
          "path": f"/admin/announcements/{announcement.id}"},
-        {"name": "admin--settings-mailings", "user": "admin@example.org", "path": "/admin/settings/mailings"},
+        {"name": "admin--settings-general", "user": "admin@example.org", "path": "/admin/settings/general"},
+        {"name": "admin--settings-email", "user": "admin@example.org", "path": "/admin/settings/email"},
+        {"name": "admin--settings-email-sending", "user": "admin@example.org",
+         "path": "/admin/settings/email#sending"},
+        {"name": "admin--settings-email-accounts", "user": "admin@example.org",
+         "path": "/admin/settings/email#accounts"},
+        {"name": "admin--settings-email-test", "user": "admin@example.org", "path": "/admin/settings/email#test"},
         {"name": "admin--settings-devices", "user": "admin@example.org", "path": "/admin/settings/devices"},
         {"name": "admin--settings-device", "user": "admin@example.org",
          "path": f"/admin/settings/devices/{fridge.id}"},
+        {"name": "admin--settings-device-activity", "user": "admin@example.org",
+         "path": f"/admin/settings/devices/{fridge.id}#activity"},
+        {"name": "admin--settings-device-crashes", "user": "admin@example.org",
+         "path": f"/admin/settings/devices/{fridge.id}#crashes"},
         {"name": "admin--settings-sales-point", "user": "admin@example.org",
          "path": f"/admin/settings/devices/{sales_point.id}"},
+        {"name": "admin--settings-device-pair", "user": "admin@example.org",
+         "path": f"/admin/settings/devices/pair?code={device_pairing.shown(pairing.code)}"},
+        {"name": "admin--settings-firmware", "user": "admin@example.org", "path": "/admin/settings/devices/firmware"},
+        {"name": "admin--settings-firmware-new", "user": "admin@example.org",
+         "path": "/admin/settings/devices/firmware#new"},
         {"name": "admin--cards", "user": "admin@example.org", "path": "/admin/cards"},
+        {"name": "admin--attendance", "user": "admin@example.org", "path": "/admin/attendance"},
         {"name": "teams--devices", "user": "active@example.org", "path": "/teams/rocket-team/manage/devices"},
+        {"name": "teams--attendance", "user": "active@example.org", "path": "/teams/rocket-team/manage/attendance"},
+        {"name": "teams--attendance-person", "user": "active@example.org",
+         "path": "/teams/rocket-team/manage/attendance", "click": "table[aria-label='Hours per person'] button:has-text('Anna')"},
         {"name": "admin--account-cards", "user": "admin@example.org",
          "path": f"/admin/accounts/{active.user.id}#cards"},
         {"name": "teams--messages", "user": "active@example.org", "path": "/teams/rocket-team/manage/messages"},

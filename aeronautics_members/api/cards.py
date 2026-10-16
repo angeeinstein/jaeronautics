@@ -11,11 +11,11 @@ from flask_login import current_user
 from pydantic import Field
 
 from ..app import limiter, rate_limit_person
-from ..config import RATELIMIT_CARD_LINK
-from ..db_models import Device, User, db
+from ..config import RATELIMIT_CARD_LINK, RATELIMIT_CARD_QR
+from ..db_models import User, db
 from ..permissions import Permission
 from ..services import NotFoundError
-from ..services import cards, devices
+from ..services import card_links, cards, devices
 from ..services.pictures import picture_url
 from ._core import Model, UtcDateTime, endpoint
 
@@ -65,19 +65,58 @@ def my_cards():
     return _mine()
 
 
-class CardLinkIn(Model):
-    #: As read off the card: "04:a1:b2:…" from a phone, "04A1B2…" from a reader.
-    card_id: str = Field(max_length=40)
+# --- Linked with a reader's QR code (services/card_links.py) ------------------------
+
+
+class CardLinkOpenIn(Model):
+    #: What this phone was given when it first opened the link; none the first time.
+    claim: str | None = Field(default=None, max_length=40)
+
+
+class CardLinkOut(Model):
+    #: To send again: only the phone that opened the link first can use it.
+    claim: str
+    #: The card's last characters: "…E5F6".
+    card: str
+    #: The reader it was tapped on, and where that is.
+    reader: str
+    place: str | None
+    tapped_at: UtcDateTime
+    expires_at: UtcDateTime
+    #: Whether somebody is signed in, to link it; else the page asks to sign in first.
+    signed_in: bool
+
+
+@endpoint("POST", "/card-links/<token>/open", response=CardLinkOut, body=CardLinkOpenIn, public=True, tag=TAG)
+@limiter.limit(RATELIMIT_CARD_QR, key_func=rate_limit_person)
+def card_link_open(token, body):
+    """A reader's QR code opened on a phone: the card tapped there and the
+    reader. The first phone keeps the link; signing in may come after."""
+    link, claim = card_links.open_link(token, body.claim)
+    db.session.commit()
+    return CardLinkOut(claim=claim, card=f"…{link.card_tail}", reader=devices.label(link.device),
+                       place=link.device.place, tapped_at=link.created_at, expires_at=link.expires_at,
+                       signed_in=bool(current_user.is_authenticated))
+
+
+class CardLinkUseIn(Model):
+    claim: str = Field(max_length=40)
     name: str | None = Field(default=None, max_length=80)
 
 
-@endpoint("POST", "/account/cards", response=MyCardsOut, body=CardLinkIn, status=201, tag=TAG)
+class CardLinkedOut(Model):
+    card: CardOut
+    first_name: str | None
+
+
+@endpoint("POST", "/card-links/<token>", response=CardLinkedOut, body=CardLinkUseIn, status=201, tag=TAG)
 @limiter.limit(RATELIMIT_CARD_LINK, key_func=rate_limit_person)
-def my_cards_link(body):
-    """Link a card one has just scanned with one's phone (Web NFC)."""
-    cards.link(current_user, body.card_id, name=body.name, by=current_user, how=cards.BY_PHONE)
+def card_link_use(token, body):
+    """Link the card of a reader's QR code to one's account, from the phone that opened it."""
+    card = card_links.use(current_user, token, body.claim, name=body.name)
     db.session.commit()
-    return _mine()
+    member = getattr(current_user, "member", None)
+    return CardLinkedOut(card=_card(card), first_name=member.first_name if member is not None else None)
 
 
 class CardChangeIn(Model):
@@ -145,29 +184,9 @@ def admin_cards():
     return AdminCardsOut(items=[_admin_card(card) for card in cards.all_cards()])
 
 
-class CardReaderOut(Model):
-    id: int
-    name: str
-    place: str | None
-
-
-class CardWaitOut(Model):
-    reader: CardReaderOut
-    expires_at: UtcDateTime
-
-
 class PersonCardsOut(Model):
     user_id: int
     items: list[CardOut]
-    #: The readers a card can be tapped on, to link it there.
-    readers: list[CardReaderOut]
-    #: A reader waiting for this person's card, if one is.
-    waiting: CardWaitOut | None
-    most: int
-
-
-def _reader(device):
-    return CardReaderOut(id=device.id, name=devices.label(device), place=device.place)
 
 
 def _person(user_id):
@@ -178,58 +197,13 @@ def _person(user_id):
 
 
 def _persons_cards(user):
-    waits = cards.waiting_for(user)
-    return PersonCardsOut(
-        user_id=user.id,
-        items=[_card(card) for card in cards.cards_of(user)],
-        readers=[_reader(device) for device in cards.readers()],
-        waiting=CardWaitOut(reader=_reader(waits[0].device), expires_at=waits[0].expires_at) if waits else None,
-        most=cards.MOST_CARDS,
-    )
+    return PersonCardsOut(user_id=user.id, items=[_card(card) for card in cards.cards_of(user)])
 
 
 @endpoint("GET", "/admin/accounts/<int:user_id>/cards", response=PersonCardsOut, permissions=MANAGE, tag=TAG)
 def admin_person_cards(user_id):
-    """A person's cards, and the readers one could be linked on."""
+    """A person's cards; its owner links one at a reader, with the QR code shown there."""
     return _persons_cards(_person(user_id))
-
-
-@endpoint("POST", "/admin/accounts/<int:user_id>/cards", response=PersonCardsOut, body=CardLinkIn,
-          permissions=MANAGE, status=201, tag=TAG)
-@limiter.limit(RATELIMIT_CARD_LINK, key_func=rate_limit_person)
-def admin_person_cards_link(user_id, body):
-    """Link a card to this person: scanned with the admin's phone, or its ID typed in."""
-    user = _person(user_id)
-    cards.link(user, body.card_id, name=body.name, by=current_user, how=cards.BY_ADMIN_PHONE)
-    db.session.commit()
-    return _persons_cards(user)
-
-
-class CardWaitIn(Model):
-    device_id: int
-
-
-@endpoint("POST", "/admin/accounts/<int:user_id>/cards/wait", response=PersonCardsOut, body=CardWaitIn,
-          permissions=MANAGE, tag=TAG)
-def admin_person_cards_wait(user_id, body):
-    """Link the next unknown card tapped on this reader, within a minute, to this person."""
-    user = _person(user_id)
-    device = db.session.get(Device, body.device_id)
-    if device is None:
-        raise NotFoundError("No such reader.")
-    cards.wait_at_reader(current_user, user, device)
-    db.session.commit()
-    return _persons_cards(user)
-
-
-@endpoint("DELETE", "/admin/accounts/<int:user_id>/cards/wait", response=PersonCardsOut, permissions=MANAGE,
-          tag=TAG)
-def admin_person_cards_stop_waiting(user_id):
-    """Stop waiting for this person's card."""
-    user = _person(user_id)
-    cards.stop_waiting(user)
-    db.session.commit()
-    return _persons_cards(user)
 
 
 class AdminCardChangeIn(CardChangeIn):

@@ -76,7 +76,9 @@ def send_member_welcome_email(app, member, force_send=False, notify_on_failure=T
     if not force_send and settings.get("automatic_emails_enabled") != "True":
         return (False, _("Automatic welcome emails are disabled.")) if return_error else False
 
-    sender_account = settings.get("welcome_email_sender")
+    from .mail_senders import account_for
+
+    sender_account = account_for("welcome")
     template_name = settings.get("automatic_email_template")
     if not sender_account or not template_name:
         error_message = _("Email sender or template is not configured in the admin settings.")

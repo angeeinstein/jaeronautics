@@ -6,12 +6,14 @@
 import { Alert, Anchor, Button, Stack, Text, TextInput, Title } from '@mantine/core';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconMail } from '@tabler/icons-react';
 
 import { api, call } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
 import { useDocumentTitle } from '../../components/PageHeader';
 import { Panel } from '../../components/Panel';
 import { notifyFailed } from '../../lib/notify';
+import { EmailHint } from '../../components/EmailHint';
 
 export function ForgotPassword() {
   useDocumentTitle('A new password');
@@ -23,7 +25,7 @@ export function ForgotPassword() {
   return (
     <Stack gap="lg" maw={460} mx="auto" mt={{ base: 0, sm: 'xl' }}>
       <Title order={1}>A new password</Title>
-      <Panel title="Email me a link">
+      <Panel icon={IconMail} title="Email me a link">
         {ask.data ? (
           <Alert color="green" variant="light" role="status">
             <Text size="sm">{ask.data.text}</Text>
@@ -50,6 +52,7 @@ export function ForgotPassword() {
                   setEmail(event.currentTarget.value);
                 }}
               />
+              <EmailHint value={email} onUse={setEmail} />
               <Button type="submit" loading={ask.isPending} fullWidth>
                 Send the link
               </Button>

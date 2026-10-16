@@ -1,8 +1,9 @@
 /**
- * Settings -> Updates: the version running and the newest one, installing
- * it, going back to the one before, and how the last update went -- its steps
- * ticked off as they happen, and below them, folded away, everything the
- * installer printed, as in a terminal.
+ * Settings -> Updates, in two tabs. *Update*: the version running and the
+ * newest one, and installing it. *History* (#history): how the last update
+ * went -- its steps ticked off, and below them, folded away, everything the
+ * installer printed, as in a terminal -- and going back to the one before.
+ * While an update runs, only it is shown, its steps ticked off as they happen.
  *
  * A newer version is offered once CI has passed for it: the installer takes
  * CI's build and would otherwise sit waiting for it. While CI runs the page
@@ -19,8 +20,10 @@
 import { Alert, Anchor, Button, Code, Collapse, Group, Loader, Progress, Stack, Text } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { IconArrowBackUp, IconDownload, IconHistory, IconInfoCircle, IconRefresh } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
+import { PageTabs } from '../../../components/PageTabs';
 import { type CheckState, Checklist } from '../../../components/Checklist';
 import { ConfirmButton } from '../../../components/ConfirmButton';
 import { type Detail, Details } from '../../../components/Details';
@@ -133,6 +136,7 @@ function Version({ state, onCheck, checking }: { state: State; onCheck: () => vo
   const installed = state.installed;
   return (
     <Panel
+      icon={IconInfoCircle}
       title="Version"
       actions={
         <Button size="xs" variant="default" loading={checking} onClick={onCheck}>
@@ -256,7 +260,7 @@ function Install({
   onStart: (action: Action) => void;
 }) {
   return (
-    <Panel title="Install">
+    <Panel icon={IconDownload} title="Install">
       <Stack gap="md">
         {!state.runner_installed ? (
           <Alert color="amber" variant="light">
@@ -323,7 +327,7 @@ function Rollback({
 }) {
   const point = state.rollback_point;
   return (
-    <Panel title="Go back to the previous version">
+    <Panel icon={IconArrowBackUp} title="Go back to the previous version">
       {point ? (
         <Stack gap="md">
           <Text size="sm" c="dimmed">
@@ -387,7 +391,7 @@ function LastRun({ run, steps }: { run: State['last_run']; steps: Schemas['Updat
       <Pill tone="info">{run.state ?? ''}</Pill>
     );
   return (
-    <Panel title="Last update">
+    <Panel icon={IconHistory} title="Last update">
       <Stack gap="md">
         <Details
           items={[
@@ -464,34 +468,56 @@ export function Updates() {
           <LoadingState />
         )
       ) : (
-        <Stack gap="lg">
-          <Version
-            state={state}
-            checking={check.isPending}
-            onCheck={() => {
-              check.mutate();
-            }}
-          />
-          {state.in_progress || watching ? (
-            <Panel title="Update">
-              <Running state={state} phase={phase} />
-            </Panel>
-          ) : (
-            <>
-              <Install
-                state={state}
-                busy={start.isPending && start.variables === 'update'}
-                onStart={start.mutate}
-              />
-              <Rollback
-                state={state}
-                busy={start.isPending && start.variables === 'rollback'}
-                onStart={start.mutate}
-              />
-              {state.last_run.state ? <LastRun run={state.last_run} steps={state.progress.steps} /> : null}
-            </>
-          )}
-        </Stack>
+        <PageTabs
+          tabs={[
+            {
+              value: 'update',
+              label: 'Update',
+              icon: IconRefresh,
+              content: (
+                <Stack gap="lg">
+                  <Version
+                    state={state}
+                    checking={check.isPending}
+                    onCheck={() => {
+                      check.mutate();
+                    }}
+                  />
+                  {state.in_progress || watching ? (
+                    <Panel icon={IconRefresh} title="Update">
+                      <Running state={state} phase={phase} />
+                    </Panel>
+                  ) : (
+                    <Install
+                      state={state}
+                      busy={start.isPending && start.variables === 'update'}
+                      onStart={start.mutate}
+                    />
+                  )}
+                </Stack>
+              ),
+            },
+            {
+              value: 'history',
+              label: 'History',
+              icon: IconHistory,
+              // While one runs, nothing else: its steps are on the first tab.
+              content:
+                state.in_progress || watching ? null : (
+                  <Stack gap="lg">
+                    {state.last_run.state ? (
+                      <LastRun run={state.last_run} steps={state.progress.steps} />
+                    ) : null}
+                    <Rollback
+                      state={state}
+                      busy={start.isPending && start.variables === 'rollback'}
+                      onStart={start.mutate}
+                    />
+                  </Stack>
+                ),
+            },
+          ]}
+        />
       )}
     </>
   );

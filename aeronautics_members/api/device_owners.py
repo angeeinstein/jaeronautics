@@ -44,6 +44,8 @@ class OwnedDeviceOut(Model):
     online: bool
     last_seen_at: UtcDateTime | None
     settings: dict[str, Any]
+    #: How many outputs it can switch (a sale can switch them); none when it has not said.
+    outputs: int | None = None
     #: What the owner may choose on it, with the choices that are theirs.
     fields: list[DeviceSettingOut]
     #: What it reported lately, newest first.
@@ -71,7 +73,7 @@ def _owned_out(device):
         id=device.id, code=device.code, name=device.name, label=devices_service.label(device),
         type_label=device_type.label if device_type else device.type, place=device.place,
         description=device.description, enabled=device.enabled, online=devices_service.is_online(device),
-        last_seen_at=device.last_seen_at, settings=device.settings or {}, fields=fields,
+        last_seen_at=device.last_seen_at, settings=device.settings or {}, outputs=device.outputs, fields=fields,
         recent=[OwnedReportOut(at=event.at, detail=event.detail or event.name or "Reported")
                 for event in devices_service.recent_reports(device)],
     )

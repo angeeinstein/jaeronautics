@@ -49,10 +49,12 @@ association the admins or leaders can use their device however they like."
   **owner**: the association or one team -- and keep what is technical: the
   key, the request log, removing it, linking cards at a reader.
 - **The owner** -- a team's leads and team treasurer on the team's
-  management page; for the association, admins and the treasurer on
-  Admin › Credit -- gets a *Devices* section: each of their devices, online
+  management page -- gets a *Devices* section: each of their devices, online
   or not, the recent taps in plain words ("so that they can actually see
-  that this is working"), and freely its name, place, item and on/off.
+  that this is working"), and freely its name, place and on/off. What a
+  sales point sells is chosen on the owner's *Sales* page, with the price
+  list (2026-10-14: "this devices page should only be about technical
+  stuff"); the association's on Admin › Sales.
 - **A reader sells only its owner's items**, so every sale counts for the
   owner (before, an admin could set a team's reader to an item of another
   seller). Given to another owner, a reader's item is cleared.
@@ -61,8 +63,8 @@ association the admins or leaders can use their device however they like."
   team's side menu shows *Devices* once the team owns one.
 - **Each device has a code,** random and made when it is added (`K7MQ-2X9A`,
   no 0/O/1/I/L): "a unique ID of just random characters, so that this does
-  not seem like a name given by a person". A name is optional; the code
-  stands in for it. The maintainer suggested the ESP32's MAC address as the
+  not seem like a name given by a person". A name is optional (at most 30
+  characters, since 2026-10-15); the code stands in for it. The maintainer suggested the ESP32's MAC address as the
   ID; it was kept beside it instead, because the device is added in the
   portal before it has ever spoken, and a replaced board would otherwise be
   another device. The board sends its MAC address with every request
@@ -117,6 +119,11 @@ device for everything?" No devices with only a button or an LED.
   This replaces "simple devices driven by the portal" from the Direction
   below; the screen devices' part of it (the portal gives data and results,
   not screens) holds.
+  The cost: about €50 a device instead of €10-15 for an ESP32 and a reader.
+  The maintainer still has to put that to the teams, who may not accept it,
+  "so maybe we have to still allow other devices again in the future, but I
+  will try to keep it like we decided, only one device". So the portal keeps
+  types per device and does not assume a screen.
 - **The device says what it can do, the portal what it is for.** With its
   sign of life the device reports its board, its firmware version and the
   uses its firmware supports. The portal assigns one of them, with its
@@ -124,10 +131,19 @@ device for everything?" No devices with only a button or an LED.
   needs no new key and nothing on the device. A new use is a firmware release
   plus its module in the portal (`services/device_types.py`), which still
   decides what a tap does.
-- **Changes reach the device at once** (long polling): the device asks for
-  what is new and the server holds the request up to about a minute,
-  answering the moment something changes. Works through the Cloudflare
-  tunnel.
+- **Changes reach the device within seconds.** Long polling (the server
+  holding the device's request until something changes) was ruled out when
+  building it: the portal runs 3 workers × 4 threads, so each device would
+  hold one of 12 request slots, and a handful of devices could stall the
+  site. Instead the device asks every 2 seconds (10 until 2026-10-16) with
+  the last answer's `ETag` and is answered `304`, no body, while nothing
+  changed -- cheap, and not listed with its requests. 2 seconds, agreed
+  2026-10-16 to make it feel "a lot more dynamic": measured about 2 ms in
+  the app (5-10 ms on the server, with MariaDB, nginx and TLS), no database
+  write; with "only two" devices planned and "not more than 10 in the long
+  term", a few per cent of a core. The "nothing changed" answers are kept
+  out of nginx's access log too (432,000 lines a day for 10 devices).
+  Long polling stays ruled out: 10 devices would hold 10 of the 12 slots.
 - **Wi-Fi is the firmware's**, including WPA2-Enterprise (it has joined the
   university's network); nothing for the portal to do.
 
@@ -186,20 +202,174 @@ The firmware can already update itself over the air.
 - **The device installs only this firmware**: it checks the same marks the
   server checks (below).
 
+### A fresh board flashed from the portal (agreed 2026-10-16)
+
+A new board has no firmware, so it cannot pair or update; until now it
+needed a computer with ESP-IDF once. The maintainer: "provision a fresh
+device that does not have any firmware on it yet ... flashed from this
+page. And after that, the device can be paired, and then it just does a
+normal update to the actual latest firmware version."
+
+- **A factory image**: one file built with everything in it -- bootloader,
+  partition table, OTA data, the app -- written from address `0x0`
+  (`idf.py merge-bin`, or `esptool.py merge_bin`). The update files stay as
+  they are. On upload the portal reads what it is from the file: the
+  bootloader's chip, the partition table, and the app in it (its app
+  description: version, project, build date), and refuses it unless the app
+  is whole, of the same chip as the bootloader, and of the same project as
+  the update files. **One per chip**, a new one replacing the old: one chip
+  and one device for now, "maybe in the future I will have other devices so
+  we can keep this open". It need not be the newest version -- the normal
+  update brings the board there.
+- **Flashed in the browser** over Web Serial with Espressif's `esptool-js`:
+  Chrome or Edge on a computer. The page compares the connected board's chip
+  with the image's and refuses another. **"Erase everything first" is on**
+  (the maintainer: "this should be on"): it also clears a used board's key
+  and Wi-Fi, so the page resets one too.
+- **Flashing and pairing stay two steps.** Pairing right after flashing (by
+  the MAC address read while flashing) was offered and not wanted: "pairing
+  is rather easy ... the flashing ... isn't security critical at all. And the
+  other step, the pairing, is a separate thing that is security critical."
+  After flashing, the page says to set up the Wi-Fi on the device's screen
+  (the firmware asks for it at its first start) and to pair it.
+- **Where:** the Firmware page, in tabs: *Updates* (as before) and *New
+  device* (the factory image and the flasher).
+- Note: an update over the air cannot change the partition table; a changed
+  layout needs the boards flashed over USB once more.
+
+### Crash reports (agreed 2026-10-16)
+
+Proposed with the firmware ("Device Crash Reports", a handoff page, "shape
+it as fits the portal"): on a crash -- an exception, an assert, a watchdog
+-- ESP-IDF keeps a core dump (an ELF, 20-60 KB, at most 128 KB; only the
+last) and the board restarts; the firmware then sends it to the portal.
+
+- **Two requests**: a summary (`POST /api/v1/device/crash`: `crash_id`, the
+  dump's SHA-256; `build`, the first 16 hex of the crashed program file's
+  SHA-256; task, PC, call path, reset reason, size), answered `201
+  {"upload": true}` or `200 {"upload": false}` -- the file is there already,
+  or not wanted -- then the file (`PUT .../crash/<crash_id>/file`, checked
+  by its SHA-256 and its ELF header). The same `crash_id` again is answered
+  as the first time. Changed from the proposal: no `firmware` field (every
+  request carries `X-Device-Firmware`), the portal's usual error shapes.
+- **The crashed version from `build`**: the SHA-256 of the program file is
+  in every app's description (`app_elf_sha256`); the portal reads it from
+  each update file and factory image and names the version, else shows
+  `build`.
+- **Only on the device's page in Admin › Settings › Devices, a tab of its
+  own, *Crashes*; admins only.** The maintainer: "you only see the log in
+  the admin devices page when you select a device. Only there this thing is
+  seen." Not in the activity list, the devices list or a team's pages.
+- **No email**: "I'm still developing the thing and there could be some
+  issues and I don't want lots of emails ... If I'm interested, I can look
+  this up on the device page."
+- **The whole dump, nothing redacted** -- it can hold what the device had in
+  memory (its key, card IDs, a Wi-Fi password while connecting); "having a
+  complete crash log can make debugging a bit easier ... for the moment, I
+  would just include the complete crash report". Downloaded only by admins.
+- **Not in the privacy policy**: the same data in the same portal, "Amazon
+  doesn't tell me where they keep their crash logs as well".
+- **Kept** 90 days like the device's events, at most 20 dump files per
+  device: a new one lets the oldest file go, its summary staying -- the
+  newest crash is the one that matters. Deleted with the device; an admin
+  can delete one.
+- Decoding stays on a computer: `espcoredump.py info_corefile -c <dump>
+  <program file>`.
+
 ### Open (2026-10-14)
 
-- **The marks of "our" firmware:** ESP-IDF's app description already holds
-  the project name and version; with a few bytes of our own (a marker and
-  the board) both the server and the device can tell this firmware from any
-  other. That guards against a wrong file, not against someone who takes over
-  an admin account or the server: anyone can copy the marker.
-- **Signing the firmware:** the maintainer is not sure yet. Signed
-  images (ESP-IDF's signature check on updates, the key kept on the
-  maintainer's computer) would guard against that too. It can be switched
-  on later with an ordinary update; the portal only stores and passes on the
+- ~~The marks of "our" firmware~~ -- **settled 2026-10-15: none of our
+  own.** A real file carries ESP-IDF's app description (project, version,
+  build time, IDF version) and its chip in the image header; the portal
+  checks those -- the same project and chip as the newest firmware -- with
+  the checksum and the appended SHA-256. "This was exactly what I meant."
+  Bytes of our own would guard only against a wrong file too, and anyone can
+  copy them.
+- **Signing the firmware: not planned** (2026-10-14). The maintainer: "I am
+  not really worried about admins uploading malicious firmware, because if
+  they are already an admin, they can do a lot of other malicious stuff."
+  It could still be switched on later with an ordinary update (ESP-IDF's
+  signature check on updates); the portal only stores and passes on the
   file either way.
-- Which part first: pairing and the device reporting its uses, or firmware
-  updates.
+- What else the firmware sends and needs is still being worked out with the
+  firmware. Built first (2026-10-14, branch `claude/device-pairing`), as
+  "the parts that are not really dependent on this": pairing, the device
+  reporting what it is and can do, the backup code and the card opening the
+  settings, and the base of firmware updates -- uploading a file in the
+  portal, its checks (`services/device_firmware.py`, `_unlike_the_newest`),
+  the device asking for its version,
+  downloading it and saying how it went.
+
+## Actions after a sale (agreed and built 2026-10-15)
+
+A sale can switch a reader's outputs: a magnetic lock on the fridge (the
+reader beside it, an honesty system -- the door opens after paying), a
+coffee machine's relay. The firmware drives the outputs ("a relay connected
+via I2C ... switch on and off multiple things"); the portal says which and
+how long, "so you can do this in the field with no need to build a new
+firmware".
+
+- **The device says how many outputs it has** (`X-Device-Outputs`, 0 to 16),
+  shown on its page.
+- **Per reader, one list of lines**, kept in its settings (`actions`, with an
+  on/off switch): *after any sale* or *after this item* -> output 1-N for
+  0.1 to 600 seconds. "Any sale" is one choice of the first field, so there
+  is one list, not one per reader and one per item. An item's line is for
+  that item **on that reader**: the price list carries none, and the same
+  item on another reader has its own, or none. Both kinds run when both
+  are set. An item's lines go when it leaves the menu or is deleted.
+- **Set on the owner's Sales page**, *Sales points* tab: an *Actions* button
+  on the reader's panel opens a small dialog with its lines, *Add*, a delete
+  per line and the switch. Not on readers without outputs -- "I don't want
+  to clutter the site".
+- **The sale's answer carries what to do now** (`actions` in `buy`'s
+  `sold`); the firmware need not read the list.
+- **Decided with it:** nothing for the portal being unreachable ("this
+  magnetic lock won't be some super secure thing anyways" -- unplug it);
+  opening the door without buying (restocking) is in the device's own
+  settings menu, opened with an admin's card; an output per item on readers
+  with several outputs is covered by the item lines.
+
+## The screens: a menu, icons, attendance (agreed 2026-10-14)
+
+What the maintainer's firmware already shows, and what the portal has to
+send for it. The messages themselves: `docs/device-protocol.md`, the one
+document the firmware is written against.
+
+- **A menu of items.** A card tapped on a sales point opens a menu for about
+  eight seconds: up to **four items** -- name, price, icon -- with "Hi Alex"
+  and the balance at the top right. Four for now; "maybe in the future I
+  will add pagination or a scrollable list of items, but let's keep it at
+  four for the moment", so nothing in the portal or the protocol assumes
+  four for ever. The owner chooses the items (in order). Built 2026-10-14:
+  a card tapped is answered with the menu and a ticket for one purchase,
+  valid for 20 seconds; the item chosen is bought with it.
+- **Icons are chosen in the portal** (built), from a fixed list (coffee, tea,
+  beer, ...): whoever adds an item to a price list gives it a name, a price
+  and an icon. The firmware carries one picture per name ("I will then
+  pre-compile all of those icons ... and put them on the device"); a new
+  icon is a new name in the list and a firmware update. The firmware does
+  not guess an icon from the item's name.
+- **First name and balance on the screen:** yes. "Everybody knows each
+  other here."
+- **Attendance** (built 2026-10-15): two buttons, *Check in* and *Check
+  out*, then the card. Check in answers "Welcome Alex" and the time;
+  checking in again while checked in is refused ("check out first"); check
+  out answers "Goodbye Alex", the time and how long, worked out by the
+  portal. What it records and who sees it: `docs/attendance-plan.md`.
+- **Compatibility is not held on to.** "Please don't try to stick to
+  something that's not as good as it could be just because of backwards
+  compatibility. A small firmware update to all devices that are older is
+  not that much of a problem." The protocol document says what changed, and
+  the portal and the firmware are updated together.
+- **Kept in mind, not built:** settings of the device itself set in the
+  portal (brightness, volume, how long the menu stays) and commands (restart,
+  "show where you are", a message on the screen). The maintainer: possible
+  to expand later, "but you need to keep this in mind when designing the
+  API". Wi-Fi changed from the portal was advised against (a wrong password
+  locks the device out where only someone at the device can fix it, and the
+  portal would hold Wi-Fi passwords -- for enterprise Wi-Fi, a person's
+  university login); not decided.
 
 ## How it works
 
@@ -207,23 +377,63 @@ The firmware can already update itself over the air.
 
 Admin › Settings › Devices lists every device: its name, type and place, and
 whether it is on. It also shows when the device was last seen, its firmware
-version and its address.
+version (and the one it should install) and its address.
 
-- **Add a device:** name, type, place, and the settings its type has. The
-  key is shown once, with *Copy* and *Download configuration*: a small JSON
-  file with the portal's address, the device's id and its key.
-- **One device's page:**
-  - its settings and the switch;
+- **Pair a device** (the usual way): devices waiting to be paired are listed
+  above the devices, the list refreshing every 5 seconds while one waits. The
+  approval page (`/admin/settings/devices/pair?code=K7Q-4X9`, which the
+  device's QR code opens) shows what the device says it is -- board, MAC
+  address, firmware, what it can be, from where and when it asked -- and
+  pairs it as **a new device** (owner, type -- only one its firmware can be
+  --, name, place, settings) or as **the board of a device** (it keeps that
+  device's code, settings and history; the old board's key stops at once).
+  Or *Turn away*. Nobody sees the key.
+- **Add a device** by hand, for development: name, type, place, and the
+  settings its type has. The key is shown once, with *Copy*, *Download
+  configuration* and *Download starter*.
+- **Firmware** (`/admin/settings/devices/firmware`): upload a file (its
+  version, project, build, chip and ESP-IDF version are read from it), see
+  every version with how many devices run it, *Install on every device* or
+  *Stop offering*, delete a version no device is to run, and each device's
+  state: up to date, update waiting, update failed (with the device's
+  reason), refreshed every 5 seconds -- the *Updates* tab. The *New device*
+  tab (`#new`, since 2026-10-16): *Flash a board* -- *Connect and flash*
+  asks for the board's port, finds its chip and MAC address, refuses a chip
+  with no factory image, erases the flash (*Erase everything first*, on),
+  writes the image from 0 with a progress bar, checks it by its MD5 and
+  restarts the board, then points to pairing; what the flasher said is
+  folded below. Chrome or Edge on a computer; elsewhere the page says so.
+  *Factory image*: one per chip, uploaded and deleted there
+  (`services/device_factory.py`, `firmware_image.read_factory`,
+  `storage/firmware/factory/`, in the backup with the rest of `storage`).
+- **One device's page** -- three tabs, *Device*, *Activity* and, since
+  2026-10-16, *Crashes* (`#crashes`): each crash newest first -- when, the
+  version that crashed (else its build), the task, why (*Crashed*, *Task
+  hung*, *Interrupts hung*), the call path -- with *Dump* to download and
+  *Delete* (`services/device_crashes.py`, `storage/devices/crashes/`).
+  What the other two hold:
+  - its state, board (name and MAC address) and what its firmware can be;
+  - its settings and the switch, and its type (only one its firmware can
+    be; another type starts its settings afresh);
+  - its firmware: what it runs and should run, *Runs* to give it a version of
+    its own (to try one on one device first), *Try again* after a failure;
+  - its backup code, with *New code*;
   - its key on one line, shortened (`jadev_<key id>_…AbCd`: the last four
     characters are kept for that), when it was made and last used, with
     *Rotate* (a new key works at once, the old one stops; the new one is
     shown in the same card) and *Revoke* (no key works until a new one is
     made; the device stays) -- asked for after testing, 2026-10-12;
+    not shown for a **paired** device (since 2026-10-15): its key is given
+    at pairing and never shown, *Revoke* does what switching it off does, and
+    one needing a new key is paired again. A device added by hand (*Add a
+    device*, for development) keeps it;
   - its last 100 requests, each with its answer (`200`, `403 device_off`,
     ...), and its recent events: refused sign-ins, errors, what it reported.
     Both refresh every 5 seconds while the page is open, for watching a
     device while its firmware is written;
-  - *What the device can send*: every request a device of its type can
+  - *What the device can send* (folded closed at the bottom of the page,
+    opened with *Show*, since 2026-10-15: rarely needed once the firmware is
+    done): every request a device of its type can
     send -- the sign of life, each resource, each report -- one per row, with
     what it is for (the type describes its resources and reports), its
     `curl` command, and *Send*: sent from the page as the device, the answer
@@ -237,17 +447,35 @@ version and its address.
 
 ### The device API (`/api/v1/device`)
 
-Every request carries `Authorization: Bearer <key>`, and may carry
-`X-Device-Firmware: <version>`. No session, no cookies, no CSRF token.
+Every request carries `Authorization: Bearer <key>`, and says what the device
+is: `X-Device-Firmware` (the app description's version), `X-Device-Hardware`
+(the MAC address), `X-Device-Board`, `X-Device-Types` (the uses its firmware
+has, comma-separated). No session, no cookies, no CSRF token.
 
 - `GET /api/v1/device` is the sign of life. It answers the device's id,
-  name, type, place, its settings for its type, and the server time.
+  code, name, type, owner, place, its settings for its type, the hash of its
+  backup code, firmware to install (version, size, SHA-256) if any, how
+  often to ask (`poll_every`, 2 s) and the server time. It has an `ETag`;
+  asked with `If-None-Match`, it is `304` while nothing but the time changed.
 - `GET /api/v1/device/resources/<name>` returns what the type offers, such as
   a dispenser's items.
 - `POST /api/v1/device/events` takes `{event_id, kind, data}`, something
   the device reports. The type's module decides and answers. `event_id` is
   the device's own (a counter or random), so a request sent again after a
   network error gets the first answer and is not counted twice.
+- `GET /api/v1/device/firmware`: the firmware it should run and whether to
+  install it; `GET /api/v1/device/firmware/file`: the file (`Range` resumes);
+  `POST /api/v1/device/firmware` with `{version, result: started|failed,
+  detail}`. A version it reports failed is not offered again until an admin
+  asks.
+- `POST /api/v1/device/manager` with `{card}`: whether that card's holder may
+  open the settings on the device (`devices.manage`), asked each time.
+- **Pairing, without a key:** `POST /api/v1/device/pair/start` (the usual
+  headers; 20 an hour per network) answers a code, a pairing id, the
+  approval page's address, how long the code works (10 minutes) and how
+  often to ask (5 s); `POST /api/v1/device/pair/poll` with `{pairing_id}`
+  answers `waiting`, `refused`, or `paired` with the key and the sign of
+  life, once. At most 50 wait at once.
 - **Refusals:** `401` for an unknown or revoked key, `403` for a device switched off,
   `404` for what its type does not offer, `429` above the limit (per device),
   `400` for a report carrying more than 4 KB of data (as UTF-8 JSON).
@@ -263,16 +491,20 @@ Every request carries `Authorization: Bearer <key>`, and may carry
 
 Events are kept 90 days (the nightly clean-up). A device's address is the
 device's, not a person's. Keys are stored only as SHA-256 hashes: they are
-long random strings, so a slow hash adds nothing.
+long random strings, so a slow hash adds nothing; so are pairing ids. A
+pairing is gone once answered, or after its ten minutes (the nightly
+clean-up deletes what is left). Firmware files are kept in
+`storage/firmware/<sha256>.bin`, in backups with the rest of the storage.
+The backup code is kept as it is, for admins to read; the device gets only
+its hash.
 
 ## Later
 
 - **Agreed 2026-10-13** (`docs/cards-plan.md`): cards linked to accounts, and
-  the first use, a "Sales point" type selling a fixed item; attendance around
-  January.
+  the first use, a "Sales point" type selling a fixed item; attendance
+  (built 2026-10-15, `docs/attendance-plan.md`).
 - Not decided: doors and cabinets (with a list kept on the device for when
-  the portal cannot be reached), what attendance records and who may see it
-  (and the privacy policy for it).
+  the portal cannot be reached).
 - Pairing by team leads for their own team (2026-10-14: admins only for now).
 - A stronger sign-in, and cards that prove themselves cryptographically
   (NTAG 424 DNA, DESFire) as well as plain card ids.

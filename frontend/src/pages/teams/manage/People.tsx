@@ -15,7 +15,14 @@ import {
   Text,
   VisuallyHidden,
 } from '@mantine/core';
-import { IconCoin, IconDots, IconUserMinus, IconUserShield } from '@tabler/icons-react';
+import {
+  IconCoin,
+  IconDots,
+  IconHourglass,
+  IconUserMinus,
+  IconUsers,
+  IconUserShield,
+} from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Navigate, useLocation } from 'react-router';
@@ -65,7 +72,7 @@ export function Applications() {
   return (
     <>
       <ManageHeader title="Applications" description="Who has applied, been invited, or is paying to join." />
-      <Panel title="Waiting" flush>
+      <Panel icon={IconHourglass} title="Waiting" flush>
         {applications.isPending ? (
           <LoadingState />
         ) : applications.isError ? (
@@ -228,6 +235,7 @@ export function Members() {
         }
       />
       <Panel
+        icon={IconUsers}
         title="Members"
         flush
         actions={
@@ -363,7 +371,7 @@ export function FormerMembers() {
         title="Former members"
         description="Everybody who was in the team and is not now, kept for good."
       />
-      <Panel title="Former members" flush>
+      <Panel icon={IconUserMinus} title="Former members" flush>
         {former.isPending ? (
           <LoadingState />
         ) : former.isError ? (

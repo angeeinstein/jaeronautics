@@ -40,7 +40,7 @@ afterEach(() => {
 
 describe('presence', () => {
   it('names a page by its pattern, never by what is in the address', () => {
-    expect(pagePattern('/teams/flight-team/manage/prices')).toBe('/teams/:slug/manage/prices');
+    expect(pagePattern('/teams/flight-team/manage/sales')).toBe('/teams/:slug/manage/sales');
     expect(pagePattern('/reset-password/secret-token')).toBe('/reset-password/:token');
     expect(pagePattern('/admin/accounts/42')).toBe('/admin/accounts/:userId');
     expect(pagePattern('/no/such/page')).toBe('other');

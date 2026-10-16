@@ -5,6 +5,7 @@
 import { Button, Group, Stack, Text, TextInput } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconCoin, IconInfoCircle } from '@tabler/icons-react';
 
 import { api, call } from '../../../api/client';
 import { useGo } from '../../../app/useGo';
@@ -51,7 +52,7 @@ export function NewTeam() {
         crumbs={[{ label: 'Admin', to: '/admin' }, { label: plural, to: '/admin/teams' }, { label: 'New' }]}
       />
       <Stack gap="lg">
-        <Panel title="Details">
+        <Panel icon={IconInfoCircle} title="Details">
           <Stack gap="md">
             <DetailsFields value={details} onChange={setDetails} />
             <TextInput
@@ -70,7 +71,7 @@ export function NewTeam() {
             </Text>
           </Stack>
         </Panel>
-        <Panel title="Fee">
+        <Panel icon={IconCoin} title="Fee">
           <FeeFieldsEditor value={fee} onChange={setFee} />
         </Panel>
         <Group justify="flex-end">

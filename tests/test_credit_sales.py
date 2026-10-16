@@ -128,7 +128,8 @@ class TestWhatSellersEarned:
 
         assert (money["fees"], money["sales"]["earned"], money["earned"], money["open"]) == (2500, 400, 2900, 2900)
         assert money["sales"]["count"] == 2
-        assert money["sales"]["by_item"] == [{"name": "Beer", "count": 2, "earned": 400}]
+        assert [{key: row[key] for key in ("name", "count", "earned")} for row in money["sales"]["by_item"]] == [
+            {"name": "Beer", "count": 2, "earned": 400}]
 
     def test_the_associations_sales_are_not_a_teams(self, anna, rocket):
         team, _lead = rocket
@@ -154,19 +155,33 @@ class TestThroughTheApi:
     def test_the_association_keeps_its_prices(self, client, credit_on):  # noqa: F811
         signed_in(client, _treasurer())
 
-        added = send(client, "POST", "/api/v1/admin/credit/items", {"name": "Coffee", "price_cents": 120})
+        added = send(client, "POST", "/api/v1/admin/credit/items",
+                     {"name": "Coffee", "price_cents": 120, "icon": "coffee"})
         assert added.status_code == 201, added.get_json()
+        assert added.get_json()["items"][0]["icon"] == "coffee"
         item_id = added.get_json()["items"][0]["id"]
-        changed = send(client, "PUT", f"/api/v1/admin/credit/items/{item_id}", {"price_cents": 150})
+        changed = send(client, "PUT", f"/api/v1/admin/credit/items/{item_id}", {"price_cents": 150, "icon": "tea"})
 
-        assert changed.get_json()["items"][0]["price_cents"] == 150
+        assert (changed.get_json()["items"][0]["price_cents"], changed.get_json()["items"][0]["icon"]) == (150, "tea")
+
+    def test_every_item_has_an_icon_of_the_list(self, client, credit_on):  # noqa: F811
+        signed_in(client, _treasurer())
+
+        listed = client.get("/api/v1/admin/credit/items").get_json()
+        assert {"value": "coffee", "label": "Coffee"} in listed["icons"]
+        assert listed["icons"][-1] == {"value": "other", "label": "Other"}
+        missing = send(client, "POST", "/api/v1/admin/credit/items", {"name": "Coffee", "price_cents": 120})
+        assert missing.status_code == 400 and "icon" in missing.get_json()["error"]["fields"]
+        unknown = send(client, "POST", "/api/v1/admin/credit/items",
+                       {"name": "Coffee", "price_cents": 120, "icon": "rocket"})
+        assert unknown.get_json()["error"]["fields"] == {"icon": "Choose an icon."}
 
     def test_a_lead_keeps_the_teams_prices_a_member_does_not(self, client, credit_on, rocket):  # noqa: F811
         team, lead = rocket
         signed_in(client, lead)
         path = f"/api/v1/teams/{team.slug}/manage/prices"
 
-        assert send(client, "POST", path, {"name": "Beer", "price_cents": 200}).status_code == 201
+        assert send(client, "POST", path, {"name": "Beer", "price_cents": 200, "icon": "beer"}).status_code == 201
         assert [item["name"] for item in client.get(path).get_json()["items"]] == ["Beer"]
 
         _login(client, _person("someone@example.com", "Some", "One").id)
@@ -200,3 +215,100 @@ class TestThroughTheApi:
 
         assert funds["earned"] == 200 and funds["sales"]["earned"] == 200
         assert funds["sales"]["by_item"] == [{"name": "Beer", "count": 1, "earned": 200}]
+
+
+class TestWhatWasSold:
+    """Admin › Sales and a team's Sales page: by seller and item, the last 30 days and ever."""
+
+    def test_by_seller_and_item(self, client, anna, rocket):
+        team, lead = rocket
+        coffee = credit_sales.add_item(None, name="Coffee", price_cents=120, icon="coffee")
+        beer = credit_sales.add_item(lead, team=team, name="Beer", price_cents=200, icon="beer")
+        mate = credit_sales.add_item(lead, team=team, name="Mate", price_cents=250, icon="mate")
+        credit_sales.sell(anna, coffee)
+        credit_sales.sell(anna, beer)
+        credit_sales.sell(anna, beer)
+        taken = credit_sales.sell(anna, mate)
+        credit_sales.take_back(None, taken)
+        db.session.commit()
+        signed_in(client, _treasurer())
+
+        sellers = client.get("/api/v1/admin/sales").get_json()["sellers"]
+
+        association, rockets = sellers
+        assert association["name"] == "Joanneum Aeronautics" and association["team_slug"] is None
+        assert (association["sold"], association["earned"], association["listed"]) == (1, 120, 1)
+        assert rockets["team_slug"] == team.slug
+        assert (rockets["sold"], rockets["earned"], rockets["sold_30_days"], rockets["earned_30_days"]) == (
+            2, 400, 2, 400)
+        # Each item, what made most first; a sale taken back counts for neither.
+        assert [(item["name"], item["icon"], item["sold"], item["earned"]) for item in rockets["items"]] == [
+            ("Beer", "beer", 2, 400)]
+
+    def test_a_team_sees_its_own(self, client, anna, rocket):
+        team, lead = rocket
+        beer = credit_sales.add_item(lead, team=team, name="Beer", price_cents=200, icon="beer")
+        credit_sales.sell(anna, beer)
+        db.session.commit()
+        signed_in(client, lead)
+
+        own = client.get(f"/api/v1/teams/{team.slug}/manage/sales").get_json()
+        assert (own["name"], own["sold"], own["items"][0]["name"]) == ("Rocket", 1, "Beer")
+
+        _login(client, _person("someone@example.com", "Some", "One").id)
+        assert client.get(f"/api/v1/teams/{team.slug}/manage/sales").status_code in (403, 404)
+
+    def test_only_for_the_associations_treasurer_and_admins(self, client, credit_on):  # noqa: F811
+        signed_in(client, _person("someone@example.com", "Some", "One"))
+        assert client.get("/api/v1/admin/sales").status_code == 403
+
+
+class TestDeletingAndNames:
+    def test_a_deleted_item_leaves_the_list_and_menus_but_its_sales_keep_it(self, client, anna, rocket):
+        from aeronautics_members.services import devices
+
+        team, lead = rocket
+        beer = credit_sales.add_item(lead, team=team, name="Beer", price_cents=200, icon="beer")
+        mate = credit_sales.add_item(lead, team=team, name="Mate", price_cents=250, icon="mate")
+        device, _key = devices.add(None, type="sales_point", owner=team, settings={"items": [beer.id, mate.id]})
+        credit_sales.sell(anna, beer)
+        db.session.commit()
+        signed_in(client, lead)
+
+        deleted = send(client, "DELETE", f"/api/v1/teams/{team.slug}/manage/prices/{beer.id}")
+        assert deleted.status_code == 200, deleted.get_json()
+        assert [item["name"] for item in deleted.get_json()["items"]] == ["Mate"]
+        assert device.settings["items"] == [mate.id]
+        # What was sold still names it, with its icon, as no longer listed.
+        sold = client.get(f"/api/v1/teams/{team.slug}/manage/sales").get_json()
+        assert [(item["name"], item["icon"], item["listed"], item["item_id"]) for item in sold["items"]] == [
+            ("Beer", "beer", False, beer.id)]
+        assert send(client, "DELETE", f"/api/v1/teams/{team.slug}/manage/prices/{beer.id}").status_code == 404
+        with pytest.raises(ConflictError):
+            credit_sales.sell(anna, beer)
+
+    def test_names_are_short(self, client, credit_on, rocket):  # noqa: F811
+        team, lead = rocket
+        signed_in(client, lead)
+        path = f"/api/v1/teams/{team.slug}/manage/prices"
+
+        long = send(client, "POST", path, {"name": "A" * 21, "price_cents": 200, "icon": "beer"})
+        assert long.get_json()["error"]["fields"] == {"name": "At most 20 characters."}
+        assert send(client, "POST", path, {"name": "A" * 20, "price_cents": 200, "icon": "beer"}).status_code == 201
+
+    def test_a_longer_name_from_before_stays_until_it_is_changed(self, credit_on):  # noqa: F811
+        item = credit_sales.add_item(None, name="Coffee", price_cents=100, icon="coffee")
+        item.name = "A very long coffee name from before"
+        credit_sales.update_item(None, item, price_cents=120)
+        assert (item.name, item.price_cents) == ("A very long coffee name from before", 120)
+        with pytest.raises(ValidationError):
+            credit_sales.update_item(None, item, name="Another very long coffee name")
+
+    def test_a_longer_name_sent_again_unchanged_passes(self, credit_on):  # noqa: F811
+        """Found in review (PR #39): the page sends the name with every change,
+        so a price or an icon could not be changed without shortening it."""
+        item = credit_sales.add_item(None, name="Coffee", price_cents=100, icon="coffee")
+        item.name = "A very long coffee name from before"
+        credit_sales.update_item(None, item, name="A very long coffee name from before", price_cents=130,
+                                 icon="tea")
+        assert (item.name, item.price_cents, item.icon) == ("A very long coffee name from before", 130, "tea")

@@ -3150,6 +3150,16 @@ render_nginx_config() {
     keepalive 32;
     keepalive_timeout 60s;
 }"
+    # The devices ask every 2 seconds whether anything changed; "nothing" (304)
+    # is not logged -- 43,000 lines a day per device that say nothing. A sign
+    # of life that brought a change, an error, every other request: logged as
+    # before. As on the device's page in the portal (docs/devices-plan.md).
+    local log_flag="${SERVICE_NAME//[^A-Za-z0-9_]/_}_logged"
+    local log_block
+    log_block="map \"\$request_method \$uri \$status\" \$${log_flag} {
+    \"GET /api/v1/device 304\" 0;
+    default 1;
+}"
     # No Content-Security-Policy here: the portal sets it on every answer itself,
     # with a fresh nonce each time (aeronautics_members/content_security.py). A
     # second, fixed policy from nginx would apply as well and block what it allows.
@@ -3158,6 +3168,8 @@ render_nginx_config() {
     if [[ "${ENABLE_SSL}" == "1" ]] && cert_paths_exist; then
         cat > "${NGINX_CONF_PATH}" <<EOF
 ${upstream_block}
+
+${log_block}
 
 server {
     listen 80;
@@ -3189,6 +3201,7 @@ server {
     set_real_ip_from 127.0.0.1;
     set_real_ip_from ::1;
     client_max_body_size 20m;
+    access_log /var/log/nginx/access.log combined if=\$${log_flag};
 
     # While the portal itself does not answer -- restarting during an update,
     # or down -- nginx shows a page of its own instead of "Bad gateway". As
@@ -3223,6 +3236,8 @@ EOF
         cat > "${NGINX_CONF_PATH}" <<EOF
 ${upstream_block}
 
+${log_block}
+
 server {
     listen 80;
     server_name ${DOMAIN};
@@ -3241,6 +3256,7 @@ server {
     set_real_ip_from 127.0.0.1;
     set_real_ip_from ::1;
     client_max_body_size 20m;
+    access_log /var/log/nginx/access.log combined if=\$${log_flag};
 
     # While the portal itself does not answer -- restarting during an update,
     # or down -- nginx shows a page of its own instead of "Bad gateway". As

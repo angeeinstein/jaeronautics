@@ -4,6 +4,7 @@
  * webhook that never arrived.
  */
 import { Button, Group, Stack, Text } from '@mantine/core';
+import { IconId } from '@tabler/icons-react';
 
 import { api, call } from '../../../api/client';
 import { Details } from '../../../components/Details';
@@ -48,7 +49,7 @@ export function MembershipTab({ account }: { account: Account }) {
   const membership = account.membership;
   if (!membership) {
     return (
-      <Panel title="Membership">
+      <Panel icon={IconId} title="Membership">
         <EmptyState>
           {account.old_forum
             ? 'Not recorded: joined before the portal existed.'
@@ -60,7 +61,11 @@ export function MembershipTab({ account }: { account: Account }) {
   const pill = MEMBERSHIP_PILL[membership.state];
   return (
     <Stack gap="lg">
-      <Panel title="Membership" actions={pill ? <Pill tone={pill.tone}>{pill.label}</Pill> : null}>
+      <Panel
+        icon={IconId}
+        title="Membership"
+        actions={pill ? <Pill tone={pill.tone}>{pill.label}</Pill> : null}
+      >
         <Details
           items={[
             [

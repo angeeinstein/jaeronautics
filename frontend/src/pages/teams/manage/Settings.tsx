@@ -31,7 +31,18 @@ import {
   Tooltip,
   VisuallyHidden,
 } from '@mantine/core';
-import { IconArrowDown, IconArrowUp, IconPlus } from '@tabler/icons-react';
+import {
+  IconArrowDown,
+  IconArrowUp,
+  IconDoorEnter,
+  IconFileText,
+  IconMail,
+  IconPhoto,
+  IconPlus,
+  IconScale,
+  IconShield,
+  IconUsers,
+} from '@tabler/icons-react';
 import { useDebouncedValue } from '@mantine/hooks';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -213,7 +224,7 @@ function TextPanel({ page, pageKey }: { page: Page; pageKey: readonly unknown[] 
     'Saved.',
   );
   return (
-    <Panel title="Text">
+    <Panel icon={IconFileText} title="Text">
       <Stack gap="md">
         <Textarea
           label="Short description"
@@ -427,7 +438,7 @@ function PhotosPanel({ page, pageKey }: { page: Page; pageKey: readonly unknown[
   );
   const tooMany = files.length > room;
   return (
-    <Panel title="Photos">
+    <Panel icon={IconPhoto} title="Photos">
       <Stack gap="md">
         <Text size="sm" c="dimmed">
           {`Below the text on the About page, each opening large. ${String(page.photos.length)} of ${String(page.photos_max)}.`}
@@ -476,7 +487,7 @@ function PageForm({ page, pageKey }: { page: Page; pageKey: readonly unknown[] }
   return (
     <Stack gap="lg">
       <TextPanel page={page} pageKey={pageKey} />
-      <Panel title="Pictures">
+      <Panel icon={IconPhoto} title="Pictures">
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">
           <ImageField
             kind="picture"
@@ -552,7 +563,7 @@ function ApplyingForm({
   );
   return (
     <Stack gap="lg">
-      <Panel title="Joining">
+      <Panel icon={IconDoorEnter} title="Joining">
         <Stack gap="md">
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
             <Select
@@ -636,7 +647,7 @@ function ApplyingForm({
           </Group>
         </Stack>
       </Panel>
-      <Panel title="Rules to accept">
+      <Panel icon={IconScale} title="Rules to accept">
         <Stack gap="xs">
           {applying.rules ? (
             <Text size="sm">
@@ -701,7 +712,7 @@ function AccessListSettings({ list, listKey }: { list: AccessList; listKey: read
     'Saved.',
   );
   return (
-    <Panel title="Who receives it, and when">
+    <Panel icon={IconUsers} title="Who receives it, and when">
       <Stack gap="md">
         <Text size="sm" c="dimmed">
           The current members, emailed to whoever gives access to the team's rooms. The leads are copied in.
@@ -770,6 +781,7 @@ function AccessListPreview({ list, listKey }: { list: AccessList; listKey: reado
   ];
   return (
     <Panel
+      icon={IconMail}
       title="The email"
       actions={
         list.to.length ? (
@@ -1072,7 +1084,7 @@ function RolesBody({ roles, slug }: { roles: Roles; slug: string }) {
   ];
   return (
     <Stack gap="md">
-      <Panel title="Roles" flush>
+      <Panel icon={IconShield} title="Roles" flush>
         {rows.length ? (
           <Table verticalSpacing="sm" aria-label="Roles">
             <Table.Thead>

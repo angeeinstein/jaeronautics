@@ -575,8 +575,14 @@ The plan and what was decided: `docs/messages-plan.md`. Code:
     answers them.
   - Messages are kept on Admin › Messages or the team's Messages page, to be
     marked done.
-  - An email that could not be sent is tried again by the notification
-    timer, up to six times.
+  - The contact form's are answered with *Reply* on Admin › Messages: sent
+    from the account chosen in Settings › Email, *Senders* (*Replies to
+    contact messages*; empty: the default), optionally with a blind copy to
+    that account's own address. Answers to a reply arrive in that account's
+    mailbox -- set it up in a mail program. A team's messages are answered
+    by email.
+  - An email that could not be sent -- a message or a reply -- is tried
+    again by the notification timer, up to six times.
 - **Spam:** a hidden field, a form sent within three seconds refused, and
   rate limits (`RATELIMIT_CONTACT`, 5 an hour per person or address;
   `RATELIMIT_CONTACT_PER_IP`, 30 an hour per network address).
@@ -584,14 +590,19 @@ The plan and what was decided: `docs/messages-plan.md`. Code:
   mailings** (a team's Messages page, `team.messages`) go to active, paying
   members only, a team's to its active members.
   - Each recipient is a row in `mailing_recipients`, sent by the
-    notification timer (every two minutes) within Settings › Mailings'
-    limits -- per hour and per day, at most 40 a run.
+    notification timer (every two minutes) within the limits on Settings ›
+    Email, *What goes out* -- per hour and per day, at most 40 a run.
   - A send that fails is tried three times, then counted as failed and
     listed on the announcement's page.
   - Three failures in a row end the run: the server is refusing, and the
     next run tries again.
-- **The mail account** for all of these is chosen on Settings › Mailings. It
-  can be a different provider from the notifications'. Its limits belong
+- **Which mail account sends what** is Settings › Email, *Senders*: a
+  default (also the account emails: password reset, confirming an address),
+  and for welcome emails, notifications, announcements and team mailings
+  (with the contact form's messages), and replies to contact messages an
+  account of their own -- each empty is the default
+  (`services/mail_senders.py`). Mailings can go out through a different
+  provider from the notifications'. Its limits belong
   there: Brevo's free plan sends 300 a day, so an invitation to more members
   takes more than a day -- send it early.
 - **News and notices.**
@@ -655,13 +666,16 @@ a reason) and refunds. Admin › Settings › Credit is `settings.general`.
   books nothing more. A refund made in Stripe's dashboard comes off the
   credit through the webhook.
 
-**Selling.** The association's price list is on Admin › Credit; each team's
-on its *Prices* page (leads and team treasurer). A sale is booked by hand on
+**Selling.** Admin › **Sales** (admins and the treasurer) shows what was
+sold, by seller and by item -- how many and what each made, the last 30 days
+and ever -- the association's price list and its sales points' menus; each
+team has the same for itself on its *Sales* page (leads and team treasurer).
+Admin › Credit keeps to members' money: the totals, balances, the latest
+entries. A sale is booked by hand on
 a person's credit page (Admin › Credit › the person › *Book by hand* ›
 *Sale*) and taken back from its row. What a team sells counts in its money
 like its fees and is transferred with the next payout; the association's
-own sales stay with it. Card readers are designed in `docs/credit-plan.md`,
-not built.
+own sales stay with it. Card readers: "Cards and sales points" below.
 
 **Switching it off** hides credit from members and stops top-ups. Balances
 and history stay, Admin › Credit stays while anybody still has some, and a
@@ -685,12 +699,12 @@ Devices (admins: `devices.manage`). The plan, and what is decided:
 
 - **Adding one:** its type and its **owner** -- the association or a team --
   and, if wanted, a name (its random code, such as `K7MQ-2X9A`, stands in for
-  one). The owner runs it from then on: a team's leads and treasurer on the
-  team's page, *Devices*; the association's admins and treasurer on Admin ›
-  Credit. They name it, place it, describe it, choose what it does within its
-  type (a reader's item, from their own price list) and switch it off or on,
-  and see what it reported lately. The key, the type, the owner and removing
-  it stay with admins.
+  one). A team's leads and treasurer run the team's from its *Devices* page:
+  name, place, description, on or off, what it reported lately. **What a
+  sales point sells** is chosen with the price list, on the owner's *Sales*
+  page (Admin › Sales for the association's) -- never on a device's page, so
+  changing a device's owner always saves and its menu starts empty. The key,
+  the type, the owner and removing it stay with admins.
 - **Its key is shown once,** with *Copy key*, *Download configuration* (a
   JSON file: the portal's address, the device's code, its type, the key) and
   *Download starter*: a Markdown file with everything firmware for it needs
@@ -698,15 +712,20 @@ Devices (admins: `devices.manage`). The plan, and what is decided:
   an ESP32 (Arduino) with the key in place. Only a SHA-256 hash of the key is kept, and its last
   four characters to tell keys apart. On the device's page: *Rotate* (a new
   key; the old one stops at once) and *Revoke* (no key works until a new one
-  is made).
+  is made) -- only for a device added by hand: a paired one is paired again
+  for a new key.
 - **Switching one off** refuses it whatever key it has. *Remove* deletes it,
   its key and its events.
-- **Its page** shows when it last spoke (written at most every 30 seconds),
+- **Its page** (two tabs: *Device*, and *Activity* with its requests, events
+  and what it can send) shows how many outputs it says it has (a sale can
+  switch them: set on the owner's Sales page, `docs/devices-plan.md`,
+  "Actions after a sale"), when it last spoke (written at most every 30 seconds),
   from where, its firmware (`X-Device-Firmware`), its board's MAC address
   (`X-Device-Hardware`; another board with the same key is noted as an event), its last 100 requests with
   their answers, its recent events (kept 90 days, by the nightly
   `cleanup-logs`) -- both refreshed every 5 seconds while open -- and *What
-  the device can send*: each request of its type, described, as a `curl`
+  the device can send* (folded away at the bottom, opened with *Show*): each
+  request of its type, described, as a `curl`
   command, and with *Send* to send it from the page and see the device's
   answer (not counted as seen; never for a report that would really change
   something). A run of requests held back by the rate limit (429
@@ -726,6 +745,37 @@ Devices (admins: `devices.manage`). The plan, and what is decided:
   `services/device_types.py` (or a module of its own it imports): its
   settings, what it may fetch, what it may report and the answers. There
   are *Test*, which answers what it is sent, and *Sales point* (below).
+- **Pairing** (`services/device_pairing.py`): a device without a key shows
+  a code and a QR code; *Pair a device* (or the waiting list on the Devices
+  page) shows what it says it is, and an admin pairs it as a new device or
+  as the new board of one -- the old board's key stops at once. The device
+  fetches its key itself; nobody sees it. A code works ten minutes;
+  `RATELIMIT_DEVICE_PAIR` (20 an hour per network) and at most 50 waiting.
+  A device that missed its answer starts again and is paired as replacing
+  itself.
+- **What a device says it is,** with every request: `X-Device-Board` and
+  `X-Device-Types` (the uses its firmware has). Only those types can be
+  chosen for it. Its sign of life has an `ETag`; asked again with it, it is
+  `304` while nothing changed, so a device asks every 10 seconds and sees a
+  change within seconds (304s are not listed with its requests).
+- **Its settings on the device** open with an admin's card
+  (`POST /api/v1/device/manager`, asked each time, so a role changed counts
+  at once) or, when the portal cannot be reached, its six-digit **backup
+  code**, shown on its page with *New code*.
+- **Firmware** (`services/device_firmware.py`, `services/firmware_image.py`):
+  Devices › *Firmware*. An upload is checked from the file itself -- a whole
+  ESP-IDF app image (its checksum and appended SHA-256), with an app
+  description, of the same project as the files before (16 MB at most) --
+  and kept in `storage/firmware/` (`FIRMWARE_DIR`). *Install on every device*
+  chooses the version; a device's page can give it one of its own. Devices
+  are offered it with their sign of life, download it with their key and say
+  how it went; a version a device reports failed is not offered to it again
+  until *Try again*. A version a device is to run cannot be deleted.
+  Uploading a version again, or another file with a version already there,
+  is refused: build it with a new version.
+- **What the firmware has to do:** `docs/device-protocol.md`. The Firmware
+  page's *Device protocol* button downloads it with the portal's address
+  filled in, to hand to whoever writes the firmware.
 
 ## Cards and sales points
 
@@ -733,31 +783,32 @@ Paying for a drink by tapping a card (docs/cards-plan.md). The code:
 `services/cards.py`, `services/sales_points.py`, `api/cards.py`.
 
 - **A reader at the fridge:** Admin › Settings › Devices › *Add*, type
-  *Sales point*, and its owner. Its owner chooses the **item** a tap sells
-  from their own price list (the association's on Admin › Credit, a team's on
-  its Prices page); the sale counts for the owner. The reader's firmware reports each tap:
-  `POST /api/v1/device/events` with
-  `{"event_id": "...", "kind": "tap", "data": {"card": "04A1B2C3D4E5F6"}}`,
-  and shows the answer: `sold` (item, price, what is left), `linked`, or
-  `refused` with a `reason` (`card_unknown`, `card_disabled`,
-  `card_blocked`, `account_off`, `not_enough`, `item_off`, `credit_off`,
-  `not_set_up`, `too_soon`). `GET /api/v1/device/resources/item` gives the
-  item and its price, for a label. A card is sold to at most once in 5
-  seconds per reader; the same `event_id` again gets the first answer.
+  *Sales point*, and its owner. Its owner chooses up to four **items**, in
+  order, from their own price list, both on their *Sales* page (Admin › Sales
+  for the association's); every item there has an icon, chosen from a
+  fixed list when it is added. The sale counts for the owner. A card tapped
+  is reported as `card` and answered with a menu -- the items, the first
+  name, the balance and a ticket valid for 20 seconds; the item chosen is
+  reported as `buy` with that ticket, which buys once. The messages, every
+  answer and refusal: `docs/device-protocol.md`, section 8.1. Tickets are
+  deleted after a day by the nightly clean-up.
 - **Cards:** members see theirs on My Account › Cards (once a sales point
-  exists) and link one by scanning it with an Android phone in Chrome (Web
-  NFC). Admins (`cards.manage`) see every card under Admin › Cards and
-  manage a person's on their account page, tab *Cards*: block and unblock,
-  remove, and link one -- scanned with their own phone, its ID typed in, or
-  *Wait for a tap* on a reader, which links the next unknown card tapped
-  there within a minute.
+  exists) and link one by tapping it on a sales point: an unknown card gets
+  a QR code on the reader's screen, and the phone that opens it links the
+  card to the account signed in there (`services/card_links.py`; the link
+  works once, for 10 minutes, on the first phone that opened it). That is
+  the only way: Web NFC and the admins' ways were removed on 2026-10-14
+  (`docs/cards-plan.md`). Admins (`cards.manage`) see every card under
+  Admin › Cards and manage a person's on their account page, tab *Cards*:
+  block and unblock, remove.
 - **The card IDs are not kept:** only an HMAC of each, under a key made
   from `SECRET_KEY`, and its last four characters. **Changing `SECRET_KEY`
   makes every card unknown** (System health says so); keep it, or have the
   cards linked again. A backup carries it, so a restored portal knows the
   cards.
-- **Rate limit:** `RATELIMIT_CARD_LINK` (20 an hour per account) for
-  linking by scanning.
+- **Rate limits:** `RATELIMIT_CARD_LINK` (20 an hour per account) for
+  linking a card with a reader's QR code, `RATELIMIT_CARD_QR` (60 an hour
+  per account, else per network) for opening one.
 
 ## Stripe's fees
 

@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatDate, formatDateTime, formatDayOf, titleFromCode } from './format';
+import {
+  attendanceDay,
+  formatDate,
+  formatDateTime,
+  formatDayOf,
+  formatMinutes,
+  formatTime,
+  fromVienna,
+  titleFromCode,
+  viennaParts,
+} from './format';
 
 describe('dates and times', () => {
   it('a moment in Vienna time, summer and winter', () => {
@@ -18,5 +28,29 @@ describe('dates and times', () => {
 
   it('codes from the log as words', () => {
     expect(titleFromCode('email_changed')).toBe('Email Changed');
+  });
+
+  it('minutes as hours and minutes', () => {
+    expect(formatMinutes(145)).toBe('2 h 25 min');
+    expect(formatMinutes(45)).toBe('45 min');
+    expect(formatMinutes(180)).toBe('3 h');
+    expect(formatMinutes(0)).toBe('0 min');
+  });
+
+  it('Vienna time to UTC and back, on both sides of a clock change', () => {
+    expect(fromVienna('2026-07-01', '14:05')).toBe('2026-07-01T12:05:00.000Z');
+    expect(fromVienna('2026-12-31', '00:30')).toBe('2026-12-30T23:30:00.000Z');
+    expect(fromVienna('2026-10-25', '04:00')).toBe('2026-10-25T03:00:00.000Z');
+    expect(fromVienna('2026-03-29', '01:30')).toBe('2026-03-29T00:30:00.000Z');
+    expect(viennaParts('2026-07-01T12:05:00Z')).toEqual({ day: '2026-07-01', time: '14:05' });
+    expect(formatTime('2026-12-31T23:30:00Z')).toBe('00:30');
+  });
+
+  it('an attendance day runs from 03:15 to 03:15 in Vienna', () => {
+    expect(attendanceDay('2026-10-14T20:00:00Z')).toBe('2026-10-14'); // 22:00
+    expect(attendanceDay('2026-10-15T01:14:00Z')).toBe('2026-10-14'); // 03:14 the night after
+    expect(attendanceDay('2026-10-15T01:15:00Z')).toBe('2026-10-15'); // 03:15
+    expect(attendanceDay('2027-02-28T23:30:00Z')).toBe('2027-02-28'); // 00:30 on 1 March
+    expect(attendanceDay('2026-12-31T23:30:00Z')).toBe('2026-12-31'); // 00:30 on New Year's Day
   });
 });

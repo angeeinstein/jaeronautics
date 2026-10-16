@@ -188,6 +188,39 @@ describe('a team', () => {
     expect(screen.queryByRole('region', { name: 'Needs your attention' })).not.toBeInTheDocument();
   });
 
+  it('paying the fee to join asks card or SEPA first', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('location', { origin: window.location.origin, href: window.location.href, assign });
+    const { calls } = show(
+      <TeamPage />,
+      {
+        [`${API}/rocket`]: {
+          body: team({
+            sees_team_page: true,
+            members: [],
+            joining: null,
+            membership: membership({ status: 'approved', status_label: 'Approved', actions: ['pay_join'] }),
+          }),
+        },
+        [`POST ${API}/rocket/pay`]: { body: { url: 'https://checkout.stripe.test/t' } },
+      },
+      '/teams/rocket',
+      '/teams/:slug',
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Pay and join' }));
+    const dialog = await screen.findByRole('dialog', { name: 'How do you want to pay?' });
+    expect(within(dialog).getByRole('radio', { name: /^SEPA Direct Debit/ })).toHaveAccessibleName(
+      /Your team membership starts once the debit clears, in a few days/,
+    );
+    expect(calls.some((call) => call.method === 'POST')).toBe(false);
+    await userEvent.click(within(dialog).getByRole('radio', { name: /^Card/ }));
+
+    await waitFor(() => {
+      expect(assign).toHaveBeenCalledWith('https://checkout.stripe.test/t');
+    });
+  });
+
   it('whoever runs it sees what waits for them, a way straight there', async () => {
     show(
       <TeamPage />,

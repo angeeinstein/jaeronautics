@@ -5,16 +5,12 @@
  * treasurer (credit.manage). Data: GET /api/v1/admin/credit
  * (aeronautics_members/api/credit.py).
  */
-import { Alert, Anchor, Avatar, Group, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
-import { IconDownload } from '@tabler/icons-react';
+import { Alert, Anchor, Avatar, Group, SimpleGrid, Stack, Table, Text } from '@mantine/core';
+import { IconDownload, IconHistory, IconWallet } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
-
-import { api, call } from '../../../api/client';
 
 import { AppLink } from '../../../app/AppLink';
 import { PageHeader } from '../../../components/PageHeader';
-import { OwnedDeviceList } from '../../../components/devices/OwnedDevices';
-import { type ItemChange, PriceListPanel } from '../../../components/PriceList';
 import { Panel } from '../../../components/Panel';
 import { Pill } from '../../../components/Pill';
 import { StatTile } from '../../../components/StatTile';
@@ -109,108 +105,6 @@ function Recent({ entries }: { entries: CreditOverview['recent'] }) {
   );
 }
 
-function Sellers({ sellers }: { sellers: CreditOverview['sellers'] }) {
-  if (!sellers.some((seller) => seller.earned || seller.items)) return null;
-  return (
-    <Panel title="Sold" flush>
-      <div className={classes.inset}>
-        <Table.ScrollContainer minWidth={480} type="native">
-          <Table verticalSpacing="sm" aria-label="Sold">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th scope="col">Seller</Table.Th>
-                <Table.Th scope="col" className={classes.amount}>
-                  Items
-                </Table.Th>
-                <Table.Th scope="col" className={classes.amount}>
-                  Last 30 days
-                </Table.Th>
-                <Table.Th scope="col" className={classes.amount}>
-                  Ever
-                </Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {sellers.map((seller) => (
-                <Table.Tr key={seller.team_slug ?? 'association'}>
-                  <Table.Td>
-                    {seller.team_slug ? (
-                      <AppLink to={`/admin/money/${seller.team_slug}`} className={classes.name}>
-                        {seller.name}
-                      </AppLink>
-                    ) : (
-                      <span className={classes.name}>{seller.name}</span>
-                    )}
-                  </Table.Td>
-                  <Table.Td className={`${classes.amount} ja-figures`}>{seller.items}</Table.Td>
-                  <Table.Td className={`${classes.amount} ja-figures`}>
-                    {formatEuros(seller.earned_30_days)}
-                  </Table.Td>
-                  <Table.Td className={`${classes.amount} ja-figures`}>{formatEuros(seller.earned)}</Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
-      </div>
-    </Panel>
-  );
-}
-
-const associationPricesKey = ['admin', 'credit', 'items'] as const;
-
-/** The association's own price list: coffee in the student area, say. */
-function AssociationPrices() {
-  const list = useQuery({
-    queryKey: associationPricesKey,
-    queryFn: () => call(api.GET('/api/v1/admin/credit/items')),
-  });
-  if (!list.data) return null;
-  return (
-    <PriceListPanel
-      title="The association's price list"
-      list={list.data}
-      queryKey={associationPricesKey}
-      add={(body) => call(api.POST('/api/v1/admin/credit/items', { body }))}
-      change={(id: number, body: ItemChange) =>
-        call(api.PUT('/api/v1/admin/credit/items/{item_id}', { params: { path: { item_id: id } }, body }))
-      }
-    />
-  );
-}
-
-const associationDevicesKey = ['admin', 'credit', 'devices'] as const;
-
-/** The association's own devices -- a reader in the student area, say -- shown once it has one. */
-function AssociationDevices() {
-  const list = useQuery({
-    queryKey: associationDevicesKey,
-    queryFn: () => call(api.GET('/api/v1/admin/credit/devices')),
-  });
-  useLiveRefresh(associationDevicesKey, EVERY_MINUTE);
-  if (!list.data?.items.length) return null;
-  return (
-    <Stack gap="sm">
-      <Title order={2} size="h3">
-        The association&apos;s devices
-      </Title>
-      <OwnedDeviceList
-        devices={list.data}
-        owner="association"
-        queryKey={associationDevicesKey}
-        change={(id, body) =>
-          call(
-            api.PATCH('/api/v1/admin/credit/devices/{device_id}', {
-              params: { path: { device_id: id } },
-              body,
-            }),
-          )
-        }
-      />
-    </Stack>
-  );
-}
-
 export function Credit() {
   const overview = useQuery(creditOverviewQuery);
   useLiveRefresh(creditOverviewQuery.queryKey, EVERY_MINUTE);
@@ -259,22 +153,19 @@ export function Credit() {
               note="Last 30 days"
             />
           </SimpleGrid>
-          <Sellers sellers={overview.data.sellers} />
-          <AssociationPrices />
-          <AssociationDevices />
-          <Panel title="Balances" flush>
+          <Panel icon={IconWallet} title="Balances" flush>
             <div className={classes.inset}>
               <People people={overview.data.people} />
             </div>
           </Panel>
-          <Panel title="Latest" flush>
+          <Panel icon={IconHistory} title="Latest" flush>
             <div className={classes.inset}>
               <Recent entries={overview.data.recent} />
             </div>
           </Panel>
           <Text size="sm" c="dimmed">
             Cash handed over, credit paid out, corrections, sales and refunds are booked on a person&apos;s
-            page. A team keeps its own price list, on its Prices page.
+            page. What is sold, the price lists and the sales points are on Sales.
           </Text>
         </Stack>
       )}

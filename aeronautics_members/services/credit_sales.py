@@ -29,8 +29,30 @@ READER = "reader"
 CHANNELS = (BOOKED, READER)
 
 LEAST_PRICE = 1
-NAME_LENGTH = 60
+#: An item's name: four of them share a small screen on a sales point.
+NAME_LENGTH = 20
 MOST_ITEMS = 50
+
+#: The icons an item can have, shown beside it on a device's screen
+#: (docs/device-protocol.md, "Icons"). The firmware carries a picture for each
+#: name and shows ``other`` for one it does not know: a new icon is a new name
+#: here and a firmware update. Chosen when the item is added.
+ICONS = (
+    ("coffee", "Coffee"),
+    ("tea", "Tea"),
+    ("hot_chocolate", "Hot chocolate"),
+    ("beer", "Beer"),
+    ("soft_drink", "Soft drink"),
+    ("mate", "Mate"),
+    ("energy_drink", "Energy drink"),
+    ("juice", "Juice"),
+    ("water", "Water"),
+    ("snack", "Snack"),
+    ("sweets", "Sweets"),
+    ("ice_cream", "Ice cream"),
+    ("other", "Other"),
+)
+ICON_NAMES = frozenset(name for name, _label in ICONS)
 
 
 def _refuse(field, message, code="credit_item_invalid"):
@@ -43,7 +65,8 @@ def _refuse(field, message, code="credit_item_invalid"):
 def items(team=None, *, include_inactive=False):
     """A seller's price list in its order: the association's (``team`` None) or a team's."""
     query = db.select(CreditItem).where(
-        CreditItem.team_id.is_(None) if team is None else CreditItem.team_id == team.id
+        CreditItem.team_id.is_(None) if team is None else CreditItem.team_id == team.id,
+        CreditItem.deleted_at.is_(None),
     )
     if not include_inactive:
         query = query.where(CreditItem.active.is_(True))
@@ -53,15 +76,22 @@ def items(team=None, *, include_inactive=False):
 def item_of(item_id, team=None):
     """One item of this seller's list, or NotFoundError."""
     item = db.session.get(CreditItem, item_id)
-    if item is None or item.team_id != (team.id if team is not None else None):
+    if item is None or item.deleted_at is not None or item.team_id != (team.id if team is not None else None):
         raise NotFoundError("No such item.", code="credit_item_not_found")
     return item
 
 
-def _clean(name, price_cents):
-    name = " ".join((name or "").split())[:NAME_LENGTH]
+def _clean_name(name):
+    name = " ".join((name or "").split())
     if not name:
         _refuse("name", "Name it.")
+    if len(name) > NAME_LENGTH:
+        _refuse("name", f"At most {NAME_LENGTH} characters.")
+    return name
+
+
+def _clean(name, price_cents):
+    name = _clean_name(name)
     try:
         price = int(price_cents)
     except (TypeError, ValueError):
@@ -71,12 +101,19 @@ def _clean(name, price_cents):
     return name, price
 
 
-def add_item(actor, *, team=None, name, price_cents):
+def _clean_icon(icon):
+    if icon not in ICON_NAMES:
+        _refuse("icon", "Choose an icon.")
+    return icon
+
+
+def add_item(actor, *, team=None, name, price_cents, icon="other"):
     name, price = _clean(name, price_cents)
+    icon = _clean_icon(icon)
     if len(items(team, include_inactive=True)) >= MOST_ITEMS:
         raise ConflictError(f"A price list holds at most {MOST_ITEMS} items.", code="credit_items_too_many")
     last = max((item.position for item in items(team, include_inactive=True)), default=-1)
-    item = CreditItem(team_id=team.id if team is not None else None, name=name, price_cents=price,
+    item = CreditItem(team_id=team.id if team is not None else None, name=name, price_cents=price, icon=icon,
                       active=True, position=last + 1)
     db.session.add(item)
     db.session.flush()
@@ -84,18 +121,23 @@ def add_item(actor, *, team=None, name, price_cents):
     return item
 
 
-def update_item(actor, item, *, name=None, price_cents=None, active=None):
-    """Rename it, change its price, or switch it off and on. Sales made stay at their price."""
-    new_name, new_price = _clean(item.name if name is None else name,
-                                 item.price_cents if price_cents is None else price_cents)
-    before = (item.name, item.price_cents, item.active)
+def update_item(actor, item, *, name=None, price_cents=None, active=None, icon=None):
+    """Rename it, change its price or icon, or switch it off and on. Sales made stay at their price."""
+    # A name longer than the limit, from before it, stays until it is changed:
+    # sent again unchanged with a new price or icon, it passes as it is.
+    unchanged = name is None or " ".join(name.split()) == item.name
+    new_name = item.name if unchanged else _clean_name(name)
+    _, new_price = _clean("-", item.price_cents if price_cents is None else price_cents)
+    before = (item.name, item.price_cents, item.active, item.icon)
     item.name, item.price_cents = new_name, new_price
+    if icon is not None:
+        item.icon = _clean_icon(icon)
     if active is not None:
         item.active = bool(active)
     item.updated_at = get_now_utc()
-    if before != (item.name, item.price_cents, item.active):
+    if before != (item.name, item.price_cents, item.active, item.icon):
         _audit("credit_item_changed", actor, item, before={"name": before[0], "price_cents": before[1],
-                                                            "active": before[2]})
+                                                            "active": before[2], "icon": before[3]})
     return item
 
 
@@ -112,10 +154,31 @@ def move_item(actor, item, direction):
     return item
 
 
+def delete_item(actor, item):
+    """Off its price list for good: what was sold still names it. A sales
+    point's menu loses it at once, and with it the item's actions there."""
+    from ..db_models import Device
+    from . import device_types
+
+    item.deleted_at = get_now_utc()
+    item.active = False
+    devices = db.session.execute(
+        db.select(Device).where(Device.team_id.is_(None) if item.team_id is None else Device.team_id == item.team_id)
+    ).scalars().all()
+    for device in devices:
+        chosen = (device.settings or {}).get("items")
+        if isinstance(chosen, list) and item.id in chosen:
+            settings = {**device.settings, "items": [found for found in chosen if found != item.id]}
+            device_type = device_types.get(device.type)
+            device.settings = device_type.tidy(settings) if device_type and device_type.tidy else settings
+    _audit("credit_item_deleted", actor, item)
+    return item
+
+
 def _audit(event, actor, item, **extra):
     log_audit_event("credit", event, actor_user=actor, metadata={
         "item_id": item.id, "team_id": item.team_id, "name": item.name, "price_cents": item.price_cents,
-        "active": item.active, **extra,
+        "icon": item.icon, "active": item.active, **extra,
     })
 
 
@@ -132,7 +195,7 @@ def sell(user, item, *, by=None, channel=BOOKED, card=None, device=None):
     reader, ``card`` and ``device`` are what it was paid with, and where."""
     if channel not in CHANNELS:
         raise ValidationError("Unknown way of selling.", code="credit_channel_invalid")
-    if not item.active:
+    if not item.active or item.deleted_at is not None:
         raise ConflictError(f"{item.name} is not sold any more.", code="credit_item_inactive")
     if item.team is not None and item.team.status != "active":
         raise ConflictError(f"{item.team.name} is archived.", code="credit_seller_archived")
@@ -194,7 +257,7 @@ def sales_summary(team=None, since=None):
     """What a seller earned with credit, in cents, and by item: sales less what was taken back,
     and for a team less the association's share where it keeps one.
 
-    ``{"earned": int, "count": int, "by_item": [{"name", "count", "earned"}]}`` --
+    ``{"earned": int, "count": int, "by_item": [{"key", "name", "icon", "count", "earned"}]}`` --
     ``count`` is the sales that stand (a sale taken back counts for neither).
     """
     entries = db.session.execute(_sales_query(team, since)).scalars().all()
@@ -204,7 +267,10 @@ def sales_summary(team=None, since=None):
     count = 0
     for entry in entries:
         key = entry.item_id or f"name:{entry.description}"
-        row = by_item.setdefault(key, {"name": entry.item.name if entry.item else entry.description,
+        row = by_item.setdefault(key, {"key": key, "name": entry.item.name if entry.item else entry.description,
+                                       "icon": entry.item.icon if entry.item else "other",
+                                       "item_id": entry.item_id,
+                                       "listed": entry.item is not None and entry.item.deleted_at is None,
                                        "count": 0, "earned": 0})
         # The seller's part: the price, less the association's share where it keeps one,
         # and the top-up fee's share where the teams carry Stripe's fees.

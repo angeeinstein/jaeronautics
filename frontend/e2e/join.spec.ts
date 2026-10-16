@@ -2,6 +2,15 @@ import type { Page } from '@playwright/test';
 
 import { expect, signIn, test } from './fixtures';
 
+/** Card or SEPA, asked only when something is charged today -- not in the year's free months. */
+async function howToPay(page: Page) {
+  const cost = page.getByRole('region', { name: 'What it costs' });
+  await expect(cost).toBeVisible();
+  const sepa = page.getByRole('radio', { name: /^SEPA Direct Debit/ });
+  if ((await cost.innerText()).includes('Free until')) await expect(sepa).toHaveCount(0);
+  else await sepa.click();
+}
+
 test.describe('the start page', () => {
   test('says what the portal is, and the two ways in', async ({ page }) => {
     await page.goto('/');
@@ -92,6 +101,7 @@ test.describe('joining', () => {
     await expect(dialog.getByRole('heading', { name: 'Statuten' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
+    await howToPay(page);
     await page.getByRole('checkbox').check();
     await page.getByRole('button', { name: 'Join and continue to payment' }).click();
 
@@ -127,6 +137,7 @@ test.describe('joining', () => {
     await next(page, 'Your password');
     await page.getByLabel(/^Password/).fill(`another-${testInfo.project.name}`);
     await next(page, 'Check and join');
+    await howToPay(page);
     await page.getByRole('checkbox').check();
     await page.getByRole('button', { name: 'Join and continue to payment' }).click();
 

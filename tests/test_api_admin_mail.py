@@ -82,15 +82,16 @@ class TestAccounts:
 
         assert response.status_code == 400 and "key" in response.get_json()["error"]["fields"]
 
-    def test_removing_the_welcome_emails_sender_says_so(self, client):
+    def test_removing_a_chosen_sender_says_what_falls_to_the_default(self, client):
         _boss(client)
         account_id = _add(client)["id"]
+        app_module.set_setting_value("mail_default_sender", "office")
         app_module.set_setting_value("welcome_email_sender", "office")
         db.session.commit()
 
         body = send(client, "DELETE", f"{API}/accounts/{account_id}").get_json()
 
-        assert body == {"removed_welcome_sender": True}
+        assert body == {"cleared_senders": ["default", "welcome"]}
         assert db.session.get(Setting, "welcome_email_sender") is None
         assert db.session.get(MailAccount, account_id) is None
 
@@ -181,5 +182,7 @@ class TestTheTestEmail:
 def test_the_pages_are_the_apps(client):
     _boss(client)
 
-    assert client.get("/admin/settings/mail").status_code == 200
-    assert client.get("/admin/settings/test-email").status_code == 200
+    assert client.get("/admin/settings/email").status_code == 200
+    # The old addresses lead to Settings › Email's tabs.
+    assert client.get("/admin/settings/mail").headers["Location"].endswith("/admin/settings/email#accounts")
+    assert client.get("/admin/settings/test-email").headers["Location"].endswith("/admin/settings/email#test")

@@ -82,6 +82,10 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/public/Contact')).Contact }),
           },
           {
+            path: '/link/:token',
+            lazy: async () => ({ Component: (await import('../pages/public/LinkCard')).LinkCard }),
+          },
+          {
             path: '/unsubscribe/:token',
             lazy: async () => ({ Component: (await import('../pages/public/Unsubscribe')).Unsubscribe }),
           },
@@ -122,6 +126,10 @@ export const routes: RouteObject[] = [
           {
             path: 'cards',
             lazy: async () => ({ Component: (await import('../pages/account/Cards')).Cards }),
+          },
+          {
+            path: 'attendance',
+            lazy: async () => ({ Component: (await import('../pages/account/Attendance')).Attendance }),
           },
           {
             path: 'create-membership',
@@ -229,12 +237,18 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/teams/manage/Messages')).Messages }),
           },
           {
-            path: 'manage/prices',
-            lazy: async () => ({ Component: (await import('../pages/teams/manage/Prices')).Prices }),
+            path: 'manage/sales',
+            lazy: async () => ({ Component: (await import('../pages/teams/manage/Sales')).Sales }),
           },
           {
             path: 'manage/devices',
             lazy: async () => ({ Component: (await import('../pages/teams/manage/Devices')).Devices }),
+          },
+          {
+            path: 'manage/attendance',
+            lazy: async () => ({
+              Component: (await import('../pages/teams/manage/Attendance')).Attendance,
+            }),
           },
           // Site admins only: what used to be the team's page under Admin › Teams.
           {
@@ -310,10 +324,8 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/admin/settings/General')).General }),
           },
           {
-            path: 'settings/notifications',
-            lazy: async () => ({
-              Component: (await import('../pages/admin/settings/Notifications')).Notifications,
-            }),
+            path: 'settings/email',
+            lazy: async () => ({ Component: (await import('../pages/admin/settings/Email')).Email }),
           },
           {
             path: 'settings/billing',
@@ -326,28 +338,22 @@ export const routes: RouteObject[] = [
             }),
           },
           {
-            path: 'settings/mailings',
-            lazy: async () => ({
-              Component: (await import('../pages/admin/settings/MailingSettings')).MailingSettings,
-            }),
-          },
-          {
             path: 'settings/forum',
             lazy: async () => ({ Component: (await import('../pages/admin/settings/Forum')).Forum }),
           },
           {
-            path: 'settings/mail',
+            path: 'settings/devices',
+            lazy: async () => ({ Component: (await import('../pages/admin/settings/Devices')).Devices }),
+          },
+          {
+            path: 'settings/devices/pair',
             lazy: async () => ({
-              Component: (await import('../pages/admin/settings/MailAccounts')).MailAccounts,
+              Component: (await import('../pages/admin/settings/PairDevice')).PairDevice,
             }),
           },
           {
-            path: 'settings/test-email',
-            lazy: async () => ({ Component: (await import('../pages/admin/settings/TestEmail')).TestEmail }),
-          },
-          {
-            path: 'settings/devices',
-            lazy: async () => ({ Component: (await import('../pages/admin/settings/Devices')).Devices }),
+            path: 'settings/devices/firmware',
+            lazy: async () => ({ Component: (await import('../pages/admin/settings/Firmware')).Firmware }),
           },
           {
             path: 'settings/devices/:deviceId',
@@ -392,8 +398,16 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/admin/credit/Holder')).Holder }),
           },
           {
+            path: 'sales',
+            lazy: async () => ({ Component: (await import('../pages/admin/credit/Sales')).Sales }),
+          },
+          {
             path: 'cards',
             lazy: async () => ({ Component: (await import('../pages/admin/Cards')).Cards }),
+          },
+          {
+            path: 'attendance',
+            lazy: async () => ({ Component: (await import('../pages/admin/Attendance')).Attendance }),
           },
         ],
       },

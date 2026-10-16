@@ -12,6 +12,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
+import { IconAlertTriangle, IconHistory } from '@tabler/icons-react';
 
 import { AppLink } from '../../../app/AppLink';
 import { can, useMe } from '../../../api/session';
@@ -72,6 +73,7 @@ function SyncProblems({ data, canOpenAccounts }: { data: ReviewsData; canOpenAcc
   return (
     <div id="sync-problems">
       <Panel
+        icon={IconAlertTriangle}
         title="Forum sync problems"
         flush
         actions={<Pill tone="failed">{String(data.waiting.sync_problems ?? data.sync_problems.length)}</Pill>}
@@ -182,6 +184,7 @@ function History() {
   return (
     <div id="review-history">
       <Panel
+        icon={IconHistory}
         title="History"
         flush
         actions={

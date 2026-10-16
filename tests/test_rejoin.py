@@ -227,7 +227,7 @@ class TestRejoining:
         response = client.post("/api/v1/account/rejoin", json={})
 
         assert stripe_stub["checkout"] == []
-        assert response.status_code == 502
+        assert response.status_code == 503
         assert "could not check your billing" in response.get_json()["error"]["message"]
 
     def test_refused_while_the_membership_runs(self, app, client, stripe_stub):

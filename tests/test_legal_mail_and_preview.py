@@ -174,19 +174,19 @@ class TestWelcomeToTheTeam:
 
 
 class TestTheSwitch:
-    def test_set_on_the_general_settings_and_kept_by_the_others(self, app, client):
+    def test_set_on_the_email_settings_and_kept_by_the_others(self, app, client):
         _login(client, _staff("boss@example.org", "admin").id)
 
-        general = {"invoice_payments": False, "automatic_emails": False}
+        sending = {"automatic_emails": False, "admin_general": True, "admin_error": True, "user_status": True,
+                   "per_hour": 100, "per_day": 300}
 
-        send(client, "PUT", "/api/v1/admin/settings/general", {**general, "legal_pdfs_in_welcome_emails": True})
+        send(client, "PUT", "/api/v1/admin/settings/email/sending", {**sending, "legal_pdfs_in_welcome_emails": True})
         assert legal_pdf.attach_to_welcome_emails()
 
-        send(client, "PUT", "/api/v1/admin/settings/notifications",
-             {"admin_general": True, "admin_error": True, "user_status": True})
+        send(client, "PUT", "/api/v1/admin/settings/general", {"invoice_payments": True})
         assert legal_pdf.attach_to_welcome_emails()
 
-        send(client, "PUT", "/api/v1/admin/settings/general", {**general, "legal_pdfs_in_welcome_emails": False})
+        send(client, "PUT", "/api/v1/admin/settings/email/sending", {**sending, "legal_pdfs_in_welcome_emails": False})
         assert not legal_pdf.attach_to_welcome_emails()
 
 

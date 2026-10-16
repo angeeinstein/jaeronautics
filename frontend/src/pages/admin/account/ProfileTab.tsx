@@ -5,6 +5,7 @@
  */
 import { Button, Group, Stack, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
+import { IconMail, IconUser } from '@tabler/icons-react';
 
 import { api, ApiError, call } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
@@ -15,6 +16,7 @@ import { formatDateTime } from '../../../lib/format';
 import { notifyDone } from '../../../lib/notify';
 import { ACCOUNT_STATE_PILL } from '../accountLabels';
 import { type Account, path, useAccountAction } from './shared';
+import { EmailHint } from '../../../components/EmailHint';
 
 function AccountState({ account }: { account: Account }) {
   const pill = ACCOUNT_STATE_PILL[account.account_state];
@@ -43,7 +45,7 @@ function CorrectEmail({ account }: { account: Account }) {
   );
 
   return (
-    <Panel title="Correct the private address">
+    <Panel icon={IconMail} title="Correct the private address">
       <Stack gap="sm">
         <Text size="sm" c="dimmed">
           For a member who cannot get in because the address is wrong and the password forgotten. Whoever
@@ -60,6 +62,12 @@ function CorrectEmail({ account }: { account: Account }) {
               setEmail(event.currentTarget.value);
               setProblem(null);
             }}
+            inputContainer={(input) => (
+              <>
+                {input}
+                <EmailHint value={email} onUse={setEmail} />
+              </>
+            )}
             flex="1 1 18rem"
           />
           <ConfirmButton
@@ -83,7 +91,7 @@ function CorrectEmail({ account }: { account: Account }) {
 export function ProfileTab({ account }: { account: Account }) {
   return (
     <Stack gap="lg">
-      <Panel title="Account">
+      <Panel icon={IconUser} title="Account">
         <Details
           items={[
             ['Name', account.name],

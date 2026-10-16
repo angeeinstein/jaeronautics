@@ -1,5 +1,5 @@
 /**
- * Settings -> Mail accounts: the accounts the portal sends email from --
+ * Settings › Email, *Accounts*: the accounts the portal sends email from --
  * added, changed, tested, removed -- and importing or exporting them as a
  * JSON file. Their passwords never reach the browser, except in an export,
  * which asks for the current password first. Data: /api/v1/admin/settings/mail
@@ -21,6 +21,7 @@ import {
 } from '@mantine/core';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconMail, IconPencil, IconTransfer } from '@tabler/icons-react';
 
 import { api, ApiError, call, type Schemas } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
@@ -28,7 +29,7 @@ import { EmptyState } from '../../../components/States';
 import { Panel } from '../../../components/Panel';
 import { fileNameOf, saveFile } from '../../../lib/files';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
-import { SettingsPage, useNotMyLogin } from './shared';
+import { SettingsLoaded, useNotMyLogin } from './shared';
 
 type Account = Schemas['MailAccountOut'];
 type AccountIn = Schemas['MailAccountIn'];
@@ -125,6 +126,7 @@ function AccountForm({ editing, onDone }: { editing: Account | null; onDone: () 
 
   return (
     <Panel
+      icon={IconPencil}
       title={editing ? `Change ${editing.key}` : 'Add an account'}
       actions={
         editing ? (
@@ -223,8 +225,8 @@ function AccountRow({ account, onEdit }: { account: Account; onEdit: () => void 
       ),
     onSuccess: async (result) => {
       notifyDone(`${account.key} removed.`);
-      if (result.removed_welcome_sender)
-        notifyNote('It sent the welcome email: none is sent until another sender is chosen under General.');
+      if (result.cleared_senders.length)
+        notifyNote('What it sent goes out from the default account now (the Senders tab).');
       await client.invalidateQueries({ queryKey: ['admin', 'settings'] });
     },
     onError: notifyFailed,
@@ -322,7 +324,7 @@ function ImportExport() {
   );
 
   return (
-    <Panel title="Import and export">
+    <Panel icon={IconTransfer} title="Import and export">
       <Stack gap="lg">
         <Stack gap="sm">
           <Text size="sm" c="dimmed">
@@ -399,7 +401,7 @@ function Accounts({ data }: { data: Schemas['MailOut'] }) {
   const [editing, setEditing] = useState<Account | null>(null);
   return (
     <Stack gap="lg">
-      <Panel title="Accounts" flush>
+      <Panel icon={IconMail} title="Accounts" flush>
         {data.accounts.length ? (
           <Table.ScrollContainer minWidth={680} type="native">
             <Table verticalSpacing="sm" aria-label="Mail accounts">
@@ -444,14 +446,7 @@ function Accounts({ data }: { data: Schemas['MailOut'] }) {
   );
 }
 
-export function MailAccounts() {
-  return (
-    <SettingsPage
-      title="Mail accounts"
-      description="The accounts the portal sends email from."
-      query={mailQuery}
-    >
-      {(data) => <Accounts data={data} />}
-    </SettingsPage>
-  );
+/** Settings › Email, *Accounts*: the accounts the portal sends email from. */
+export function MailAccountsTab() {
+  return <SettingsLoaded query={mailQuery}>{(data) => <Accounts data={data} />}</SettingsLoaded>;
 }

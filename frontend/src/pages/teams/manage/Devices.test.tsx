@@ -25,19 +25,24 @@ function fridge(overrides: Partial<Schemas['OwnedDeviceOut']> = {}): Schemas['Ow
     enabled: true,
     online: true,
     last_seen_at: '2026-10-13T11:00:00Z',
-    settings: { item: null },
+    settings: { items: [] },
     fields: [
       {
-        name: 'item',
-        label: 'Item',
-        kind: 'choice',
-        default: null,
-        help: "What a tap sells, from the owner's price list.",
+        name: 'items',
+        label: 'Items',
+        kind: 'choices',
+        most: 4,
+        with_prices: true,
+        default: [],
+        help: "What its menu offers, in this order: at most 4, from the owner's price list.",
         max_length: 200,
         minimum: null,
         maximum: null,
         owner_may_change: true,
-        choices: [{ value: 9, label: 'Mate, €2.50', group: 'Rocket', owner: 'rocket' }],
+        choices: [
+          { value: 9, label: 'Mate, €2.50', group: 'Rocket', owner: 'rocket' },
+          { value: 11, label: 'Coffee, €0.80', group: 'Rocket', owner: 'rocket' },
+        ],
       },
     ],
     recent: [{ at: '2026-10-13T11:00:00Z', detail: '…E5F6 bought Mate, €2.50; €2.50 left' }],
@@ -68,17 +73,18 @@ describe("a team's devices", () => {
     );
   });
 
-  it("is named and given an item from the team's own price list", async () => {
+  it('is named; its menu is chosen on the Sales page, not here', async () => {
     const { calls } = show({
       [`PATCH ${API}/7`]: {
-        body: { items: [fridge({ name: 'Rocket fridge', label: 'Rocket fridge', settings: { item: 9 } })] },
+        body: {
+          items: [fridge({ name: 'Rocket fridge', label: 'Rocket fridge', settings: { items: [11, 9] } })],
+        },
       },
     });
 
     const card = await screen.findByRole('region', { name: 'K7MQ-2X9A' });
     await userEvent.type(within(card).getByRole('textbox', { name: /^Name/ }), 'Rocket fridge');
-    await userEvent.click(within(card).getByRole('combobox', { name: 'Item' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'Mate, €2.50' }));
+    expect(within(card).queryByRole('combobox', { name: 'Items' })).not.toBeInTheDocument();
     await userEvent.click(within(card).getByRole('button', { name: 'Save' }));
 
     expect(await screen.findByRole('region', { name: 'Rocket fridge' })).toBeInTheDocument();
@@ -87,7 +93,6 @@ describe("a team's devices", () => {
       name: 'Rocket fridge',
       place: '',
       description: '',
-      settings: { item: 9 },
     });
   });
 

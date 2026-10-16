@@ -153,9 +153,13 @@ class TestCredentialsAreRestricted:
         admin = _user("general@example.com", ROLE_ADMIN)
         _login(client, admin.id)
 
-        response = send(client, "PUT", "/api/v1/admin/settings/general", {
-            "invoice_payments": False, "automatic_emails": True, "legal_pdfs_in_welcome_emails": False})
+        response = send(client, "PUT", "/api/v1/admin/settings/general", {"invoice_payments": True})
+        assert response.status_code == 200
+        assert db.session.get(app_module.Setting, "invoice_payments_enabled").value == "True"
 
+        response = send(client, "PUT", "/api/v1/admin/settings/email/sending", {
+            "automatic_emails": True, "legal_pdfs_in_welcome_emails": False, "admin_general": True,
+            "admin_error": True, "user_status": True, "per_hour": 100, "per_day": 300})
         assert response.status_code == 200
         assert db.session.get(app_module.Setting, "automatic_emails_enabled").value == "True"
 
@@ -315,7 +319,8 @@ class TestTheUiHidesWhatItDoesNotOffer:
 
         assert client.get("/admin/settings/backup").headers["Location"].endswith("/admin/settings/general")
         assert client.get("/admin/settings/updates").headers["Location"].endswith("/admin/settings/general")
-        assert client.get("/admin/settings/mail").headers["Location"].endswith("/admin/settings/general")
+        # Settings › Email, without its Accounts tab: the accounts' API refuses.
+        assert client.get("/admin/settings/email").status_code == 200
         assert client.get("/api/v1/admin/settings/mail").status_code == 403
         # Ordinary administration is untouched.
         assert client.get("/admin/settings/general").status_code == 200

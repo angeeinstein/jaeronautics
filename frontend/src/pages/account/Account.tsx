@@ -13,6 +13,7 @@
 import { Avatar, Button, Group, Stack, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { type ReactNode, useId } from 'react';
+import { IconId } from '@tabler/icons-react';
 
 import { can, displayName, initials, useMe } from '../../api/session';
 import { AppLink } from '../../app/AppLink';
@@ -32,7 +33,7 @@ import { type Account as AccountData, type MemberAccount, useAccount } from './s
 export function NoMembership() {
   const me = useMe();
   return (
-    <Panel title="Membership">
+    <Panel icon={IconId} title="Membership">
       <Stack gap="sm">
         <Text>This account has no membership.</Text>
         <Text size="sm" c="dimmed">

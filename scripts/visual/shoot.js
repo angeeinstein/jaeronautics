@@ -129,6 +129,12 @@ function inspect() {
         viewport: mode.viewport, colorScheme: mode.colorScheme, isMobile: mode.isMobile,
         hasTouch: mode.hasTouch, storageState: await sessionFor(entry.user), reducedMotion: 'reduce',
       });
+      if (entry.storage) {
+        // What the page keeps in the browser (localStorage), there before it loads.
+        await context.addInitScript((items) => {
+          for (const [key, value] of Object.entries(items)) window.localStorage.setItem(key, value);
+        }, entry.storage);
+      }
       const page = await context.newPage();
       await page.goto(`${base}${entry.path}`, { waitUntil: 'networkidle' });
       if (entry.open) {

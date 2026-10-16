@@ -2,8 +2,8 @@
 
 - **Announcements:** Admin › Announcements (``announcements.send``).
 - **Team mailings:** on a team's Messages page (``team.messages``).
-- **Settings › Mailings:** the account they are sent from, and how many an
-  hour and a day.
+- Which account they are sent from, and how many an hour and a day: Settings ›
+  Email (api/email_settings.py).
 - **The news switch:** the page an email's "No more news by email" link
   opens (by its token, signed in or not), the one-click unsubscribe mail
   programs offer (List-Unsubscribe-Post), and My Account.
@@ -17,7 +17,6 @@ from pydantic import Field
 
 from ..app import csrf
 from ..db_models import Team, db
-from ..mail_utils import load_mail_accounts_config
 from ..member_categories import CATEGORY_LABELS, CATEGORY_ORDER
 from ..permissions import Permission
 from ..services import mailings as mailings_service
@@ -130,26 +129,6 @@ class TeamMailingsOut(Model):
     items: list[MailingOut]
     #: Whom a mailing would reach now: the team's active members.
     recipients: int
-
-
-class MailingSettingsOut(Model):
-    #: The chosen account; empty: the notifications' sender.
-    sender: str
-    #: What is used when none is chosen.
-    default_sender: str
-    accounts: list[str]
-    per_hour: int
-    per_day: int
-
-
-class MailingSettingsIn(Model):
-    sender: str = ""
-    per_hour: int = Field(ge=1)
-    per_day: int = Field(ge=1)
-
-
-class MailingSettingsSavedOut(Model):
-    changed: list[str]
 
 
 class NewsOut(Model):
@@ -291,34 +270,6 @@ def team_mailing_stop(slug, mailing_id):
     """Stop one of the team's mailings."""
     team = _managed(slug, TeamPermission.MESSAGES)
     return _detail(mailings_service.stop(current_user, mailings_service.mailing_of(mailing_id, team)))
-
-
-# --- Settings › Mailings ---------------------------------------------------------------------------
-
-
-@endpoint("GET", "/admin/settings/mailings", response=MailingSettingsOut,
-          permissions=[Permission.SETTINGS_GENERAL], tag="Admin")
-def admin_settings_mailings():
-    """The account mailings and messages are sent from, and how many an hour and a day."""
-    current = mailings_service.settings()
-    chosen = current["sender"]
-    default = "" if chosen else mailings_service.sender_account()
-    if chosen:
-        from ..services.notifications import get_default_sender_account, get_notification_service
-
-        default = get_notification_service().get_sender_account() or get_default_sender_account() or ""
-    return MailingSettingsOut(sender=chosen, default_sender=default, accounts=sorted(load_mail_accounts_config()),
-                              per_hour=current["per_hour"], per_day=current["per_day"])
-
-
-@endpoint("PUT", "/admin/settings/mailings", response=MailingSettingsSavedOut, body=MailingSettingsIn,
-          permissions=[Permission.SETTINGS_GENERAL], tag="Admin")
-def admin_settings_mailings_save(body):
-    """Choose the account mailings are sent from, and the provider's limits."""
-    changed = mailings_service.save_settings(current_user, sender=body.sender, per_hour=body.per_hour,
-                                             per_day=body.per_day)
-    db.session.commit()
-    return MailingSettingsSavedOut(changed=sorted(changed or []))
 
 
 # --- The news switch ---------------------------------------------------------------------------------

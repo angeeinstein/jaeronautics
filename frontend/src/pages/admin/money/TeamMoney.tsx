@@ -1,8 +1,9 @@
 /**
- * One team's money, the association's side (docs/frontend-structure.md, 4):
- * the balance, the transfer -- with a code a banking app scans, filled in with
- * the amount and reference as typed -- where it goes, and every period,
- * transfer and payment. The team's leads see their own on the team's page.
+ * One team's money, the association's side (docs/frontend-structure.md, 4),
+ * in two tabs. *Balance*: what is open and how it adds up, the transfer --
+ * with a code a banking app scans, filled in with the amount and reference as
+ * typed -- and where it goes. *History* (#history): every period, transfer,
+ * sale and payment. The team's leads see their own on the team's page.
  * Data: GET /api/v1/admin/money/<slug> (aeronautics_members/api/admin_money.py).
  */
 import { Alert, Button, Grid, Group, SimpleGrid, Stack, Table, Text, TextInput } from '@mantine/core';
@@ -10,6 +11,14 @@ import { useDebouncedValue } from '@mantine/hooks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useParams } from 'react-router';
+import {
+  IconBuildingBank,
+  IconCalendar,
+  IconHistory,
+  IconReceipt,
+  IconScale,
+  IconTransfer,
+} from '@tabler/icons-react';
 
 import { api, ApiError, call } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
@@ -17,6 +26,7 @@ import { DayInput } from '../../../components/DayInput';
 import { Details } from '../../../components/Details';
 import { MoneyStatement } from '../../../components/MoneyStatement';
 import { PageHeader } from '../../../components/PageHeader';
+import { PageTabs } from '../../../components/PageTabs';
 import { Panel } from '../../../components/Panel';
 import { EmptyState, ErrorState, LoadingState } from '../../../components/States';
 import { arrivedClass, useArrivals } from '../../../lib/arrivals';
@@ -50,7 +60,7 @@ function useMoneyChange<Input>(slug: string, run: (input: Input) => Promise<Team
 function Balance({ money }: { money: TeamMoneyOut }) {
   const last = money.transfers[0];
   return (
-    <Panel title="Balance">
+    <Panel icon={IconScale} title="Balance">
       <Stack gap="sm">
         <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="md">
           {(
@@ -100,13 +110,13 @@ function TransferPanel({ money }: { money: TeamMoneyOut }) {
 
   if (money.open <= 0) {
     return (
-      <Panel title="Transfer to the team">
+      <Panel icon={IconTransfer} title="Transfer to the team">
         <EmptyState>Nothing open.</EmptyState>
       </Panel>
     );
   }
   return (
-    <Panel title="Transfer to the team">
+    <Panel icon={IconTransfer} title="Transfer to the team">
       <Grid gap="xl">
         <Grid.Col span={{ base: 12, md: 5 }}>
           {payable ? (
@@ -237,7 +247,7 @@ function BankPanel({ money }: { money: TeamMoneyOut }) {
   }
 
   return (
-    <Panel title="Bank details">
+    <Panel icon={IconBuildingBank} title="Bank details">
       <Stack gap="md">
         <Text size="sm" c="dimmed">
           Where the association transfers the team&apos;s money. Every change is logged, and the
@@ -282,7 +292,7 @@ function BankPanel({ money }: { money: TeamMoneyOut }) {
 
 function Periods({ money }: { money: TeamMoneyOut }) {
   return (
-    <Panel title="By period" flush>
+    <Panel icon={IconCalendar} title="By period" flush>
       {money.by_period.length ? (
         <Table verticalSpacing="sm" aria-label="By period">
           <Table.Thead>
@@ -313,7 +323,7 @@ function Periods({ money }: { money: TeamMoneyOut }) {
 
 function Transfers({ money }: { money: TeamMoneyOut }) {
   return (
-    <Panel title="Transfers" flush>
+    <Panel icon={IconTransfer} title="Transfers" flush>
       {money.transfers.length ? (
         <Table.ScrollContainer minWidth={560} type="native">
           <Table verticalSpacing="sm" aria-label="Transfers">
@@ -357,6 +367,7 @@ function Payments({ money }: { money: TeamMoneyOut }) {
   );
   return (
     <Panel
+      icon={IconReceipt}
       title="Payments"
       flush
       actions={
@@ -431,22 +442,42 @@ export function TeamMoney() {
       ) : money.isError ? (
         <ErrorState error={money.error} onRetry={() => void money.refetch()} />
       ) : (
-        <Stack gap="lg">
-          <Balance money={money.data} />
-          <MoneyStatement statement={money.data.statement} />
-          {/* Keyed by what was recorded, so the form starts afresh from the new balance. */}
-          <TransferPanel
-            key={`${String(money.data.open)}-${String(money.data.transfers.length)}`}
-            money={money.data}
-          />
-          <BankPanel key={JSON.stringify(money.data.bank)} money={money.data} />
-          <Periods money={money.data} />
-          <Transfers money={money.data} />
-          {money.data.sales.count || money.data.sales.by_item.length ? (
-            <SalesPanel sales={money.data.sales} />
-          ) : null}
-          <Payments money={money.data} />
-        </Stack>
+        <PageTabs
+          tabs={[
+            {
+              value: 'balance',
+              label: 'Balance',
+              icon: IconScale,
+              content: (
+                <Stack gap="lg">
+                  <Balance money={money.data} />
+                  <MoneyStatement statement={money.data.statement} />
+                  {/* Keyed by what was recorded, so the form starts afresh from the new balance. */}
+                  <TransferPanel
+                    key={`${String(money.data.open)}-${String(money.data.transfers.length)}`}
+                    money={money.data}
+                  />
+                  <BankPanel key={JSON.stringify(money.data.bank)} money={money.data} />
+                </Stack>
+              ),
+            },
+            {
+              value: 'history',
+              label: 'History',
+              icon: IconHistory,
+              content: (
+                <Stack gap="lg">
+                  <Periods money={money.data} />
+                  <Transfers money={money.data} />
+                  {money.data.sales.count || money.data.sales.by_item.length ? (
+                    <SalesPanel sales={money.data.sales} />
+                  ) : null}
+                  <Payments money={money.data} />
+                </Stack>
+              ),
+            },
+          ]}
+        />
       )}
     </>
   );

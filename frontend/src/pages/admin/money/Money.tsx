@@ -12,6 +12,7 @@ import { Button, Group, Stack, Table, Text } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type SyntheticEvent, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { IconBrandStripe, IconUsersGroup } from '@tabler/icons-react';
 
 import { api, call } from '../../../api/client';
 import { AppLink } from '../../../app/AppLink';
@@ -220,7 +221,7 @@ function OnStripe({ today, start }: { today: string; start: string | null }) {
   }
 
   return (
-    <Panel title="On Stripe" actions={<FetchNow since={since} until={until} />}>
+    <Panel icon={IconBrandStripe} title="On Stripe" actions={<FetchNow since={since} until={until} />}>
       <Stack gap="md">
         {overview.data ? <FetchState overview={overview.data} /> : null}
         <PeriodForm today={today} start={start} since={since ?? ''} until={until ?? ''} onCheck={show} />
@@ -248,6 +249,7 @@ export function Money() {
       ) : (
         <Stack gap="lg">
           <Panel
+            icon={IconUsersGroup}
             title="Teams"
             flush
             actions={

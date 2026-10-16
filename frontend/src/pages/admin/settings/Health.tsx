@@ -7,6 +7,7 @@
  */
 import { Alert, Button, Code, Group, SimpleGrid, Stack, Table, Text, VisuallyHidden } from '@mantine/core';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { IconClock, IconId, IconMailOff, IconStethoscope } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
 import { can, useMe } from '../../../api/session';
@@ -35,6 +36,7 @@ function Report({ health }: { health: Health }) {
   const schema = health.database_schema;
   return (
     <Panel
+      icon={IconStethoscope}
       title="Report"
       actions={
         health.healthy ? <Pill tone="active">Healthy</Pill> : <Pill tone="failed">Needs attention</Pill>
@@ -79,7 +81,7 @@ function Report({ health }: { health: Health }) {
 function Membership({ health }: { health: Health }) {
   const figures = health.membership;
   return (
-    <Panel title="Membership">
+    <Panel icon={IconId} title="Membership">
       <Details
         items={[
           ['Members', figures.members],
@@ -110,7 +112,7 @@ function BackgroundWork({ health }: { health: Health }) {
     onError: notifyFailed,
   });
   return (
-    <Panel title="Background work">
+    <Panel icon={IconClock} title="Background work">
       <Details
         items={[
           ['Background tasks queued', queues.external_work_pending],
@@ -222,7 +224,7 @@ function UndeliveredRow({ email, mayResolve }: { email: Schemas['UndeliveredOut'
 function Undelivered({ emails }: { emails: Schemas['UndeliveredOut'][] }) {
   const mayResolve = can(useMe().data, 'notifications.manage');
   return (
-    <Panel title="Emails that could not be delivered" flush>
+    <Panel icon={IconMailOff} title="Emails that could not be delivered" flush>
       <Text size="sm" c="dimmed" px="md" pt="md">
         Retrying sends to the address on the member's profile now, so correct a typo there first. Dismissing
         keeps the record and stops reporting it.

@@ -91,7 +91,7 @@ def test_a_forum_that_refuses_the_picture_is_a_bad_gateway(client, monkeypatch):
 
     response = send(client, "POST", f"{API}/pictures/{picture.id}/approve", {})
 
-    assert response.status_code == 502
+    assert response.status_code == 503
     assert response.get_json()["error"]["message"] == "The forum said no."
     db.session.refresh(picture)
     assert picture.status == "pending"

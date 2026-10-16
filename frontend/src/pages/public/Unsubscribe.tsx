@@ -8,6 +8,7 @@
 import { Alert, Button, Stack, Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router';
+import { IconMailOff } from '@tabler/icons-react';
 
 import { api, call } from '../../api/client';
 import { useDocumentTitle } from '../../components/PageHeader';
@@ -42,7 +43,7 @@ export function Unsubscribe() {
       ) : news.isError ? (
         <ErrorState error={news.error} />
       ) : (
-        <Panel title={news.data.email}>
+        <Panel icon={IconMailOff} title={news.data.email}>
           <Stack gap="md">
             {news.data.subscribed ? (
               <>

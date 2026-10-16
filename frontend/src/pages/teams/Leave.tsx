@@ -6,6 +6,7 @@ import { Alert, Button, Checkbox, Group, List, Stack, Textarea } from '@mantine/
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type SyntheticEvent, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { IconDoorExit } from '@tabler/icons-react';
 
 import { api, ApiError, call } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
@@ -66,7 +67,7 @@ export function Leave() {
       ) : leaving.isError ? (
         <ErrorState error={leaving.error} />
       ) : (
-        <Panel title="What leaving means">
+        <Panel icon={IconDoorExit} title="What leaving means">
           <Stack gap="md" maw={640}>
             <List size="sm" spacing="xs">
               {leaving.data.stays_until ? (

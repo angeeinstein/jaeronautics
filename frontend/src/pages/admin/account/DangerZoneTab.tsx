@@ -6,6 +6,7 @@
 import { Alert, Button, Group, List, Stack, Text, TextInput } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconDatabase, IconEraser, IconUserOff } from '@tabler/icons-react';
 
 import { api, call } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
@@ -33,7 +34,7 @@ function SwitchOff({ account }: { account: Account }) {
 
   if (account.disabled_at) {
     return (
-      <Panel title="Deactivated">
+      <Panel icon={IconUserOff} title="Deactivated">
         <Stack gap="sm" align="flex-start">
           <Text size="sm">
             Cannot sign in or use the forum{account.disabled_reason ? `: ${account.disabled_reason}` : '.'}
@@ -52,7 +53,7 @@ function SwitchOff({ account }: { account: Account }) {
     );
   }
   return (
-    <Panel title="Deactivate">
+    <Panel icon={IconUserOff} title="Deactivate">
       <Stack gap="sm">
         <Text size="sm" c="dimmed">
           Stops them signing in and removes their forum access. The membership, including anything paid for,
@@ -117,7 +118,7 @@ function Erase({ account }: { account: Account }) {
 
   if (account.erased_at) {
     return (
-      <Panel title="Personal data">
+      <Panel icon={IconDatabase} title="Personal data">
         <Text size="sm">
           Erased on {formatDayOf(account.erased_at)}. The membership and payment record was kept.
         </Text>
@@ -125,7 +126,7 @@ function Erase({ account }: { account: Account }) {
     );
   }
   return (
-    <Panel title="Erase personal data">
+    <Panel icon={IconEraser} title="Erase personal data">
       {erasure.isPending ? (
         <LoadingState />
       ) : erasure.isError ? (

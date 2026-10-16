@@ -393,7 +393,7 @@ class TestThePage:
 
         response = client.post("/api/v1/admin/money/fetch")
 
-        assert response.status_code == 502 and response.get_json()["error"]["code"] == "stripe_unavailable"
+        assert response.status_code == 503 and response.get_json()["error"]["code"] == "stripe_unavailable"
 
     def test_a_day_that_is_no_day_is_refused(self, app, client):
         _login(client, _staff("treasurer@example.org", "treasurer").id)

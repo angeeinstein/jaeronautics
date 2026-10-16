@@ -36,7 +36,8 @@ describe('the admin sidebar', () => {
     expect(labels()).toEqual([
       ['Overview', ['Dashboard']],
       ['People', ['Accounts', 'Reviews', 'Cards']],
-      ['Teams', ['Teams', 'Money']],
+      ['Money', ['Money']],
+      ['Teams', ['Teams']],
       ['System', ['Logs', 'Legal texts', 'Settings']],
     ]);
   });
@@ -45,7 +46,7 @@ describe('the admin sidebar', () => {
     const treasurer = makeMe({ permissions: ['admin.access', 'teams.money'] });
     expect(labels(treasurer)).toEqual([
       ['Overview', ['Dashboard']],
-      ['Teams', ['Money']],
+      ['Money', ['Money']],
     ]);
   });
 
@@ -54,13 +55,7 @@ describe('the admin sidebar', () => {
     const settings = adminSidebar(me)
       .groups.at(-1)
       ?.items.find((item) => item.label === 'Settings');
-    expect(settings?.children?.map((child) => child.label)).toEqual([
-      'General',
-      'Notifications',
-      'Credit',
-      'Mailings',
-      'Test email',
-    ]);
+    expect(settings?.children?.map((child) => child.label)).toEqual(['General', 'Email', 'Credit']);
   });
 
   it('every section, each at its own address, for somebody who may do everything', () => {
@@ -69,13 +64,10 @@ describe('the admin sidebar', () => {
       ?.items.find((item) => item.label === 'Settings');
     expect(settings?.children?.map((child) => child.to)).toEqual([
       '/admin/settings/general',
-      '/admin/settings/notifications',
+      '/admin/settings/email',
       '/admin/settings/credit',
-      '/admin/settings/mailings',
       '/admin/settings/billing',
       '/admin/settings/forum',
-      '/admin/settings/mail',
-      '/admin/settings/test-email',
       '/admin/settings/devices',
       '/admin/settings/health',
       '/admin/settings/updates',
@@ -86,7 +78,7 @@ describe('the admin sidebar', () => {
   it('teams under the name they have here, and the count of reviews waiting', () => {
     const me = makeMe({ team_labels: { singular: 'Crew', plural: 'Crews' }, counts: { reviews_waiting: 3 } });
     const groups = adminSidebar(me).groups;
-    expect(groups[2]?.label).toBe('Crews');
+    expect(groups[3]?.label).toBe('Crews');
     expect(groups[1]?.items.find((item) => item.label === 'Reviews')?.count).toBe(3);
   });
 });

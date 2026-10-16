@@ -7,11 +7,13 @@ changed; the secrets themselves never leave the server.
 """
 from api_helpers import send, signed_in
 from conftest import app_module, db
-from aeronautics_members.db_models import AuditLog, Setting
+from aeronautics_members.db_models import AuditLog, MailAccount, Setting
 from test_admin_reviews import _staff
 
 API = "/api/v1/admin/settings"
-GENERAL = {"invoice_payments": False, "automatic_emails": False, "legal_pdfs_in_welcome_emails": False}
+GENERAL = {"invoice_payments": False}
+SENDING = {"automatic_emails": False, "legal_pdfs_in_welcome_emails": False, "automatic_email_template": None,
+           "admin_general": True, "admin_error": True, "user_status": True, "per_hour": 100, "per_day": 300}
 
 
 def _stored(key):
@@ -35,7 +37,7 @@ class TestGeneral:
 
         assert body["invoice_payments"] is False and body["institutional_email_domains"] is None
         assert "edu.fh-joanneum.at" in body["domains_in_use"]
-        assert isinstance(body["senders"], list) and isinstance(body["templates"], list)
+        assert "welcome_email_sender" not in body, "email is on Settings › Email"
 
     def test_saved_and_logged_once_with_what_changed(self, client):
         _superadmin(client)
@@ -57,14 +59,6 @@ class TestGeneral:
         assert body == {"changed": []}
         assert db.session.query(AuditLog).filter_by(event_type="settings_updated").count() == before
 
-    def test_a_sender_that_does_not_exist_is_said_at_its_field(self, client):
-        _superadmin(client)
-
-        response = send(client, "PUT", f"{API}/general", {**GENERAL, "welcome_email_sender": "nobody"})
-
-        assert response.status_code == 400
-        assert response.get_json()["error"]["fields"] == {"welcome_email_sender": "That sender account does not exist."}
-
     def test_it_touches_no_other_section(self, client):
         app_module.set_setting_value("notification_admin_error_enabled", "False")
         app_module.set_setting_value("stripe_price_id", "price_kept")
@@ -76,17 +70,77 @@ class TestGeneral:
         assert _stored("notification_admin_error_enabled") == "False" and _stored("stripe_price_id") == "price_kept"
 
 
-class TestNotifications:
-    def test_the_switches_and_each_channel(self, client):
+def _accounts():
+    db.session.add_all([
+        MailAccount(account_key="office", host="h", port=465, username="office@example.org", password="p"),
+        MailAccount(account_key="support", host="h", port=465, username="u-1", password="p",
+                    from_email="support@example.org"),
+    ])
+    db.session.commit()
+
+
+class TestEmailSenders:
+    def test_a_default_and_each_kind_empty_is_the_default(self, app, client):
+        from aeronautics_members.services import mail_senders
+
+        _accounts()
         _superadmin(client)
-        send(client, "PUT", f"{API}/notifications",
-             {"admin_general": True, "admin_error": False, "user_status": True, "sender": None})
+        body = client.get(f"{API}/email/senders").get_json()
+        assert (body["default"], body["default_in_use"], body["accounts"]) == ("", "office", ["office", "support"])
 
-        body = client.get(f"{API}/notifications").get_json()
+        saved = send(client, "PUT", f"{API}/email/senders", {"default": "office", "replies": "support",
+                                                               "reply_copy": True})
 
-        assert (body["admin_general"], body["admin_error"], body["user_status"]) == (True, False, True)
+        assert saved.status_code == 200, saved.get_json()
+        assert [mail_senders.account_for(kind) for kind in ("welcome", "notifications", "mailings", "replies")] == [
+            "office", "office", "office", "support"]
+        body = client.get(f"{API}/email/senders").get_json()
+        assert (body["replies"], body["reply_copy"], body["reply_address"]) == ("support", True, "support@example.org")
+        entry = db.session.query(AuditLog).filter_by(event_type="settings_updated").one()
+        assert entry.event_metadata["section"] == "email_senders"
+
+    def test_an_account_that_does_not_exist_is_said_at_its_field(self, client):
+        _accounts()
+        _superadmin(client)
+
+        response = send(client, "PUT", f"{API}/email/senders", {"welcome": "nobody"})
+
+        assert response.status_code == 400 and "welcome" in response.get_json()["error"]["fields"]
+
+    def test_an_account_removed_hands_what_it_sent_to_the_default(self, app):
+        from aeronautics_members.services import mail_senders, settings_sections
+
+        _accounts()
+        settings_sections.save_senders(None, default="office", welcome="support", notifications="",
+                                       mailings="support", replies="", reply_copy=False)
+        db.session.commit()
+
+        assert mail_senders.forget_account("support") == ["welcome", "mailings"]
+        db.session.commit()
+        assert mail_senders.account_for("welcome") == "office"
+
+
+class TestEmailSending:
+    def test_the_welcome_email_the_notifications_and_the_pace_saved_together(self, client):
+        _superadmin(client)
+
+        saved = send(client, "PUT", f"{API}/email/sending",
+                     {**SENDING, "automatic_emails": True, "admin_error": False, "per_hour": 50})
+
+        assert saved.status_code == 200, saved.get_json()
+        body = client.get(f"{API}/email/sending").get_json()
+        assert (body["automatic_emails"], body["admin_error"], body["per_hour"], body["per_day"]) == (
+            True, False, 50, 300)
         assert [channel["channel"] for channel in body["health"]] == ["admin_general", "admin_error", "user_status"]
         assert body["health"][1]["enabled"] is False
+        assert isinstance(body["templates"], list)
+
+    def test_the_pace_checked(self, client):
+        _superadmin(client)
+
+        response = send(client, "PUT", f"{API}/email/sending", {**SENDING, "per_hour": 500, "per_day": 300})
+
+        assert response.status_code == 400 and "per_hour" in response.get_json()["error"]["fields"]
 
 
 class TestBilling:
@@ -145,5 +199,10 @@ class TestForum:
 def test_the_pages_are_the_apps(client):
     _superadmin(client)
 
-    for section in ("general", "notifications", "billing", "forum"):
+    for section in ("general", "email", "billing", "forum"):
         assert client.get(f"/admin/settings/{section}").status_code == 200
+    # The pages Settings › Email took over lead to its tab.
+    for old, tab in (("notifications", "sending"), ("mailings", "sending"), ("mail", "accounts"),
+                     ("test-email", "test")):
+        response = client.get(f"/admin/settings/{old}")
+        assert response.status_code == 302 and response.headers["Location"].endswith(f"/admin/settings/email#{tab}")

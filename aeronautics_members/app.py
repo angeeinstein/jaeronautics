@@ -3817,6 +3817,14 @@ def create_app(config_overrides=None):
         """Reconciles local billing state with Stripe for Stripe-managed memberships."""
         if _stand_down_while_paused("billing-reconcile"):
             return
+        # The night's steps tied to a date: a stay still open from yesterday
+        # is closed as not checked out (docs/attendance-plan.md).
+        from .services.attendance import close_forgotten
+
+        closed = close_forgotten()
+        db.session.commit()
+        if closed:
+            click.echo(f"Closed {closed} stay(s) not checked out.")
         today = get_membership_today()
         cutoff = today + timedelta(days=max(0, lookahead_days))
         stripe_linked_filter = or_(Member.stripe_customer_id.is_not(None), Member.stripe_subscription_id.is_not(None))

@@ -11,10 +11,38 @@ Codex's review comments that still held (`docs/review-fixes.md`, branch
 `claude/review-fixes`). What it
 was is in their pull requests and in git history (`git log -- docs/todo.md`).
 The legal drafts below wait for the board. Cards and sales points
-(`docs/cards-plan.md`) are built on `claude/card-sales`; attendance with the
-same cards comes next, needed around January.
+(`docs/cards-plan.md`) are built; the sales point's menu with icons, linking a
+card with a reader's QR code, device pairing and firmware updates on
+`claude/device-pairing`, with the batch of 2026-10-15 (price lists with their
+figures and delete, a device's page slimmer, card or SEPA asked before
+Stripe's page), and the batch after it (a sale switching a reader's
+outputs, tabs on long pages and an icon in every panel, the firmware file
+checked by its chip), attendance with the same cards
+(`docs/attendance-plan.md`), answering contact messages from the portal
+(`docs/messages-plan.md`), and the batch of 2026-10-16 (Settings › Email
+with its tabs, Admin › Attendance always in the menu, a hint under every
+email field when a university address looks mistyped). The price-list
+proposal below waits for the maintainer's answer.
 
 ## Open
+
+### Price lists: deleted items folded into one row
+
+- **Added:** 2026-10-15
+- **What:** an item deleted after it was sold now stays in its price list for
+  good, greyed, "No longer on the list" -- in *30 days* too, with 0. "Over
+  the time, there are multiple or dozens of products that are deleted, but
+  are still shown in the list here. This would be annoying." Instead, **one
+  row**, folded: "▸ 3 no longer on the list · 9 sold · €18.40"; a click
+  unfolds the items, greyed as now. In *30 days* it counts only those sold in
+  the last 30 days, and is not there when there are none.
+- **Where:** `frontend/src/components/PriceList.tsx` (`GoneRow`, the `gone`
+  list), on Admin › Sales and a team's Sales page.
+- **Why folded, not hidden:** *Together* still adds up -- what they made does
+  not vanish from the totals -- and the detail stays one click away. A
+  deleted item never sold stays out of the list, as now.
+- **Open question:** the proposal above, offered 2026-10-15 (the maintainer
+  named hiding, removing, a collapsed section or another list as options).
 
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
@@ -35,6 +63,18 @@ same cards comes next, needed around January.
   the cards linked to accounts: a name, a keyed hash of the ID and its end,
   when linked and last used, and that they go with the account (§ 20). See
   `docs/cards-plan.md`.
+- **Also (added 2026-10-14, with linking a card by QR code):** a card not
+  linked yet, tapped on a reader with a screen, is kept as its hash for a day
+  (§ 20, the cards paragraph). See `docs/cards-plan.md`.
+- **Also (added 2026-10-16, with answering contact messages):** the
+  privacy policy draft says an answer written in the portal is kept with the
+  message, and a copy may go to the association's mailbox (§ 31, the
+  contact form, and the retention table). See `docs/messages-plan.md`.
+- **Also (added 2026-10-15, with attendance):** the privacy policy draft
+  names the stays recorded at attendance readers -- who, which team, in and
+  out with the reader, corrections and by whom; who sees them; kept with the
+  account, in the export, deleted with it (§ 20, after the cards). See
+  `docs/attendance-plan.md`.
 - **Also (added 2026-10-11, with Stripe's book):** the privacy policy draft
   says that the portal keeps a copy of the Stripe account's bookings without
   names, and that a difference with Stripe names the payer's address and is
@@ -48,76 +88,40 @@ same cards comes next, needed around January.
   of publishing as `version`/`effective_from` (and the file names); check
   that nothing refers to the old § 31-36 of the membership terms.
 
-### Attendance with the same cards (later)
-
-- **Added:** 2026-10-13
-- **Put off by the maintainer:** needed "in January, maybe a bit before ...
-  not something that we need to build now immediately".
-- **What:** the flight team's members earn ECTS and must be there for a
-  number of hours; members tap their card on a reader there. The cards and
-  the readers exist (`docs/cards-plan.md`, `docs/devices-plan.md`); this is
-  a device type of its own.
-- **Open questions:** what counts (tapping in and out, a forgotten tap-out,
-  a least time), who may see it (team leads, whoever handles ECTS), and the
-  privacy policy for it.
-
-### Devices: pairing, uses reported by the device, firmware updates
-
-- **Added:** 2026-10-14
-- **What:** one device with a touchscreen and an NFC reader for every use,
-  one firmware: the device reports the uses its firmware supports and the
-  portal assigns one; pairing by a code on the screen, approved by an admin,
-  so nobody copies keys; device settings opened by an admin's card, with a
-  backup code; firmware files uploaded in the portal and installed by the
-  devices over the air.
-- **Where:** the device API (`api/devices.py`, `services/devices.py`), Admin ›
-  Settings › Devices (a pairing page, a Firmware page).
-- **Why, decided, open questions:** `docs/devices-plan.md`, "One device for
-  everything". Bigger than a small change: built when the maintainer says,
-  not with a batch.
-
-### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
-
-- **Added:** 2026-10-12
-- **What:** before Stripe's payment page opens, a choice the person has to
-  click: **Card, Apple Pay or Google Pay** ("your membership starts right
-  away") or **SEPA Direct Debit** ("your membership starts once the debit
-  clears, in a few days", the wording `Payment.tsx` already uses). For a team
-  fee: "your team membership". Both answers open **the same** Stripe page,
-  with both methods as now.
-- **Where:**
-  - joining (`frontend/src/pages/public/MembershipForm.tsx`): its last step,
-    "How do you want to pay?";
-  - starting a membership from an existing account, rejoining, "Resume
-    payment" (`pages/account/`), and paying a team fee (`pages/teams/`): a
-    small dialog when the pay button is pressed.
-
-  One shared component, the same wording everywhere.
-- **Why:** SEPA takes days, which is "most of all annoying for them, because
-  they have to wait some time before they can use their account, or before
-  they can become a team member". The maintainer wants people who do not care
-  to choose card, and SEPA kept for those who have no card or prefer it. Text
-  above or below a button is not read ("nobody reads such fine prints"); a
-  choice they have to click is.
-- **Decided:**
-  - Both answers lead to the same Stripe page with card and SEPA. Somebody who
-    picked card and did not find their method there might abandon and "plan to
-    complete it later"; better they pick SEPA there. They have read the notice,
-    so changing their mind is fine.
-  - SEPA stays switched on in Stripe. The portal names the methods itself
-    (`services/billing.py`, `services/payments.py`: card and `sepa_debit`),
-    and members renewing by SEPA keep their mandate.
-- **Ruled out:**
-  - switching SEPA off in Stripe: it would probably break the portal's
-    checkouts, and existing SEPA renewals;
-  - a line of text near the pay button or on Stripe's page alone;
-  - offering SEPA only on the cancel page;
-  - opening Stripe's page with only the chosen method.
-
 ## Ideas for later (not scheduled)
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
 
+- **The server log in the portal** -- 2026-10-16. The journal of the portal's
+  services readable on a phone, for when SSH is not at hand ("if some issue
+  occurs and I don't have access to a computer"). Put off: not urgent, the
+  command line has it. What was talked through:
+  - **Where:** a *Server log* tab beside System health's checks, with
+    `system.update`. Lines with time, service, level (errors red, warnings
+    amber); a traceback folded into its error; filters for errors only, one
+    service, a search; *Follow* (asks every few seconds for what came after
+    the last line -- no open stream holding a gunicorn worker); *Load
+    earlier*; *Copy*.
+  - **Reading the journal:** not the `systemd-journal` group (the whole
+    server's journal: SSH logins, `sudo` commands). A small root-owned script
+    (`/usr/local/bin/jaeronautics-log`, installed by `install.sh`), the only
+    thing the portal may run with `sudo`, takes a service from a fixed list, a
+    line count and a cursor, checks them, and calls `journalctl -o json`. It
+    reads nothing the portal can write. The command line stays unrestricted
+    ("rather more information than less").
+  - **Services:** the portal's own, nginx, MariaDB, Redis, and systemd's
+    messages about them (failed, restarted, out of memory). Not SSH, `sudo`,
+    the kernel. Open: Discourse, if on the same server.
+  - **Secrets out before a line leaves the server**, done by the portal (it
+    holds the secrets anyway, so doing it as root protects nothing more and
+    would make a root process read portal-controlled data): every exact value
+    it knows (`.env` secrets, SMTP passwords, Discourse key and secret,
+    device key secrets) replaced with `[hidden: …]`, then shapes (`sk_`,
+    `rk_`, `whsec_`, `xkeysib-`, `Bearer`, `Api-Key:`, `password=`, a
+    password in a database address). At the source, `hide_parameters` so
+    database errors stop printing their values. Personal data stays: useful
+    to identify an error, and those with `system.update` are trusted with it.
+  - Opening it not recorded in Admin › Logs (noise for one or two people).
 - **Each version in its own folder, built beside the running one** --
   2026-10-11. As `angeeinstein/study-helper` does: a folder per version with
   its own Python environment, switched to only once healthy, the previous one
@@ -131,10 +135,6 @@ Talked about, not agreed as work. Not built unless the maintainer brings them up
   copy of Stripe's books (`docs/money-ledger-plan.md`).
 - **Stripe's transfers to the bank, matched to their bookings** --
   2026-10-11. Not needed while nothing has been transferred to the bank.
-- **Answering contact messages from inside the portal** -- 2026-10-09. A
-  reply written in Admin › Messages and sent as a formatted HTML email, with
-  the conversation kept together. "Would be nice … but I think we can stay at
-  the normal email reply for now." See `docs/messages-plan.md`.
 - **The association's Odoo website** -- 2026-10-07. People confuse it with the
   portal and try to sign in there. No decision.
 - **Rounded corners** -- 2026-10-07. Discussed what switching the square look
@@ -152,6 +152,21 @@ Talked about, not agreed as work. Not built unless the maintainer brings them up
 What the maintainer did not want, and why -- a record, not a ban. Any of it
 may be suggested again, saying what has changed since. Only what the
 maintainer explicitly says must never change is marked so.
+
+- **The credit switch hiding everything that belongs to credit** (2026-10-15).
+  Asked: with credit off, Admin › Credit and Admin › Sales still showed (they
+  stay while anybody holds a balance, so it can be refunded). Proposed: the
+  switch as *Credit and sales* -- Admin › Sales hidden, Admin › Credit only
+  with a note while balances remain, *Sales point* not offered as a type. The
+  maintainer, once they knew a sales point already refuses every tap with
+  "Paying with credit is switched off" and a team's Sales page and members'
+  credit are hidden: "we can leave it as is. This is fine."
+
+- **Undoing your own sale** on My Account for a few minutes (2026-10-15;
+  listed under "Later" in `docs/cards-plan.md`). "I don't think that's
+  necessary if somebody is too stupid to only pay for something once, then
+  that's their problem" -- and a sale can still be taken back on the
+  person's credit page.
 
 - **Handling the forum's read-only mode in the portal** (2026-10-09).
   - The proposal had two parts:

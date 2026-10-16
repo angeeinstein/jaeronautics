@@ -9,12 +9,14 @@ import { Alert, Anchor, Button, PasswordInput, Stack, Text, TextInput, Title } f
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { IconUser } from '@tabler/icons-react';
 
 import { api, ApiError, call } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
 import { useDocumentTitle } from '../../components/PageHeader';
 import { Panel } from '../../components/Panel';
 import { messageOf } from '../../lib/notify';
+import { EmailHint } from '../../components/EmailHint';
 
 export function SignIn() {
   useDocumentTitle('Sign in');
@@ -50,7 +52,7 @@ export function SignIn() {
           </Stack>
         </Alert>
       ) : null}
-      <Panel title="Your account">
+      <Panel icon={IconUser} title="Your account">
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -79,6 +81,7 @@ export function SignIn() {
                 setEmail(event.currentTarget.value);
               }}
             />
+            <EmailHint value={email} onUse={setEmail} />
             <PasswordInput
               label="Password"
               autoComplete="current-password"

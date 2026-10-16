@@ -103,7 +103,7 @@ class TestAskingForTheUniversityEmailAgain:
         response = _signed_in(client, member).post("/api/v1/account/emails/work/confirmation")
 
         # Said, not a server error; and the page still opens.
-        assert response.status_code == 502
+        assert response.status_code == 503
         assert "could not send" in response.get_json()["error"]["message"]
         assert client.get("/api/v1/account").status_code == 200
 

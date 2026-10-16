@@ -67,32 +67,51 @@ def _choice(value, allowed, field, message):
     return value or None
 
 
-def save_general(actor, *, invoice_payments, automatic_emails, legal_pdfs_in_welcome_emails, welcome_email_sender,
-                 automatic_email_template, institutional_email_domains, staff_email_domains=None):
-    sender = _choice(welcome_email_sender, sender_accounts(), "welcome_email_sender",
-                     "That sender account does not exist.")
-    template = _choice(automatic_email_template, email_templates(), "automatic_email_template",
-                       "That email template does not exist.")
+def save_general(actor, *, invoice_payments, institutional_email_domains, staff_email_domains=None):
     return _write(actor, "general", {
         "invoice_payments_enabled": _flag(invoice_payments),
-        "automatic_emails_enabled": _flag(automatic_emails),
-        "legal_pdfs_in_welcome_emails": _flag(legal_pdfs_in_welcome_emails),
-        "welcome_email_sender": sender,
-        "automatic_email_template": template,
         # Stored as typed; institutional_email.py makes sense of commas, newlines and stray @ signs.
         "institutional_email_domains": (institutional_email_domains or "").strip() or None,
         "staff_email_domains": (staff_email_domains or "").strip() or None,
     })
 
 
-def save_notifications(actor, *, admin_general, admin_error, user_status, sender):
-    sender = _choice(sender, sender_accounts(), "sender", "That sender account does not exist.")
-    return _write(actor, "notifications", {
+def save_senders(actor, *, default, welcome, notifications, mailings, replies, reply_copy):
+    """Settings › Email, *Senders*: the default mail account, and one for each kind of
+    email (services/mail_senders.py). Each must exist; empty is the default."""
+    from . import ValidationError
+    from .mail_senders import DEFAULT, KINDS, REPLY_COPY, accounts
+
+    available = set(accounts())
+    chosen = {"default": default, "welcome": welcome, "notifications": notifications, "mailings": mailings,
+              "replies": replies}
+    for field, value in chosen.items():
+        value = (value or "").strip()
+        if value and value not in available:
+            message = "No such mail account (the Accounts tab)."
+            raise ValidationError(message, code="settings_invalid", details={"fields": {field: message}})
+        chosen[field] = value
+    values = {DEFAULT: chosen["default"] or None}
+    values.update({key: chosen[kind] or None for kind, key in KINDS.items()})
+    values[REPLY_COPY] = "1" if reply_copy else None
+    return _write(actor, "email_senders", values)
+
+
+def save_sending(actor, *, automatic_emails, legal_pdfs_in_welcome_emails, automatic_email_template,
+                 admin_general, admin_error, user_status):
+    """Settings › Email, *What goes out*: the welcome email and the notifications. The
+    mailings' pace is services/mailings.py's own."""
+    template = _choice(automatic_email_template, email_templates(), "automatic_email_template",
+                       "That email template does not exist.")
+    changed = _write(actor, "email_sending", {
+        "automatic_emails_enabled": _flag(automatic_emails),
+        "legal_pdfs_in_welcome_emails": _flag(legal_pdfs_in_welcome_emails),
+        "automatic_email_template": template,
         "notification_admin_general_enabled": _flag(admin_general),
         "notification_admin_error_enabled": _flag(admin_error),
         "notification_user_status_enabled": _flag(user_status),
-        "notification_sender": sender,
     })
+    return changed
 
 
 def save_billing(actor, *, publishable_key, price_id, secret_key=None, webhook_secret=None):

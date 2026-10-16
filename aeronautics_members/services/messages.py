@@ -8,20 +8,30 @@ to the admins. The email carries the sender as Reply-To, so it is answered
 from one's own mailbox, and the sender never sees a recipient's address until
 somebody answers.
 
+The contact form's messages are also answered from the portal (``reply``):
+written in Admin › Messages, emailed to the sender from the mail account
+chosen for replies (Settings › Email, Senders) -- a *support* address, not an
+admin's own -- with, if chosen there, a blind copy to that address, so the
+conversation is complete in its mailbox. The person's answer goes to that
+mailbox, read in a mail program. Messages to a team's leads are answered by
+email, as before.
+
 An email that could not be sent is tried again by the notification timer
 (``deliver_waiting``); the message is in Admin › Messages, or on the team's
-Messages page, either way. A message marked done is forgotten a year later.
+Messages page, either way. A message marked done is forgotten a year later,
+with its answers.
 
 Against spam, without a captcha service (the portal loads nothing from
 elsewhere): a hidden field people do not see and bots fill in, a form sent
 faster than a person types, and rate limits on the endpoint.
 """
 
-from datetime import timedelta
+from datetime import timedelta, timezone
 
 from flask import current_app
 
-from ..db_models import ContactMessage, Role, User, db
+from ..config import MEMBERSHIP_TIMEZONE
+from ..db_models import ContactMessage, ContactReply, Role, User, db
 from ..mail_utils import send_mail
 from ..permissions import Permission, roles_with
 from ..security_utils import build_public_url
@@ -228,6 +238,85 @@ def deliver(message):
     return True
 
 
+# --- Answering from the portal ------------------------------------------------------------
+
+
+def local_time(moment):
+    """A stored time (UTC, without a zone) as read in Vienna."""
+    aware = moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+    return aware.astimezone(MEMBERSHIP_TIMEZONE)
+
+
+def _reply_subject(message):
+    return message.subject if message.subject.lower().startswith("re:") else f"Re: {message.subject}"
+
+
+def _send_reply(reply):
+    """Email an answer to the message's sender. False when it has to wait."""
+    from . import mailings
+
+    message = reply.message
+    reply.attempts += 1
+    # Its account deleted or renamed while it waited: from the one answering
+    # now -- the replies' account, else the default, else any there is.
+    from . import mail_senders
+
+    existing = mail_senders.accounts()
+    if reply.account_key not in existing:
+        usable = [key for key in (mailings.reply_account(), mail_senders.default_account(), *existing)
+                  if key in existing]
+        reply.account_key = usable[0] if usable else reply.account_key
+    copy = mailings.account_address(reply.account_key) if mailings.reply_copy() else ""
+    written = local_time(message.created_at)
+    sent, error = send_mail(
+        from_account=reply.account_key,
+        to_email=message.sender_email,
+        subject=_reply_subject(message),
+        template_name="contact_reply.html",
+        body_html=mailings.render_body(reply.body),
+        quoted_intro=f"On {written:%d.%m.%Y} at {written:%H:%M}, {message.sender_name} wrote:",
+        quoted_text=message.body,
+        bcc_emails=[copy] if copy and copy.lower() != message.sender_email.lower() else None,
+        return_error=True,
+    )
+    if not sent:
+        reply.error = (error or "not sent")[:500]
+        return False
+    reply.sent_at = get_now_utc()
+    reply.error = None
+    return True
+
+
+def reply(actor, message, body):
+    """An answer to a contact-form message, emailed at once; the message is
+    then done. Kept even when the email has to wait: it is tried again."""
+    from . import mailings
+
+    if message.team_id is not None:
+        raise ValidationError("A message to a team is answered by email.", code="reply_team_message")
+    text = _clean(body, "body", BODY_MAX, what="An answer")
+    account = mailings.reply_account()
+    if not account:
+        raise ValidationError("No mail account to send from (Settings › Email, Accounts).", code="reply_no_account")
+    answer = ContactReply(message=message, author_user_id=actor.id if actor else None, body=text,
+                          account_key=account)
+    db.session.add(answer)
+    db.session.flush()
+    _send_reply(answer)
+    if message.done_at is None:
+        message.done_at = get_now_utc()
+        message.done_by_user_id = actor.id if actor else None
+    log_audit_event(
+        category="messages",
+        event_type="message_replied",
+        actor_user=actor,
+        metadata={"message_id": message.id, "reply_id": answer.id, "account": account,
+                  "sent": answer.sent_at is not None},
+    )
+    db.session.commit()
+    return answer
+
+
 def deliver_waiting(limit=20):
     """Messages whose email could not be sent yet, tried again (the notification timer)."""
     waiting = db.session.execute(
@@ -243,6 +332,19 @@ def deliver_waiting(limit=20):
         except Exception:  # noqa: BLE001 -- the next one is still tried
             db.session.rollback()
             current_app.logger.exception("Could not deliver contact message %s.", message.id)
+    answers = db.session.execute(
+        db.select(ContactReply)
+        .where(ContactReply.sent_at.is_(None), ContactReply.attempts < MOST_ATTEMPTS)
+        .order_by(ContactReply.created_at)
+        .limit(limit)
+    ).scalars().all()
+    for answer in answers:
+        try:
+            sent += bool(_send_reply(answer))
+            db.session.commit()
+        except Exception:  # noqa: BLE001 -- the next one is still tried
+            db.session.rollback()
+            current_app.logger.exception("Could not send the answer %s.", answer.id)
     return sent
 
 
@@ -306,7 +408,8 @@ def sent_by(user):
     """What somebody wrote, for their data export."""
     return [
         {"at": message.created_at, "to": message.team.name if message.team_id else "The association",
-         "topic": TOPICS.get(message.topic), "subject": message.subject, "message": message.body}
+         "topic": TOPICS.get(message.topic), "subject": message.subject, "message": message.body,
+         "answers": [{"at": answer.created_at, "answer": answer.body} for answer in message.replies]}
         for message in db.session.execute(
             db.select(ContactMessage).where(ContactMessage.sender_user_id == user.id)
             .order_by(ContactMessage.created_at)

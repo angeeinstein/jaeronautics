@@ -12,6 +12,7 @@ import { api, call, type Schemas } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
 import { ConfirmButton } from '../../components/ConfirmButton';
 import { Breadcrumbs, type Crumb, useDocumentTitle } from '../../components/PageHeader';
+import { PayButton } from '../../components/payment/PayMethod';
 import { Pill, type Tone } from '../../components/Pill';
 import { notifyDone, notifyFailed } from '../../lib/notify';
 import classes from './Teams.module.css';
@@ -164,16 +165,19 @@ export function MembershipBlock({
               case 'pay_join':
               case 'pay_next':
               case 'pay_stay':
+                // Paying ahead for the next period changes nothing today: no question then.
                 return (
-                  <Button
+                  <PayButton
                     key={action}
-                    loading={pay.isPending}
-                    onClick={() => {
+                    payFor={action === 'pay_stay' ? 'team-stay' : 'team'}
+                    ask={action !== 'pay_next'}
+                    loading={pay.isPending || pay.isSuccess}
+                    onPay={() => {
                       pay.mutate();
                     }}
                   >
                     {PAY_LABELS[action]}
-                  </Button>
+                  </PayButton>
                 );
               case 'join':
                 return (

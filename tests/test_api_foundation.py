@@ -272,7 +272,8 @@ class TestTheDescription:
     def test_every_endpoint_says_what_it_answers(self, app):
         from aeronautics_members.api import ENDPOINTS
 
-        assert [e.name for e in ENDPOINTS if e.response is None and e.method == "GET"] == []
+        # A JSON model, or a file of a said kind (``produces``).
+        assert [e.name for e in ENDPOINTS if e.response is None and not e.produces and e.method == "GET"] == []
         assert [e.name for e in ENDPOINTS if not e.summary] == []
 
     def test_every_model_has_a_name_of_its_own(self, app):

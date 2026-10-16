@@ -228,12 +228,27 @@ class TestTheTestEmail:
     """Sent from the admin settings to see what members receive. Sent with next
     to nothing, templates arrived half empty and looked broken on a phone."""
 
-    @pytest.mark.parametrize("template,expected", [
+    SAMPLES = [
         ("welcome_email.html", ["Hello Anna,", "MusterA_L25", "Open Forum", "Active until"]),
         ("member_account_action.html", ["Confirm your email address", "Confirm Email Address", "valid for 7 days"]),
         ("admin_notification_digest.html", ["Open Audit Logs", "could not be removed", "Delete the leftover"]),
         ("test_email.html", ["the sender account is working", "Sent at:"]),
-    ])
+        ("contact_message.html", ["Workshop on Monday?", "Anna Muster", "finish my part", "Open in the portal"]),
+        ("contact_reply.html", ["yes, from 18:00", "Anna Muster wrote:", "open on Monday evening"]),
+        ("mailing.html", ["General assembly on 12 November", "in the club room", "as a member of"]),
+        ("money_differences.html", ["Stripe and the portal differ", "in_1Example", "Open Money"]),
+        ("team_access_list.html", ["Current members of Rocket Team", "Carla Beispiel", "Dieter Probe"]),
+    ]
+
+    def test_every_template_offered_has_sample_values(self, app):
+        """Found on the test server (2026-10-16): the templates added since had
+        none, so the test email failed on an undefined value."""
+        from aeronautics_members.services.notifications import get_email_template_choices
+
+        offered = {name for name, _label in get_email_template_choices(app)}
+        assert offered == {template for template, _expected in self.SAMPLES}
+
+    @pytest.mark.parametrize("template,expected", SAMPLES)
     def test_it_is_filled_in_like_a_real_one(self, app, client, outbox, template, expected):
         admin = make_member(email="admin@example.org")
         admin.user.grant_role(app_module.get_role("superadmin"))

@@ -108,6 +108,12 @@ class MeOut(Model):
     credit_admin: bool = False
     #: My Account › Cards: once a device reads cards, or for somebody who has some.
     cards_area: bool = False
+    #: My Account › Attendance: "menu" while it is on for one of their teams (or
+    #: the association), "data" while only their stays are kept -- then it is
+    #: reached from Privacy and data.
+    attendance_area: Literal["menu", "data"] | None = None
+    #: Admin › Attendance, for whoever runs the teams: always in the menu.
+    attendance_admin: bool = False
     team_labels: TeamLabels
     counts: Counts
     admin_notices: list[Notice]
@@ -167,6 +173,18 @@ def _credit_admin():
     return credit.enabled() or db.session.execute(db.select(CreditAccount.user_id).limit(1)).first() is not None
 
 
+def _attendance_area():
+    from ..services import attendance
+
+    return attendance.area(current_user)
+
+
+def _attendance_admin():
+    """Admin › Attendance: always in the menu of whoever runs the teams -- its
+    switch is there, as a team's is on its own Attendance page."""
+    return current_user.can(Permission.TEAMS_MANAGE)
+
+
 def _cards_area():
     from ..services import cards
 
@@ -195,6 +213,8 @@ def me():
         credit_area=_credit_area(),
         credit_admin=_credit_admin(),
         cards_area=_cards_area(),
+        attendance_area=_attendance_area(),
+        attendance_admin=_attendance_admin(),
         team_labels=TeamLabels(singular=singular, plural=plural),
         counts=Counts(reviews_waiting=waiting_for_review_count(current_user), messages_open=_messages_open()),
         admin_notices=_admin_notices() if admin_area else [],

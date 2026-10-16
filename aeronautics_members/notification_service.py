@@ -248,11 +248,13 @@ class NotificationService:
         return False
 
     def get_sender_account(self):
-        settings = self.get_settings()
-        if settings["notification_sender"]:
-            return settings["notification_sender"]
-        fallback = db.session.get(Setting, "welcome_email_sender")
-        return (fallback.value if fallback is not None else "") or ""
+        """The notifications' own account, else the default (Settings › Email, Senders)."""
+        try:
+            from .services.mail_senders import account_for
+        except ImportError:
+            from services.mail_senders import account_for
+
+        return account_for("notifications")
 
     def queue_admin_general(self, event_type, summary, payload=None, target_user=None, target_member=None, object_type=None, object_id=None):
         return self.queue_event(

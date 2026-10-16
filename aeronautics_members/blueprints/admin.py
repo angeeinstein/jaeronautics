@@ -113,12 +113,29 @@ def admin_cards():
     return app_shell()
 
 
+@admin_bp.route("/admin/attendance", methods=["GET"])
+@login_required
+@requires(Permission.TEAMS_MANAGE)
+def admin_attendance():
+    """Attendance at the association's readers (frontend/src/pages/admin/Attendance.tsx)."""
+    return app_shell()
+
+
 @admin_bp.route("/admin/credit", methods=["GET"])
 @admin_bp.route("/admin/credit/<int:user_id>", methods=["GET"])
 @login_required
 @requires(Permission.CREDIT_MANAGE)
 def admin_credit(user_id=None):
     """Everybody's credit, and one person's (frontend/src/pages/admin/credit/)."""
+    return app_shell()
+
+
+@admin_bp.route("/admin/sales", methods=["GET"])
+@login_required
+@requires(Permission.CREDIT_MANAGE)
+def admin_sales():
+    """What is sold for credit: by seller and item, the association's price list and its
+    sales points' menus (frontend/src/pages/admin/credit/Sales.tsx)."""
     return app_shell()
 
 
@@ -204,16 +221,24 @@ def admin_settings():
 
 #: A section of the settings, and what it needs beyond the general settings permission.
 SETTINGS_SECTIONS = {
-    "general": None, "notifications": None, "credit": None, "mailings": None, "billing": Permission.SETTINGS_CREDENTIALS,
-    "forum": Permission.SETTINGS_CREDENTIALS, "mail": Permission.SETTINGS_CREDENTIALS,
-    "test-email": Permission.NOTIFICATIONS_MANAGE,
+    "general": None, "email": None, "credit": None, "billing": Permission.SETTINGS_CREDENTIALS,
+    "forum": Permission.SETTINGS_CREDENTIALS,
     "health": Permission.SYSTEM_UPDATE, "updates": Permission.SYSTEM_UPDATE, "backup": Permission.SYSTEM_BACKUP,
     "devices": Permission.DEVICES_MANAGE,
 }
 
+#: The pages Settings › Email took over (2026-10), and its tab for each.
+EMAIL_TABS = {"notifications": "sending", "mailings": "sending", "mail": "accounts", "test-email": "test"}
 
-@admin_bp.route("/admin/settings/<any(general, notifications, billing, credit, mailings, forum, mail, 'test-email', health, updates, "
-                "backup, devices)"
+
+@admin_bp.route("/admin/settings/<any(notifications, mailings, mail, 'test-email'):old>", methods=["GET"])
+@login_required
+def admin_settings_email_moved(old):
+    """An old address of an email setting: Settings › Email, on its tab."""
+    return redirect(url_for("admin.admin_settings_section", section="email") + "#" + EMAIL_TABS[old])
+
+
+@admin_bp.route("/admin/settings/<any(general, email, billing, credit, forum, health, updates, backup, devices)"
                 ":section>", methods=["GET"])
 @login_required
 @requires(Permission.SETTINGS_GENERAL)
@@ -222,6 +247,23 @@ def admin_settings_section(section):
     needed = SETTINGS_SECTIONS[section]
     if needed is not None and not current_user.can(needed):
         return redirect(url_for("admin.admin_settings_section", section="general"))
+    return app_shell()
+
+
+@admin_bp.route("/admin/settings/devices/pair", methods=["GET"])
+@login_required
+@requires(Permission.DEVICES_MANAGE)
+def admin_settings_device_pair():
+    """Pairing a device by the code on its screen (``?code=K7Q-4X9``, the device's
+    QR code): drawn by the new front end (frontend/src/pages/admin/settings/PairDevice.tsx)."""
+    return app_shell()
+
+
+@admin_bp.route("/admin/settings/devices/firmware", methods=["GET"])
+@login_required
+@requires(Permission.DEVICES_MANAGE)
+def admin_settings_device_firmware():
+    """The devices' firmware: drawn by the new front end (frontend/src/pages/admin/settings/Firmware.tsx)."""
     return app_shell()
 
 

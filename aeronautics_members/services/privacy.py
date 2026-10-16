@@ -251,6 +251,9 @@ def export_account_data(user):
     payload["teams"] = _team_data(user)
     payload["credit"] = _credit_data(user)
     payload["cards"] = _card_data(user)
+    from .attendance import export_for as attendance_data
+
+    payload["attendance"] = attendance_data(user)
     from .messages import sent_by
 
     payload["messages"] = sent_by(user)
@@ -540,6 +543,9 @@ def erase_account(user, *, actor_user=None, initiated_by=INITIATED_BY_ADMIN, not
     from .cards import forget_for_erasure
 
     summary["cards_removed"] = forget_for_erasure(user, actor_user)
+    from .attendance import forget_for_erasure as forget_attendance
+
+    summary["attendance_stays_deleted"] = forget_attendance(user)
     if member is not None:
         summary["periods_retained"] = len(member.membership_periods)
         summary["avatar_files_deleted"] = _erase_member_rows(member)

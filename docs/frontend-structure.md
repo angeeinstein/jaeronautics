@@ -94,8 +94,9 @@ that appears when entering the admin area.
 | Admin | the admin sidebar | full |
 
 Sidebars are for the places where people *work* -- running a team, running
-the association -- and for My Account, which grows (credit and cards, since
-October 2026, are pages in its side menu) and so gets one place to add a page.
+the association -- and for My Account, which grows (credit, cards and
+attendance, since October 2026, are pages in its side menu) and so gets one
+place to add a page.
 
 ### The footer
 
@@ -112,13 +113,21 @@ Entered with the **gear** at the right of the top bar; opens on the Dashboard.
 
 - **‹ Back to the portal** (to My Account)
 - *Overview* -- **Dashboard**
-- *People* -- **Accounts**, **Reviews** (count of what waits), **Credit**,
-  **Cards** (every card linked; with `cards.manage`)
-- *Teams* -- **Teams**, **Money**
+- *People* -- **Accounts**, **Reviews** (count of what waits), **Cards**
+  (every card linked; with `cards.manage`), **Attendance** (the
+  association's readers, `docs/attendance-plan.md`; for whoever runs the
+  teams, with its switch on the page)
+- *Money* -- **Money** (the teams' money), **Credit** (members' money: the
+  totals, balances, the latest entries), **Sales** (what was sold, by seller
+  and item; the association's price list and its sales points' menus)
+- *Teams* -- **Teams**
 - *System* -- **Logs**, **Settings** ▸
-  - Settings folds open in place (chevron) to its parts: **General**,
-    **Notifications**, **Membership fee**, **Forum**, **Mail accounts**,
-    **Test email**, **Devices** (and one device's page), **System health**,
+  - Settings folds open in place (chevron) to its parts: **General**
+    (signing up, the university email domains), **Email** (tabs: *Senders*
+    -- which mail account sends what; *What goes out* -- the welcome email,
+    the notifications and their channels, the mailings' pace; *Accounts*;
+    *Test*), **Credit**, **Membership fee**, **Forum**, **Devices** (one
+    device's page, pairing one, the firmware with flashing a new board), **System health**,
     **Updates**, **Backup and restore**.
     Clicking *Settings* opens it on General.
     (The forum's connection test is on the Forum page, beside what it tests.)
@@ -272,14 +281,45 @@ steps on top with a line that fills, each done one a way back to it:
 4. **Password** -- signup only, with how strong it is.
 5. **Check and join** -- everything once more, each line back to its step;
    what it costs today and every year, read from Stripe's price (or nothing
-   today in the free months); the texts to accept, each opening over the form.
-   How to pay is chosen on Stripe's page.
+   today in the free months); **how they want to pay** (below); the texts to
+   accept, each opening over the form.
 
 *After joining* (pay, confirm the address or both, add a picture for the
 forum) stands beside the steps on a wide screen and in the last step on a
 narrow one. Each step is checked before the next; a field the server refuses
 takes the form back to its step. Steps slide in, fields that become relevant
 fade in -- all of it still for whoever asks their device for less motion.
+
+### How somebody pays
+
+Agreed and built 2026-10-15. Before Stripe's payment page opens, a choice to
+click (`frontend/src/components/payment/PayMethod.tsx`, the same wording
+everywhere):
+
+- **Card, Apple Pay or Google Pay** -- "Your membership starts right away."
+- **SEPA Direct Debit** -- "Your membership starts once the debit clears, in
+  a few days."
+
+For a team's fee: "Your team membership starts ..." (to join), "... carries
+on ..." (to stay). Joining asks on its last step; rejoining, *Resume payment*
+and a team's *Pay and join* and *Pay to stay* ask in a small dialog when the
+button is pressed, and choosing goes on at once. Not asked where it changes
+nothing: a membership in the year's free months (nothing is charged today),
+a team's *Pay for next period* (paid ahead), an invoice.
+
+Why: SEPA takes days, which is "most of all annoying for them, because they
+have to wait some time before they can use their account, or before they can
+become a team member". Card for whoever does not mind; SEPA kept for those
+with no card or who prefer it. A line near the button is not read ("nobody
+reads such fine prints"); a choice is.
+
+Both answers open **the same** Stripe page, with card and SEPA as before:
+whoever changes their mind there has read what it means, and is better off
+paying by SEPA than leaving to "complete it later". The choice is not sent to
+the server. Ruled out: switching SEPA off in Stripe (it would break the
+portal's checkouts and members' SEPA renewals, as the portal names the
+methods itself); a line of text alone; SEPA only on the cancel page; Stripe's
+page with only the chosen method.
 
 ## 7. Page patterns
 
@@ -303,6 +343,27 @@ fade in -- all of it still for whoever asks their device for less motion.
 - **Feedback**: a short toast at the bottom ("Saved", "Approved") instead of a
   banner across the page; errors stay next to the field they concern.
 - **Empty states**: one muted sentence in the card ("Nobody yet.").
+- **An icon in every card's header** (2026-10-15), on the accent colour,
+  chosen by what the card holds: "everything looks rather similar ... it's
+  sometimes a bit hard to see at a glance where something is". Cards about
+  the same thing share one (a clock for history, an envelope for email).
+- **Tabs on long pages** (`components/PageTabs.tsx`, 2026-10-15): one part
+  at a time, the tab in the address (`#history`), the first tab without it.
+  The Sales pages (*Price list*, *Sales points*), a device (*Device*,
+  *Activity*, *Crashes*), a team's money on Admin › Money (*Balance*, *History*),
+  Updates (*Update*, *History*) and Backup (*Backup*, *Restore*). "I like
+  the tabs on those pages where there is much content." Since 2026-10-16
+  also Settings › Email (*Senders*, *What goes out*, *Accounts*, *Test*)
+  and Devices › Firmware (*Updates*, *New device*: a fresh board flashed
+  over USB in the browser, `NewDevice.tsx`, its flasher -- esptool-js --
+  loaded only when a board is flashed).
+- **A hint under every email field** (`components/EmailHint.tsx`,
+  `lib/emailHint.ts`, 2026-10-16): when the address typed looks like a
+  mistyped university address -- the domain, dots and hyphens left out, is
+  one of the portal's (`edu-fh.joanneum.at`), or one letter off one --
+  "Did you mean anna@edu.fh-joanneum.at?", a click taking it. A hint only.
+  On the contact form, signing in, *Forgot password*, joining, My Account's
+  contact details and an admin correcting an address.
 
 ## 8. Visual language (a guide)
 

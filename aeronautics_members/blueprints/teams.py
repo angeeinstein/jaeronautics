@@ -15,7 +15,7 @@ import csv
 import io
 
 from flask import (
-    Blueprint, Response, abort, request, send_file, url_for,
+    Blueprint, Response, abort, redirect, request, send_file, url_for,
 )
 from flask_login import current_user, login_required
 
@@ -166,13 +166,20 @@ def team_messages(slug):
     return app_shell()
 
 
-@teams_bp.route("/teams/<slug>/manage/prices", methods=["GET"])
+@teams_bp.route("/teams/<slug>/manage/sales", methods=["GET"])
 @login_required
-def team_prices(slug):
-    """The team's price list for what it sells for credit (frontend/src/pages/teams/manage/Prices.tsx)."""
+def team_sales(slug):
+    """What the team sells for credit: what it sold, its price list, its sales points' menus
+    (frontend/src/pages/teams/manage/Sales.tsx)."""
     team = _money_team_or_404(slug)
     _may(team, teams_service.TeamPermission.EDIT_PRICES)
     return app_shell()
+
+
+@teams_bp.route("/teams/<slug>/manage/prices", methods=["GET"])
+def team_prices(slug):
+    """The page's old address: the price list is on the Sales page now."""
+    return redirect(url_for("teams.team_sales", slug=slug))
 
 
 @teams_bp.route("/teams/<slug>/manage/devices", methods=["GET"])
@@ -181,6 +188,15 @@ def team_devices(slug):
     """The team's devices (frontend/src/pages/teams/manage/Devices.tsx)."""
     team = _team_or_404(slug)
     _may(team, teams_service.TeamPermission.DEVICES)
+    return app_shell()
+
+
+@teams_bp.route("/teams/<slug>/manage/attendance", methods=["GET"])
+@login_required
+def team_attendance(slug):
+    """The team's attendance (frontend/src/pages/teams/manage/Attendance.tsx)."""
+    team = _team_or_404(slug)
+    _may(team, teams_service.TeamPermission.ATTENDANCE)
     return app_shell()
 
 

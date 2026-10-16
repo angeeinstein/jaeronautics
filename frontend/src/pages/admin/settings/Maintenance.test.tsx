@@ -308,6 +308,7 @@ describe('updates', () => {
       },
     });
 
+    await userEvent.click(await screen.findByRole('tab', { name: 'History' }));
     const steps = await screen.findByRole('list', { name: 'Steps of the last update' });
     expect(steps).toHaveTextContent('Installing Python dependencies: FailedNo space left on device');
     expect(calls.some((call) => call.url.endsWith('/log'))).toBe(false);
@@ -331,6 +332,7 @@ describe('updates', () => {
       },
     });
 
+    await userEvent.click(await screen.findByRole('tab', { name: 'History' }));
     expect(await screen.findByRole('button', { name: 'Roll back to cccc3333' })).toBeEnabled();
   });
 

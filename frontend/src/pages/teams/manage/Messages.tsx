@@ -13,6 +13,7 @@
 import { Stack, Text } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconPencil, IconSend } from '@tabler/icons-react';
 
 import { api, call } from '../../../api/client';
 import { type Draft, MailingComposer, MailingTable } from '../../../components/Mailing';
@@ -42,7 +43,7 @@ function Write({ slug }: { slug: string }) {
   if (mailings.isError) return <ErrorState error={mailings.error} onRetry={() => void mailings.refetch()} />;
   return (
     <Stack gap="lg">
-      <Panel title="Write to the team">
+      <Panel icon={IconPencil} title="Write to the team">
         <MailingComposer
           before={
             <Text size="sm" c="dimmed">
@@ -65,7 +66,7 @@ function Write({ slug }: { slug: string }) {
           }}
         />
       </Panel>
-      <Panel title="Sent" flush>
+      <Panel icon={IconSend} title="Sent" flush>
         <MailingTable items={mailings.data.items} />
       </Panel>
     </Stack>

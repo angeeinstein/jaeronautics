@@ -7,6 +7,7 @@
 import { Anchor, Box, Group, Stack, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useParams } from 'react-router';
+import { IconScale } from '@tabler/icons-react';
 
 import { api, call } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
@@ -30,7 +31,7 @@ export function LegalTexts() {
       ) : texts.isError ? (
         <ErrorState error={texts.error} onRetry={() => void texts.refetch()} />
       ) : (
-        <Panel title="In force" flush>
+        <Panel icon={IconScale} title="In force" flush>
           {texts.data.texts.length ? (
             <Stack gap={0}>
               {texts.data.texts.map((text) => (

@@ -9,6 +9,7 @@
 import { Alert, Anchor, Button, FileInput, Group, List, SimpleGrid, Stack, Text } from '@mantine/core';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IconClock, IconEye, IconFileTypePdf, IconFolder, IconScale } from '@tabler/icons-react';
 
 import { api, ApiError, call, type Schemas } from '../../api/client';
 import { Checklist } from '../../components/Checklist';
@@ -67,7 +68,7 @@ function Preview({ data }: { data: LegalOut }) {
   });
 
   return (
-    <Panel title="Preview a new text">
+    <Panel icon={IconEye} title="Preview a new text">
       <Stack gap="md">
         <Text size="sm" c="dimmed">
           Upload the Markdown file of a new version, the association&apos;s or a team&apos;s rules, and get it
@@ -138,7 +139,7 @@ function Preview({ data }: { data: LegalOut }) {
 
 function InForce({ data }: { data: LegalOut }) {
   return (
-    <Panel title="In force" flush>
+    <Panel icon={IconScale} title="In force" flush>
       <ul className={classes.list}>
         {data.in_force.map((text) => (
           <li key={text.page_url} className={classes.item}>
@@ -170,7 +171,7 @@ function InForce({ data }: { data: LegalOut }) {
 
 function NotInForce({ data }: { data: LegalOut }) {
   return (
-    <Panel title="Not in force yet" flush>
+    <Panel icon={IconClock} title="Not in force yet" flush>
       {data.waiting.length ? (
         <>
           <ul className={classes.list}>
@@ -255,7 +256,7 @@ function Remake({ data }: { data: LegalOut }) {
   }
 
   return (
-    <Panel title="PDFs">
+    <Panel icon={IconFileTypePdf} title="PDFs">
       <Stack gap="md">
         <Text size="sm" c="dimmed">
           Each PDF is made the first time somebody opens it and kept. A changed text, layout or logo makes a
@@ -289,7 +290,7 @@ function Remake({ data }: { data: LegalOut }) {
 
 function Files({ data }: { data: LegalOut }) {
   return (
-    <Panel title="The files on this server">
+    <Panel icon={IconFolder} title="The files on this server">
       {data.problems.length ? (
         <List size="sm" spacing={4}>
           {data.problems.map((problem) => (

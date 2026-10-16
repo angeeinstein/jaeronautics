@@ -8,6 +8,7 @@
 import { Alert, Button, Group, List, Stack, Text } from '@mantine/core';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router';
+import { IconAlertTriangle } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
@@ -35,7 +36,7 @@ function What({ token, impact }: { token: string; impact: Schemas['DeletionOut']
     onError: notifyFailed,
   });
   return (
-    <Panel title="What happens">
+    <Panel icon={IconAlertTriangle} title="What happens">
       <Stack gap="md">
         <Text size="sm">This erases your personal data and cannot be undone.</Text>
         <List size="sm" spacing="xs">

@@ -201,7 +201,7 @@ class TestBillingSync:
 
         response = send(client, "POST", url(member.user_id, "/billing-sync"))
 
-        assert response.status_code == 502
+        assert response.status_code == 503
         assert response.get_json()["error"]["code"] == "external_service_unavailable"
         assert db.session.query(NotificationEvent).filter_by(event_type="manual_billing_sync_failed").count() == 1
 

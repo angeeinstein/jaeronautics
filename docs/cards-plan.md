@@ -63,7 +63,16 @@ type, not by the card.
   - admins: a Cards section on each account's admin page, and a list of all
     cards.
 
-### Linking a card (the first version)
+### Linking a card (the first version, removed 2026-10-14)
+
+*Removed once linking with a reader's QR code worked (below): it is the one
+way now. The maintainer: "Since the card linking via the QR code works so
+perfectly ... I don't want to keep features that are not really necessary
+and may only confuse people", and "I don't think there is a single student
+who doesn't have a smartphone". Web NFC worked only in Chrome on Android;
+the admin's ways were a stand-in for whoever could not use it. Quickly
+brought back from git history if a reader without a screen ever needs them.
+Kept as the record of the start.*
 
 "Enough for the first tests"; more ways later.
 
@@ -84,7 +93,71 @@ account -- ask an admin"). A card scanned with Web NFC is sent by the browser
 and so could be made up; accepted, since a card linked wrongly charges the
 person who linked it.
 
-### The sales point (the first version)
+### Linking a card at a reader with a QR code (agreed and built 2026-10-14)
+
+The member links their own card at a reader with a screen, with any phone
+(iPhones too), "proven by being there":
+
+1. A card nobody has linked is tapped. The reader reports it as always
+   (`card`), so the portal has the card at this moment: it keeps it (as the
+   keyed hash and its end, like every card) in a **link** with a random token,
+   and answers `card_unknown` with that link's address (`link_url`). The
+   reader shows "Not linked yet, scan to link it" with it as a QR code.
+2. **The QR code holds the token, never the card's ID** -- the ID is all
+   that proves who pays, and anyone who has it could copy it onto a card
+   with a writable ID; on a screen, in a browser history or a server log it
+   would be out. Discussed and decided against (2026-10-14).
+3. The link lasts **10 minutes** and works once, so nobody is hurried on the
+   phone (signing in, a forgotten password). **The first phone to open it
+   keeps it**; another phone opening it is told it is already being used.
+   (2 minutes was agreed first, while the reader waited for the end; with the
+   reader no longer waiting, the time on the phone is free.)
+4. The phone opens the portal (signing in first if needed): "Link the card
+   …A1F3, tapped at Rocket fridge just now?", with a name for it, and
+   *Link*. The card is linked from what the link kept: **the reader takes no
+   part any more**. The phone shows "Linked, hi Alex"; the next tap at the
+   reader opens the menu.
+5. **The reader moves on at once.** While the QR code is shown -- at most
+   **30 seconds** -- it asks the portal about the link **every 2 seconds**
+   (the maintainer: "I don't want to wait ten seconds here ... two seconds
+   seems right"); those requests are not listed on the device's page. The
+   answer is `waiting` (keep the QR code), `opened` (a phone has it: show
+   "Continue on your phone" for a few seconds, then the normal screen) or
+   `expired`. The maintainer: "if somebody scans the code and then abandons
+   this, I want the device to switch back to the normal default screen
+   rather quickly so that other people could use the terminal". The portal
+   sends the times with the link, so they change without a firmware update.
+
+- **The same card tapped again** gets a new link and a new QR code, and every
+  earlier link of that card stops working -- **also one a phone has already
+  opened**. Whoever opened a link and lost it (closed the browser, the phone
+  locked) taps the card again and starts over "like it never happened
+  before" (the maintainer). Only one link per card is ever open, and only
+  someone holding the card can start one.
+- **A card linked meanwhile** another way (another QR code): the link is
+  refused with "This card is already linked", and the phone says so.
+- **Who may link:** any signed-in account, as with Web NFC then -- not only
+  active members. "Just linking a card isn't really any problematic thing";
+  paying needs credit, and topping up needs an active membership.
+- **Why it answers the concern above** (a stranger's tap ending up in
+  someone's account): the link only exists on the reader's screen, just after
+  that card was tapped, so nobody can start it from afar; and the first phone
+  keeps it, so a photograph of the code taken a moment later is of no use.
+- **Firmware:** draws the QR code from the link's `url` (ESP-IDF's `qrcode`
+  component) and asks about it while it is shown: `docs/device-protocol.md`,
+  section 7.4.
+- **Built** (`services/card_links.py`, the page
+  `frontend/src/pages/public/LinkCard.tsx` at `/link/<token>`): the page opens
+  the link before asking to sign in, so the reader moves on at once; the
+  phone keeps its claim in the browser, so signing in comes back to it. A
+  link's row is deleted the next day, and with the card's account at erasure;
+  the privacy policy draft says so.
+
+### The sales point (the first version, replaced by the menu)
+
+*Replaced on 2026-10-14 by a menu of up to four items with icons, the first
+name and the balance (docs/devices-plan.md, "The screens";
+docs/device-protocol.md, section 8.1). Kept as the record of the start.*
 
 A device type, "Sales point", with a **fixed item**: a tap sells that one
 item. "For a starter, I would only begin with a fixed item per reader, and
@@ -114,20 +187,18 @@ later on we can expand this if this works and if this feels right."
   portal so "nobody has to touch the device ever again if it's deployed once":
   - buttons: a button per item, set on the reader's page, pressed before the
     tap (as on the old coffee reader);
-  - a display: the reader fetches its seller's price list and the member
-    chooses before tapping; a marker in the sign of life tells it when the
-    list changed;
+  - a display: built as the menu (2026-10-14) -- the card is tapped first,
+    then one of up to four items chosen on the screen;
   - perhaps only part of a seller's list on a reader. How price lists and
     readers fit together beyond this is "a bit open".
 - **Linking at a reader by its user**, proven by being there: a QR code with a
   short-lived token on a reader with a display, or pressing the reader's
   button within a few seconds of pressing *Link a card* in the portal.
-- **Undoing your own sale** for a few minutes, on My Account (a double tap, or
-  the favourite beverage was not in the fridge after all). Not at the reader.
+- ~~Undoing your own sale~~ -- turned down 2026-10-15 (`docs/todo.md`,
+  "Turned down").
 - **Actions at the reader** beyond light and beeps: a relay (a coffee
-  machine), a fridge's magnetic lock -- an output per item, sent with the
-  answer. "Especially because I don't have a concrete use case for the
-  readers right now."
+  machine), a fridge's magnetic lock -- built 2026-10-15
+  (`docs/devices-plan.md`, "Actions after a sale").
 - **Attendance**, around January, with the same cards.
 
 ## How it was built (decided while building)
@@ -137,15 +208,15 @@ later on we can expand this if this works and if this feels right."
   and a backup (which carries `SECRET_KEY`) restores working cards. A check
   value kept at the first link lets System health say when `SECRET_KEY` has
   changed since, which would make every card unknown.
-- **The item is the reader's only setting**; its seller is the item's. The
-  item is chosen from every price list, grouped by seller. An item switched
-  off later stays set, and the reader answers `item_off`.
-- **A card is sold to at most once in 5 seconds per reader**, and taps on
-  one reader are taken one at a time (a row lock on the device), so two
-  copies of one tap are one sale.
+- **The items are the reader's only setting**, from its owner's price list
+  only. An item switched off later stays chosen but leaves the menu.
+- **A card tapped gets a ticket** for one purchase on that reader, for 20
+  seconds; reports on one reader are taken one at a time (a row lock on the
+  device), so two copies of one report are one sale. (The first version's
+  "once in 5 seconds per card" went with the ticket.)
 - **The device's page keeps a tap without the card's ID** (its last four
-  characters only), and says what came of it: "…E5F6 bought Beer, €1.50;
-  €3.50 left", "…E5F6 refused: Sold to this card a moment ago." (asked for
+  characters only), and says what came of it: "…E5F6 opened the menu
+  (€5.00)", "Beer sold, €1.50; €3.50 left". (asked for
   after testing, 2026-10-13). A report type says what of its data is kept
   and how its event reads.
 - **A known card tapped while an admin waits at that reader buys as usual**;

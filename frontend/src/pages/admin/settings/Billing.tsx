@@ -7,6 +7,7 @@
  */
 import { Alert, Group, PasswordInput, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
+import { IconBrandStripe } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
@@ -52,7 +53,7 @@ function Form({ data }: { data: BillingOut }) {
 
   return (
     <Stack gap="lg">
-      <Panel title="Stripe">
+      <Panel icon={IconBrandStripe} title="Stripe">
         <Stack gap="md">
           <Text size="sm" c="dimmed">
             The keys for paying online, the customer portal and checking Stripe&apos;s messages to the portal.

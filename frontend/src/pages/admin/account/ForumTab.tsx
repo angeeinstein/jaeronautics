@@ -9,6 +9,7 @@ import { useDebouncedValue } from '@mantine/hooks';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { IconArchive, IconMessages, IconPlugConnected } from '@tabler/icons-react';
 
 import { api, call } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
@@ -89,7 +90,7 @@ function ForumActions({ account }: { account: Account }) {
 function ForumPanel({ account }: { account: Account }) {
   const forum = account.forum;
   return (
-    <Panel title="Forum">
+    <Panel icon={IconMessages} title="Forum">
       <Stack gap="sm">
         <Details
           items={[
@@ -127,6 +128,7 @@ function OldForumPanel({ account }: { account: Account }) {
   if (!archive) return null;
   return (
     <Panel
+      icon={IconArchive}
       title="Old forum account"
       actions={
         archive.claimed_at ? <Pill tone="active">Reconnected</Pill> : <Pill tone="neutral">Not claimed</Pill>
@@ -206,7 +208,7 @@ function Reconnect({ account }: { account: Account }) {
   );
 
   return (
-    <Panel title="Reconnect to the old forum">
+    <Panel icon={IconPlugConnected} title="Reconnect to the old forum">
       <Stack gap="sm">
         <Text size="sm" c="dimmed">
           For a returning member whose university address no longer matches the old forum&apos;s: a new name,

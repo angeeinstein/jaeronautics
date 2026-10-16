@@ -5,6 +5,7 @@
  * How it all adds up: components/MoneyStatement.tsx.
  */
 import { Stack, Table, Text } from '@mantine/core';
+import { IconChartBar } from '@tabler/icons-react';
 
 import type { Schemas } from '../../../api/client';
 import { Panel } from '../../../components/Panel';
@@ -64,6 +65,7 @@ export function ForTheTeam({ payment }: { payment: Payment }) {
 export function SalesPanel({ sales }: { sales: Sales }) {
   return (
     <Panel
+      icon={IconChartBar}
       title="Sold for credit"
       flush
       actions={

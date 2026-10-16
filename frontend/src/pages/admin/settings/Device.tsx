@@ -1,12 +1,18 @@
 /**
- * Settings -> Devices -> one device (docs/devices-plan.md): its state; its
- * name, place and settings; switching it off; its key on one line (rotate,
- * revoke); every request a device of its type can send -- described, as a
- * command, and sent from here to see the answer; its recent requests and
- * events, refreshed every few seconds while the page is open; removing it.
+ * Settings -> Devices -> one device (docs/devices-plan.md), in three tabs.
+ * *Device*: its state, its board, what its firmware can be and how many
+ * outputs it has; its name, place, type and settings; switching it off; the
+ * firmware it runs and should run (one of its own, to try a version on one
+ * device first); its backup code; its key on one line (rotate, revoke; not
+ * for a paired device); removing it. *Activity* (#activity): its recent
+ * requests and events, refreshed every few seconds while the page is open,
+ * and every request a device of its type can send -- described, as a
+ * command, and sent from here to see the answer. *Crashes* (#crashes,
+ * DeviceCrashes.tsx): what it reported after crashing, with the core dumps.
  * Data: /api/v1/admin/devices/<id> (aeronautics_members/api/devices.py).
  */
 import {
+  Anchor,
   Button,
   Code,
   Group,
@@ -19,14 +25,29 @@ import {
   Textarea,
   TextInput,
 } from '@mantine/core';
+import {
+  IconActivity,
+  IconAdjustments,
+  IconArrowsExchange,
+  IconBug,
+  IconCloudDownload,
+  IconCpu,
+  IconHistory,
+  IconInfoCircle,
+  IconKey,
+  IconShieldLock,
+  IconTerminal2,
+  IconTrash,
+} from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 
 import { api, ApiError, call, type Schemas } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
 import { Details } from '../../../components/Details';
 import { PageHeader } from '../../../components/PageHeader';
+import { PageTabs } from '../../../components/PageTabs';
 import { Panel } from '../../../components/Panel';
 import { Pill } from '../../../components/Pill';
 import { EmptyState, ErrorState, LoadingState } from '../../../components/States';
@@ -34,15 +55,24 @@ import { formatDateTime } from '../../../lib/format';
 import { EVERY_5_SECONDS, useLiveRefresh } from '../../../lib/live';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
 import {
+  canBe,
   type Device,
   type DeviceKey,
   devicesKey,
   type DeviceType,
+  FIRMWARE_STATE,
+  firmwareKey,
   KeyReveal,
   type Settings,
   statusOf,
   TypeSettingsFields,
+  typesFor,
+  deviceFields,
+  menuFields,
+  salesPageOf,
+  valuesOf,
 } from './deviceParts';
+import { DeviceCrashes } from './DeviceCrashes';
 
 type Detail = Schemas['DeviceDetailOut'];
 
@@ -55,12 +85,21 @@ const EVENT_LABELS: Record<string, string> = {
   refused: 'Refused',
   reported: 'Reported',
   tried: 'Tried',
+  paired: 'Paired',
+  hardware: 'Board',
+  board: 'Board',
+  types: 'Can be',
+  outputs: 'Outputs',
+  type: 'Type',
+  owner: 'Owner',
+  settings: 'Settings',
+  backup_code: 'Backup code',
 };
 
-function State({ device }: { device: Device }) {
+function State({ device, types }: { device: Device; types: DeviceType[] }) {
   const status = statusOf(device);
   return (
-    <Panel title="State">
+    <Panel title="State" icon={IconInfoCircle}>
       <Details
         items={[
           [
@@ -77,7 +116,12 @@ function State({ device }: { device: Device }) {
           ['Owner', device.owner_label],
           ['Last seen', device.last_seen_at ? formatDateTime(device.last_seen_at) : 'Never'],
           ['From', device.last_address ?? '–'],
-          ['Board', device.hardware_id ?? '–'],
+          ['Board', [device.board, device.hardware_id].filter(Boolean).join(' · ') || '–'],
+          ['Can be', canBe(types, device.supported_types)],
+          [
+            'Outputs',
+            device.outputs === null || device.outputs === undefined ? 'Not said' : String(device.outputs),
+          ],
           ['Firmware', device.firmware ?? '–'],
           ['Added', formatDateTime(device.created_at)],
         ]}
@@ -88,15 +132,21 @@ function State({ device }: { device: Device }) {
 
 function SettingsForm({
   device,
-  type,
+  types,
   owners,
 }: {
   device: Device;
-  type: DeviceType | undefined;
+  types: DeviceType[];
   owners: Schemas['DeviceOwnerOut'][];
 }) {
   const client = useQueryClient();
   const [owner, setOwner] = useState(device.owner);
+  const [typeSlug, setTypeSlug] = useState(device.type);
+  const type = types.find((item) => item.slug === typeSlug);
+  // What its firmware can be -- and what it is now, should its firmware no longer say so.
+  const choosable = types.filter(
+    (item) => item.slug === device.type || typesFor(types, device.supported_types).includes(item),
+  );
   const [name, setName] = useState(device.name ?? '');
   const [place, setPlace] = useState(device.place ?? '');
   const [description, setDescription] = useState(device.description ?? '');
@@ -121,7 +171,7 @@ function SettingsForm({
   });
 
   return (
-    <Panel title="Settings">
+    <Panel title="Settings" icon={IconAdjustments}>
       <Stack gap="md">
         <Switch
           label="On"
@@ -151,11 +201,23 @@ function SettingsForm({
             setOwner(chosen);
           }}
         />
+        <Select
+          label="Type"
+          description="What it is used as: only what its firmware can be. Another type starts its settings afresh."
+          data={choosable.map((item) => ({ value: item.slug, label: item.label }))}
+          value={typeSlug}
+          error={errors.type ?? null}
+          allowDeselect={false}
+          onChange={(next) => {
+            setTypeSlug(next ?? device.type);
+            setSettings({});
+          }}
+        />
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
           <TextInput
             label="Name (optional)"
             placeholder={device.code}
-            maxLength={80}
+            maxLength={30}
             value={name}
             error={errors.name ?? null}
             onChange={(event) => {
@@ -183,7 +245,7 @@ function SettingsForm({
         />
         {type ? (
           <TypeSettingsFields
-            settings={type.settings}
+            settings={deviceFields(type.settings)}
             owner={owner}
             values={settings}
             errors={errors}
@@ -192,11 +254,28 @@ function SettingsForm({
             }}
           />
         ) : null}
+        {type && menuFields(type.settings).length ? (
+          <Text size="sm" c="dimmed">
+            What it sells is chosen with its owner&apos;s price list, on the{' '}
+            <Anchor component={Link} to={salesPageOf(device.owner)}>
+              Sales page
+            </Anchor>
+            .
+          </Text>
+        ) : null}
         <Group justify="flex-end">
           <Button
             loading={save.isPending}
             onClick={() => {
-              save.mutate({ owner, name, place, description, settings });
+              save.mutate({
+                owner,
+                name,
+                place,
+                description,
+                // Only what this page shows: a menu is its owner's, on their Sales page.
+                settings: valuesOf(settings, deviceFields(type?.settings ?? [])),
+                ...(typeSlug !== device.type ? { type: typeSlug } : {}),
+              });
             }}
           >
             Save
@@ -217,21 +296,70 @@ interface DeviceRequest {
   curl: string;
   /** What the page sends to try it; none: not sent from here. */
   tryBody: ((data: Record<string, unknown>) => Schemas['DeviceTryIn']) | null;
+  /** Why it is not sent from here, when it is not. */
+  untried?: string;
   /** A report: it carries data. */
   report: boolean;
 }
 
 function requestsOf(server: string, type: DeviceType | undefined): DeviceRequest[] {
   const bearer = `-H "Authorization: Bearer <key>"`;
+  const json = `-H "Content-Type: application/json"`;
+  const byDevice = 'Sent by the device itself.';
   return [
     {
       id: 'hello',
       method: 'GET',
       path: '/device',
       title: 'Sign of life',
-      description: 'Who the device is, its settings and the time. Sent at start and every few minutes.',
-      curl: `curl ${bearer} -H "X-Device-Firmware: 1.0.0" ${server}`,
+      description:
+        'Who the device is, its settings, firmware to install, the hash of its backup code and the time. Asked every 2 seconds with If-None-Match: 304 when nothing changed.',
+      curl: `curl ${bearer} -H "X-Device-Firmware: 1.0.0" -H "X-Device-Types: sales_point" ${server}`,
       tryBody: () => ({ what: 'hello' }),
+      report: false,
+    },
+    {
+      id: 'firmware',
+      method: 'GET',
+      path: '/device/firmware',
+      title: 'Firmware',
+      description: 'The firmware it should run, and whether to install it now.',
+      curl: `curl ${bearer} ${server}/firmware`,
+      tryBody: null,
+      untried: byDevice,
+      report: false,
+    },
+    {
+      id: 'firmware-file',
+      method: 'GET',
+      path: '/device/firmware/file',
+      title: 'Download the firmware',
+      description: 'The file to install over the air; a Range request resumes a download.',
+      curl: `curl ${bearer} -o firmware.bin ${server}/firmware/file`,
+      tryBody: null,
+      untried: byDevice,
+      report: false,
+    },
+    {
+      id: 'firmware-report',
+      method: 'POST',
+      path: '/device/firmware',
+      title: 'How an update goes',
+      description: 'Started, or failed: then that version is not offered again until an admin asks.',
+      curl: `curl ${bearer} ${json} \\\n     -d '{"version": "1.1.0", "result": "failed", "detail": "Image invalid"}' ${server}/firmware`,
+      tryBody: null,
+      untried: 'Not sent from here: it would really happen.',
+      report: false,
+    },
+    {
+      id: 'manager',
+      method: 'POST',
+      path: '/device/manager',
+      title: 'May this card open the settings?',
+      description: 'A card tapped to open the settings on the device: allowed for admins, asked each time.',
+      curl: `curl ${bearer} ${json} -d '{"card": "04A1B2C3D4E5F6"}' ${server}/manager`,
+      tryBody: null,
+      untried: byDevice,
       report: false,
     },
     ...(type?.resources ?? []).map((resource): DeviceRequest => ({
@@ -277,6 +405,8 @@ function DeviceApi({
   type: DeviceType | undefined;
 }) {
   const client = useQueryClient();
+  // Folded away: rarely needed once the firmware is done, and long.
+  const [open, setOpen] = useState(false);
   const [data, setData] = useState<Record<string, string>>({});
   const [answer, setAnswer] = useState<{ id: string; text: string } | null>(null);
   const send = useMutation({
@@ -311,92 +441,112 @@ function DeviceApi({
   };
 
   return (
-    <Panel title="What the device can send" flush>
-      <Stack gap={0}>
-        <Text size="sm" c="dimmed" p="md">
-          Every request a device of this type can send, with the command to send it from a computer.{' '}
-          <b>Send</b> sends it from here as the device and shows the answer; the device is not counted as
-          seen.
-          {refused ? ` The device itself would be refused now: ${refused}.` : ''}
-        </Text>
-        {requestsOf(server, type).map((request) => (
-          <Stack
-            key={request.id}
-            gap="sm"
-            p="md"
-            style={{ borderTop: '1px solid var(--ja-border)' }}
-            aria-label={request.title}
-            role="group"
-          >
-            <Group justify="space-between" align="flex-start" gap="md">
-              <Stack gap={4} miw={0} style={{ flex: 1 }}>
-                <Group gap="sm">
-                  <Text fw={600}>{request.title}</Text>
-                  <Code>
-                    {request.method} {request.path}
-                  </Code>
-                </Group>
-                {request.description ? (
-                  <Text size="sm" c="dimmed">
-                    {request.description}
-                  </Text>
+    <Panel
+      title="What the device can send"
+      icon={IconTerminal2}
+      flush
+      actions={
+        <Button
+          size="xs"
+          variant="default"
+          aria-expanded={open}
+          onClick={() => {
+            setOpen(!open);
+          }}
+        >
+          {open ? 'Hide' : 'Show'}
+        </Button>
+      }
+    >
+      {open ? (
+        <Stack gap={0}>
+          <Text size="sm" c="dimmed" p="md">
+            Every request a device of this type can send, with the command to send it from a computer.{' '}
+            <b>Send</b> sends it from here as the device and shows the answer; the device is not counted as
+            seen.
+            {refused ? ` The device itself would be refused now: ${refused}.` : ''}
+          </Text>
+          {requestsOf(server, type).map((request) => (
+            <Stack
+              key={request.id}
+              gap="sm"
+              p="md"
+              style={{ borderTop: '1px solid var(--ja-border)' }}
+              aria-label={request.title}
+              role="group"
+            >
+              <Group justify="space-between" align="flex-start" gap="md">
+                <Stack gap={4} miw={0} style={{ flex: 1 }}>
+                  <Group gap="sm">
+                    <Text fw={600}>{request.title}</Text>
+                    <Code>
+                      {request.method} {request.path}
+                    </Code>
+                  </Group>
+                  {request.description ? (
+                    <Text size="sm" c="dimmed">
+                      {request.description}
+                    </Text>
+                  ) : null}
+                  {request.tryBody ? null : (
+                    <Text size="sm" c="dimmed">
+                      {request.untried ?? 'Not sent from here: it would really happen.'}
+                    </Text>
+                  )}
+                </Stack>
+                {request.tryBody ? (
+                  <Button
+                    variant="default"
+                    aria-label={`Send ${request.title}`}
+                    loading={send.isPending && send.variables.id === request.id}
+                    onClick={() => {
+                      sendRequest(request);
+                    }}
+                  >
+                    Send
+                  </Button>
                 ) : null}
-                {request.tryBody ? null : (
-                  <Text size="sm" c="dimmed">
-                    Not sent from here: it would really happen.
-                  </Text>
-                )}
-              </Stack>
-              {request.tryBody ? (
-                <Button
-                  variant="default"
-                  aria-label={`Send ${request.title}`}
-                  loading={send.isPending && send.variables.id === request.id}
-                  onClick={() => {
-                    sendRequest(request);
+              </Group>
+              {request.report && request.tryBody ? (
+                <Textarea
+                  label="Data"
+                  autosize
+                  minRows={1}
+                  styles={{ input: { fontFamily: 'var(--mantine-font-family-monospace)' } }}
+                  value={data[request.id] ?? '{}'}
+                  onChange={(event) => {
+                    setData({ ...data, [request.id]: event.currentTarget.value });
                   }}
-                >
-                  Send
-                </Button>
+                />
               ) : null}
-            </Group>
-            {request.report && request.tryBody ? (
-              <Textarea
-                label="Data"
-                autosize
-                minRows={1}
-                styles={{ input: { fontFamily: 'var(--mantine-font-family-monospace)' } }}
-                value={data[request.id] ?? '{}'}
-                onChange={(event) => {
-                  setData({ ...data, [request.id]: event.currentTarget.value });
-                }}
-              />
-            ) : null}
-            <Code block>{request.curl}</Code>
-            {answer?.id === request.id ? (
-              <Stack gap={4}>
-                <Text size="sm" fw={600}>
-                  Answer
-                </Text>
-                <Code block aria-label="Answer">
-                  {answer.text}
-                </Code>
-              </Stack>
-            ) : null}
-          </Stack>
-        ))}
-        <Text size="sm" c="dimmed" p="md" style={{ borderTop: '1px solid var(--ja-border)' }}>
-          HTTPS only, with the key as a bearer token: no session, no cookies. Refused: 401 for an unknown or
-          revoked key, 403 when switched off, 404 for what its type does not offer, 429 when too often.
-        </Text>
-      </Stack>
+              <Code block>{request.curl}</Code>
+              {answer?.id === request.id ? (
+                <Stack gap={4}>
+                  <Text size="sm" fw={600}>
+                    Answer
+                  </Text>
+                  <Code block aria-label="Answer">
+                    {answer.text}
+                  </Code>
+                </Stack>
+              ) : null}
+            </Stack>
+          ))}
+          <Text size="sm" c="dimmed" p="md" style={{ borderTop: '1px solid var(--ja-border)' }}>
+            HTTPS only, with the key as a bearer token: no session, no cookies. Every request says what the
+            device is: X-Device-Firmware, X-Device-Hardware (its MAC address), X-Device-Board, X-Device-Types,
+            and X-Device-Outputs when it has outputs. Refused: 401 for an unknown or revoked key, 403 when
+            switched off, 404 for what its type does not offer, 429 when too often.
+          </Text>
+        </Stack>
+      ) : null}
     </Panel>
   );
 }
 
 function Events({ events }: { events: Detail['events'] }) {
   return (
-    <Panel title="Recent events" flush>
+    <Panel title="Recent events" icon={IconHistory} flush>
       {events.length ? (
         <Table.ScrollContainer minWidth={560} type="native">
           <Table verticalSpacing="xs" aria-label="Recent events">
@@ -432,6 +582,128 @@ function Events({ events }: { events: Detail['events'] }) {
   );
 }
 
+/** The firmware it runs and should run -- every device's, or one of its own -- and how that stands. */
+function FirmwareCard({ device }: { device: Device }) {
+  const client = useQueryClient();
+  const firmware = useQuery({
+    queryKey: firmwareKey,
+    queryFn: () => call(api.GET('/api/v1/admin/devices/firmware')),
+  });
+  const path = { params: { path: { device_id: device.id } } };
+  const done = async (message: string) => {
+    notifyDone(message);
+    await client.invalidateQueries({ queryKey: devicesKey });
+  };
+  const choose = useMutation({
+    mutationFn: (releaseId: number | null) =>
+      call(
+        api.PUT('/api/v1/admin/devices/{device_id}/firmware', { ...path, body: { release_id: releaseId } }),
+      ),
+    onSuccess: async (saved) => {
+      await done(saved.firmware_wanted ? `It installs ${saved.firmware_wanted}.` : 'Saved.');
+    },
+    onError: notifyFailed,
+  });
+  const retry = useMutation({
+    mutationFn: () => call(api.POST('/api/v1/admin/devices/{device_id}/firmware/retry', path)),
+    onSuccess: async () => {
+      await done('Offered again.');
+    },
+    onError: notifyFailed,
+  });
+  const state = FIRMWARE_STATE[device.firmware_state];
+  const releases = firmware.data?.releases ?? [];
+  const everyDevice = releases.find((release) => release.chosen);
+  return (
+    <Panel title="Firmware" icon={IconCloudDownload}>
+      <Stack gap="md">
+        <Group gap="xs">
+          <Pill tone={state.tone}>{state.label}</Pill>
+          <Text size="sm" c="dimmed">
+            {`Runs ${device.firmware ?? 'an unknown version'}${device.firmware_wanted ? `; should run ${device.firmware_wanted}` : ''}.`}
+          </Text>
+        </Group>
+        {device.firmware_state === 'failed' ? (
+          <Group justify="space-between" gap="md">
+            <Text size="sm">{device.firmware_failed_detail ?? 'It could not install it.'}</Text>
+            <Button
+              variant="default"
+              loading={retry.isPending}
+              onClick={() => {
+                retry.mutate();
+              }}
+            >
+              Try again
+            </Button>
+          </Group>
+        ) : null}
+        <Select
+          label="Runs"
+          description="Another version for this device alone: to try it here first."
+          data={[
+            {
+              value: '',
+              label: everyDevice
+                ? `What every device runs (${everyDevice.version})`
+                : 'What every device runs',
+            },
+            ...releases.map((release) => ({ value: String(release.id), label: release.version })),
+          ]}
+          value={device.firmware_release_id ? String(device.firmware_release_id) : ''}
+          allowDeselect={false}
+          disabled={choose.isPending}
+          onChange={(next) => {
+            choose.mutate(next ? Number(next) : null);
+          }}
+        />
+      </Stack>
+    </Panel>
+  );
+}
+
+/** The code that opens its settings on the device when the portal cannot be reached. */
+function BackupCode({ device }: { device: Device }) {
+  const client = useQueryClient();
+  const renew = useMutation({
+    mutationFn: () =>
+      call(
+        api.POST('/api/v1/admin/devices/{device_id}/backup-code', {
+          params: { path: { device_id: device.id } },
+        }),
+      ),
+    onSuccess: async () => {
+      notifyDone('New backup code: the device gets it with its next sign of life.');
+      await client.invalidateQueries({ queryKey: devicesKey });
+    },
+    onError: notifyFailed,
+  });
+  return (
+    <Panel title="Backup code" icon={IconShieldLock}>
+      <Stack gap="sm">
+        <Group justify="space-between" gap="md" align="center">
+          <Code fz="lg" aria-label="Backup code">
+            {device.backup_code ?? '–'}
+          </Code>
+          <ConfirmButton
+            variant="default"
+            confirmLabel="Yes, a new one"
+            loading={renew.isPending}
+            onConfirm={() => {
+              renew.mutate();
+            }}
+          >
+            New code
+          </ConfirmButton>
+        </Group>
+        <Text size="sm" c="dimmed">
+          Opens its settings on the device when the portal cannot be reached. Otherwise an admin&apos;s card
+          opens them.
+        </Text>
+      </Stack>
+    </Panel>
+  );
+}
+
 /** Its key on one line -- shortened, when made, when last used -- with what can be done to it. */
 function KeyCard({ device }: { device: Device }) {
   const client = useQueryClient();
@@ -458,7 +730,7 @@ function KeyCard({ device }: { device: Device }) {
   });
 
   return (
-    <Panel title="Key">
+    <Panel title="Key" icon={IconKey}>
       {shown ? (
         <KeyReveal
           result={shown}
@@ -529,7 +801,7 @@ function KeyCard({ device }: { device: Device }) {
 
 function Requests({ requests }: { requests: Detail['requests'] }) {
   return (
-    <Panel title="Recent requests" flush>
+    <Panel title="Recent requests" icon={IconArrowsExchange} flush>
       {requests.length ? (
         <Table.ScrollContainer minWidth={560} type="native">
           <Table verticalSpacing="xs" aria-label="Recent requests">
@@ -578,7 +850,7 @@ function RemoveDevice({ device }: { device: Device }) {
     mutationFn: () =>
       call(api.DELETE('/api/v1/admin/devices/{device_id}', { params: { path: { device_id: device.id } } })),
     onSuccess: async () => {
-      notifyDone(`${device.name} removed.`);
+      notifyDone(`${device.label} removed.`);
       await navigate('/admin/settings/devices');
       // The list only: this device's own data, asked for again, would be "not found".
       await client.invalidateQueries({ queryKey: devicesKey, exact: true });
@@ -586,7 +858,7 @@ function RemoveDevice({ device }: { device: Device }) {
     onError: notifyFailed,
   });
   return (
-    <Panel title="Remove the device">
+    <Panel title="Remove the device" icon={IconTrash}>
       <Group justify="space-between" gap="md" align="center">
         <Text size="sm" c="dimmed">
           Deletes the device, its key, its requests and its events.
@@ -616,24 +888,54 @@ function DevicePage({
 }) {
   const { device } = detail;
   const type = types.find((item) => item.slug === device.type);
-  return (
+  const settings = (
     <Stack gap="lg">
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
-        <State device={device} />
+        <State device={device} types={types} />
         {/* Keyed by what was saved, so it starts afresh after a save, not after every refresh. */}
         <SettingsForm
-          key={JSON.stringify([device.owner, device.name, device.place, device.description, device.settings])}
+          key={JSON.stringify([
+            device.owner,
+            device.type,
+            device.name,
+            device.place,
+            device.description,
+            device.settings,
+          ])}
           device={device}
-          type={type}
+          types={types}
           owners={owners}
         />
       </SimpleGrid>
-      <KeyCard device={device} />
-      <DeviceApi device={device} server={detail.server} type={type} />
-      <Requests requests={detail.requests} />
-      <Events events={detail.events} />
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
+        <FirmwareCard device={device} />
+        <BackupCode device={device} />
+      </SimpleGrid>
+      {/* A paired device's key was handed to it; nobody saw it, so there is none to rotate here. */}
+      {device.paired ? null : <KeyCard device={device} />}
       <RemoveDevice device={device} />
     </Stack>
+  );
+  const activity = (
+    <Stack gap="lg">
+      <Requests requests={detail.requests} />
+      <Events events={detail.events} />
+      <DeviceApi device={device} server={detail.server} type={type} />
+    </Stack>
+  );
+  return (
+    <PageTabs
+      tabs={[
+        { value: 'device', label: 'Device', icon: IconCpu, content: settings },
+        { value: 'activity', label: 'Activity', icon: IconActivity, content: activity },
+        {
+          value: 'crashes',
+          label: 'Crashes',
+          icon: IconBug,
+          content: <DeviceCrashes deviceId={device.id} />,
+        },
+      ]}
+    />
   );
 }
 

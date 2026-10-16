@@ -7,7 +7,7 @@
  * Data: GET /api/v1/teams/<slug>.
  */
 import { Anchor, Avatar, Group, SimpleGrid, Stack, Text } from '@mantine/core';
-import { IconChevronRight } from '@tabler/icons-react';
+import { IconBellRinging, IconChevronRight, IconId, IconUsers } from '@tabler/icons-react';
 import { Navigate, useParams } from 'react-router';
 
 import { AppLink } from '../../app/AppLink';
@@ -41,7 +41,7 @@ function Attention({ team }: { team: Team }) {
   const waiting = team.applications_waiting ?? 0;
   if (!waiting) return null;
   return (
-    <Panel title="Needs your attention">
+    <Panel icon={IconBellRinging} title="Needs your attention">
       <AppLink to={`/teams/${team.slug}/manage`} className={classes.todo}>
         <span className={classes.todoCount}>{waiting}</span>
         <span className={classes.todoText}>
@@ -58,6 +58,7 @@ function Members({ team }: { team: Team }) {
   const arrived = useArrivals(team.slug, team.members?.map(personKey));
   return (
     <Panel
+      icon={IconUsers}
       title="Members"
       actions={
         <Text size="sm" c="dimmed">
@@ -116,7 +117,7 @@ export function TeamPage() {
       <TeamHero team={data} compact />
       <SimpleGrid cols={{ base: 1, md: attention ? 2 : 1 }} spacing="lg">
         <Attention team={data} />
-        <Panel title="Your membership">
+        <Panel icon={IconId} title="Your membership">
           <Stack gap="md">
             <MembershipBlock slug={slug} membership={data.membership} onTeamPage />
             {data.rules && data.membership.ongoing ? (
