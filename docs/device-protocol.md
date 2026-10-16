@@ -41,7 +41,7 @@ configured with the portal's address.
 
 | Header | Example | What for |
 |---|---|---|
-| `Authorization` | `Bearer jadev_3f9a1c2b7d10_…` | The device's key. Every request except pairing. |
+| `Authorization` | `Bearer <the device's key>` | The device's key. Every request except pairing. |
 | `X-Device-Firmware` | `1.2.0` | The running firmware's version, exactly as its app description has it (`esp_app_get_description()->version`). The portal compares it with the version the device should run. |
 | `X-Device-Hardware` | `98:A3:16:E5:06:3C` | The board's MAC address. Shown in the portal. Noted as an event when the key turns up on another board. |
 | `X-Device-Board` | `jae-terminal-s3` | What the firmware calls the board. |
