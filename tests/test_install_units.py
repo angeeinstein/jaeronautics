@@ -350,6 +350,16 @@ def test_nginx_shows_a_page_of_its_own_while_the_portal_does_not_answer(installe
     assert "error_page 502 503 504 =503 /maintenance.html;" in deployed
 
 
+def test_the_devices_nothing_changed_is_not_logged_by_nginx(installer):
+    """Every 2 seconds per device (docs/devices-plan.md): only the 304 to the
+    sign of life is left out of the access log; a change, an error, every
+    other request is logged."""
+    body = _function(installer, "render_nginx_config")
+    assert '\\"GET /api/v1/device 304\\" 0;' in body and "default 1;" in body
+    assert body.count("${log_block}") == 2  # with and without TLS
+    assert body.count("access_log /var/log/nginx/access.log combined if=\\$${log_flag};") == 2
+
+
 def test_the_page_needs_nothing_from_the_portal():
     page = (STATIC / "maintenance.html").read_text(encoding="utf-8")
     assert '<meta http-equiv="refresh"' in page

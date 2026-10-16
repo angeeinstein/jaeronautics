@@ -59,8 +59,11 @@ OUTPUTS_MAX = 16
 BACKUP_CODE_LENGTH = 6
 #: How often a device should ask for its sign of life (it is answered "nothing
 #: new", 304, when nothing changed): what is changed in the portal reaches it
-#: within this time.
-POLL_EVERY = 10
+#: within this time. 2 seconds since 2026-10-16 (10 before), "a lot more
+#: dynamic": about 5 ms each, no write -- 10 devices cost a few per cent of a
+#: core. The device takes it from each answer; part of the ETag, so a change
+#: here reaches every device with its next request.
+POLL_EVERY = 2
 
 
 class DeviceRefused(ServiceError):

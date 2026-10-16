@@ -313,7 +313,7 @@ function requestsOf(server: string, type: DeviceType | undefined): DeviceRequest
       path: '/device',
       title: 'Sign of life',
       description:
-        'Who the device is, its settings, firmware to install, the hash of its backup code and the time. Asked every 10 seconds with If-None-Match: 304 when nothing changed.',
+        'Who the device is, its settings, firmware to install, the hash of its backup code and the time. Asked every 2 seconds with If-None-Match: 304 when nothing changed.',
       curl: `curl ${bearer} -H "X-Device-Firmware: 1.0.0" -H "X-Device-Types: sales_point" ${server}`,
       tryBody: () => ({ what: 'hello' }),
       report: false,

@@ -87,7 +87,7 @@ configured with the portal's address.
     ├─ no key stored ──► PAIRING (section 3) ──► key stored
     │                                               │
     ▼                                               ▼
- RUNNING: sign of life every 10 s (section 4); taps, menus, reports (sections 7, 8)
+ RUNNING: sign of life every 2 s (section 4); taps, menus, reports (sections 7, 8)
     │
     ├─ firmware offered ──► UPDATE (section 6) ──► restart into the new version
     ├─ 401 on any request ──► key gone: show it, offer to pair again
@@ -153,7 +153,7 @@ device's code, settings and history.
 
 ## 4. The sign of life (built)
 
-`GET /api/v1/device`. Send it at start, then every `poll_every` seconds (10),
+`GET /api/v1/device`. Send it at start, then every `poll_every` seconds (2),
 always with `If-None-Match` set to the `ETag` of the last `200`.
 
 - **`304`, no body:** nothing changed. Keep what you have.
@@ -172,7 +172,7 @@ always with `If-None-Match` set to the `ETag` of the last `200`.
   "reports": ["card", "buy"],
   "backup_code_hash": "9f86d081884c7d65…",
   "firmware": null,
-  "poll_every": 10,
+  "poll_every": 2,
   "server_time": "2026-10-14T14:02:11Z"
 }
 ```
@@ -185,13 +185,19 @@ always with `If-None-Match` set to the `ETag` of the last `200`.
 | `resources`, `reports` | What this use may fetch and report. |
 | `backup_code_hash` | Section 5. |
 | `firmware` | `null`, or the firmware to install (section 6). |
-| `poll_every` | Seconds until the next sign of life. |
+| `poll_every` | Seconds until the next sign of life. Take it from every answer; never hard-code it. |
 | `server_time` | The portal's clock, UTC. Set the device's clock from it. |
 
 A `304` costs the portal next to nothing, which is why the device asks every
-10 seconds. Whatever is changed in the portal reaches the device within
-seconds. Sign-of-life requests answered `304` are not listed on the device's
-page in the portal; every other request is.
+2 seconds (10 until 2026-10-16). Whatever is changed in the portal reaches the
+device within 2 seconds. Sign-of-life requests answered `304` are not listed
+on the device's page in the portal, nor in the server's access log; every
+other request is.
+
+**Keep the connection open** between requests (ESP-IDF's HTTP client does so
+when the same client is reused): a new HTTPS connection every 2 seconds would
+cost the device a TLS handshake each time. The server keeps an idle one for
+75 seconds.
 
 *Planned (later): `config` and `commands` in this answer (section 9).*
 
@@ -616,7 +622,7 @@ Kept in mind, not built. The shape, so nothing gets in its way:
 
 - **`config`** in the sign of life: the device's own settings, set by an admin
   on its page. For example `{"brightness": 80, "volume": 60, "menu_seconds": 8}`.
-  They reach the device within 10 seconds, like everything else. The firmware
+  They reach the device within 2 seconds, like everything else. The firmware
   ignores keys it does not know and keeps its own defaults for keys missing.
 - **`commands`** in the sign of life: things to do once, such as
   `{"id": "c_81f2", "kind": "restart"}`, `"identify"` (beep and blink, to find
@@ -680,6 +686,8 @@ The list (`ICONS` in `aeronautics_members/services/credit_sales.py`):
   portal (section 6.4). Nothing changes for firmware already running.
 - **2026-10-16:** crash reports (section 6.5), from the firmware's proposal,
   without its `firmware` field (the header says it).
+- **2026-10-16:** the sign of life every 2 seconds, not 10 (`poll_every`
+  says so in every answer; firmware that takes it from there needs nothing).
 - **2026-10-14:** the `card` report's `linked` answer is gone (it came only
   while an admin waited at a reader, which was removed). Firmware that still
   handles it is harmless: it never comes.

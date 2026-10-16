@@ -135,9 +135,15 @@ device for everything?" No devices with only a button or an LED.
   holding the device's request until something changes) was ruled out when
   building it: the portal runs 3 workers × 4 threads, so each device would
   hold one of 12 request slots, and a handful of devices could stall the
-  site. Instead the device asks every 10 seconds with the last answer's
-  `ETag` and is answered `304`, no body, while nothing changed -- cheap, and
-  not listed with its requests.
+  site. Instead the device asks every 2 seconds (10 until 2026-10-16) with
+  the last answer's `ETag` and is answered `304`, no body, while nothing
+  changed -- cheap, and not listed with its requests. 2 seconds, agreed
+  2026-10-16 to make it feel "a lot more dynamic": measured about 2 ms in
+  the app (5-10 ms on the server, with MariaDB, nginx and TLS), no database
+  write; with "only two" devices planned and "not more than 10 in the long
+  term", a few per cent of a core. The "nothing changed" answers are kept
+  out of nginx's access log too (432,000 lines a day for 10 devices).
+  Long polling stays ruled out: 10 devices would hold 10 of the 12 slots.
 - **Wi-Fi is the firmware's**, including WPA2-Enterprise (it has joined the
   university's network); nothing for the portal to do.
 
@@ -449,7 +455,7 @@ has, comma-separated). No session, no cookies, no CSRF token.
 - `GET /api/v1/device` is the sign of life. It answers the device's id,
   code, name, type, owner, place, its settings for its type, the hash of its
   backup code, firmware to install (version, size, SHA-256) if any, how
-  often to ask (`poll_every`, 10 s) and the server time. It has an `ETag`;
+  often to ask (`poll_every`, 2 s) and the server time. It has an `ETag`;
   asked with `If-None-Match`, it is `304` while nothing but the time changed.
 - `GET /api/v1/device/resources/<name>` returns what the type offers, such as
   a dispenser's items.
