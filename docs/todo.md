@@ -92,6 +92,36 @@ proposal below waits for the maintainer's answer.
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
 
+- **The server log in the portal** -- 2026-10-16. The journal of the portal's
+  services readable on a phone, for when SSH is not at hand ("if some issue
+  occurs and I don't have access to a computer"). Put off: not urgent, the
+  command line has it. What was talked through:
+  - **Where:** a *Server log* tab beside System health's checks, with
+    `system.update`. Lines with time, service, level (errors red, warnings
+    amber); a traceback folded into its error; filters for errors only, one
+    service, a search; *Follow* (asks every few seconds for what came after
+    the last line -- no open stream holding a gunicorn worker); *Load
+    earlier*; *Copy*.
+  - **Reading the journal:** not the `systemd-journal` group (the whole
+    server's journal: SSH logins, `sudo` commands). A small root-owned script
+    (`/usr/local/bin/jaeronautics-log`, installed by `install.sh`), the only
+    thing the portal may run with `sudo`, takes a service from a fixed list, a
+    line count and a cursor, checks them, and calls `journalctl -o json`. It
+    reads nothing the portal can write. The command line stays unrestricted
+    ("rather more information than less").
+  - **Services:** the portal's own, nginx, MariaDB, Redis, and systemd's
+    messages about them (failed, restarted, out of memory). Not SSH, `sudo`,
+    the kernel. Open: Discourse, if on the same server.
+  - **Secrets out before a line leaves the server**, done by the portal (it
+    holds the secrets anyway, so doing it as root protects nothing more and
+    would make a root process read portal-controlled data): every exact value
+    it knows (`.env` secrets, SMTP passwords, Discourse key and secret,
+    device key secrets) replaced with `[hidden: …]`, then shapes (`sk_`,
+    `rk_`, `whsec_`, `xkeysib-`, `Bearer`, `Api-Key:`, `password=`, a
+    password in a database address). At the source, `hide_parameters` so
+    database errors stop printing their values. Personal data stays: useful
+    to identify an error, and those with `system.update` are trusted with it.
+  - Opening it not recorded in Admin › Logs (noise for one or two people).
 - **Each version in its own folder, built beside the running one** --
   2026-10-11. As `angeeinstein/study-helper` does: a folder per version with
   its own Python environment, switched to only once healthy, the previous one
