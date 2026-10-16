@@ -1209,6 +1209,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/devices/{device_id}/crashes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The device's crash reports, the newest first. */
+        get: operations["admin_device_crashes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/devices/{device_id}/crashes/{crash_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a crash report and its dump. */
+        delete: operations["admin_device_crash_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/devices/{device_id}/crashes/{crash_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A crash's core dump (ELF), for ``espcoredump.py info_corefile``. */
+        get: operations["admin_device_crash_file"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/devices/{device_id}/firmware": {
         parameters: {
             query?: never;
@@ -2322,6 +2373,40 @@ export interface paths {
         /** Where the link of a QR code the device shows stands: asked every few */
         get: operations["device_card_link"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/device/crash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A crash the device had, as ESP-IDF read it from the core dump after the */
+        post: operations["device_crash"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/device/crash/{crash_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** The core dump of a crash reported before: the raw ELF as the body */
+        put: operations["device_crash_file"];
         post?: never;
         delete?: never;
         options?: never;
@@ -5136,6 +5221,71 @@ export interface components {
             owner: string;
             /** Value */
             value: unknown;
+        };
+        /** DeviceCrashAnswerOut */
+        DeviceCrashAnswerOut: {
+            /** Upload */
+            upload: boolean;
+        };
+        /** DeviceCrashIn */
+        DeviceCrashIn: {
+            /** Backtrace */
+            backtrace?: string[];
+            /**
+             * Backtrace Corrupted
+             * @default false
+             */
+            backtrace_corrupted?: boolean;
+            /** Build */
+            build: string;
+            /** Crash Id */
+            crash_id: string;
+            /** Pc */
+            pc: string;
+            /**
+             * Reset Reason
+             * @enum {string}
+             */
+            reset_reason: "panic" | "task_watchdog" | "interrupt_watchdog";
+            /** Size */
+            size: number;
+            /** Task */
+            task: string;
+        };
+        /** DeviceCrashOut */
+        DeviceCrashOut: {
+            /** Backtrace */
+            backtrace: string[];
+            /** Backtrace Corrupted */
+            backtrace_corrupted: boolean;
+            /** Build */
+            build: string;
+            /** Has File */
+            has_file: boolean;
+            /** Id */
+            id: number;
+            /** Pc */
+            pc: string;
+            /** Received At */
+            received_at: string;
+            /** Reported By */
+            reported_by: string | null;
+            /**
+             * Reset Reason
+             * @enum {string}
+             */
+            reset_reason: "panic" | "task_watchdog" | "interrupt_watchdog";
+            /** Size */
+            size: number;
+            /** Task */
+            task: string;
+            /** Version */
+            version: string | null;
+        };
+        /** DeviceCrashesOut */
+        DeviceCrashesOut: {
+            /** Crashes */
+            crashes: components["schemas"]["DeviceCrashOut"][];
         };
         /** DeviceDetailOut */
         DeviceDetailOut: {
@@ -14045,6 +14195,164 @@ export interface operations {
             };
         };
     };
+    admin_device_crashes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceCrashesOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_device_crash_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: number;
+                crash_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceCrashesOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_device_crash_file: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: number;
+                crash_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     admin_device_firmware: {
         parameters: {
             query?: never;
@@ -18324,6 +18632,86 @@ export interface operations {
             };
             /** @description Not found. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    device_crash: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceCrashIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceCrashAnswerOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    device_crash_file: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                crash_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

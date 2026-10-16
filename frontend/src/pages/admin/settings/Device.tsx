@@ -1,5 +1,5 @@
 /**
- * Settings -> Devices -> one device (docs/devices-plan.md), in two tabs.
+ * Settings -> Devices -> one device (docs/devices-plan.md), in three tabs.
  * *Device*: its state, its board, what its firmware can be and how many
  * outputs it has; its name, place, type and settings; switching it off; the
  * firmware it runs and should run (one of its own, to try a version on one
@@ -7,7 +7,8 @@
  * for a paired device); removing it. *Activity* (#activity): its recent
  * requests and events, refreshed every few seconds while the page is open,
  * and every request a device of its type can send -- described, as a
- * command, and sent from here to see the answer.
+ * command, and sent from here to see the answer. *Crashes* (#crashes,
+ * DeviceCrashes.tsx): what it reported after crashing, with the core dumps.
  * Data: /api/v1/admin/devices/<id> (aeronautics_members/api/devices.py).
  */
 import {
@@ -28,6 +29,7 @@ import {
   IconActivity,
   IconAdjustments,
   IconArrowsExchange,
+  IconBug,
   IconCloudDownload,
   IconCpu,
   IconHistory,
@@ -70,6 +72,7 @@ import {
   salesPageOf,
   valuesOf,
 } from './deviceParts';
+import { DeviceCrashes } from './DeviceCrashes';
 
 type Detail = Schemas['DeviceDetailOut'];
 
@@ -925,6 +928,12 @@ function DevicePage({
       tabs={[
         { value: 'device', label: 'Device', icon: IconCpu, content: settings },
         { value: 'activity', label: 'Activity', icon: IconActivity, content: activity },
+        {
+          value: 'crashes',
+          label: 'Crashes',
+          icon: IconBug,
+          content: <DeviceCrashes deviceId={device.id} />,
+        },
       ]}
     />
   );

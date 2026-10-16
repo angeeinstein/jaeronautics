@@ -35,6 +35,19 @@ def images():
     return db.session.execute(db.select(FactoryImage).order_by(FactoryImage.chip)).scalars().all()
 
 
+def builds():
+    """``{program file SHA-256: version}`` of the factory images' apps, as device_firmware.builds."""
+    known = {}
+    for image in images():
+        if image.elf_sha256 is None:
+            try:
+                image.elf_sha256 = firmware_image.read_factory(path_of(image).read_bytes()).elf_sha256
+            except (OSError, firmware_image.NotAnImage):
+                continue
+        known[image.elf_sha256] = image.version
+    return known
+
+
 def image_of(image_id):
     image = db.session.get(FactoryImage, image_id)
     if image is None:
@@ -65,7 +78,7 @@ def upload(actor, data, *, file_name=None):
         db.session.add(image)
     image.version, image.project = found.version[:32], found.project[:32]
     image.built, image.idf_version = found.built[:40] or None, found.idf_version[:32] or None
-    image.sha256, image.size = found.sha256, found.size
+    image.sha256, image.size, image.elf_sha256 = found.sha256, found.size, found.elf_sha256
     image.file_name = os.path.basename(file_name or "")[:200] or None
     image.uploaded_at = utcnow()
     image.uploaded_by_user_id = actor.id if actor is not None else None

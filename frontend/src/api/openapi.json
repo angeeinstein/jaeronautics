@@ -4783,6 +4783,191 @@
         "title": "DeviceChoiceOut",
         "type": "object"
       },
+      "DeviceCrashAnswerOut": {
+        "additionalProperties": false,
+        "properties": {
+          "upload": {
+            "title": "Upload",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "upload"
+        ],
+        "title": "DeviceCrashAnswerOut",
+        "type": "object"
+      },
+      "DeviceCrashIn": {
+        "additionalProperties": false,
+        "properties": {
+          "backtrace": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Backtrace",
+            "type": "array"
+          },
+          "backtrace_corrupted": {
+            "default": false,
+            "title": "Backtrace Corrupted",
+            "type": "boolean"
+          },
+          "build": {
+            "maxLength": 16,
+            "minLength": 16,
+            "title": "Build",
+            "type": "string"
+          },
+          "crash_id": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Crash Id",
+            "type": "string"
+          },
+          "pc": {
+            "maxLength": 10,
+            "title": "Pc",
+            "type": "string"
+          },
+          "reset_reason": {
+            "enum": [
+              "panic",
+              "task_watchdog",
+              "interrupt_watchdog"
+            ],
+            "title": "Reset Reason",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "task": {
+            "maxLength": 32,
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "crash_id",
+          "build",
+          "task",
+          "pc",
+          "reset_reason",
+          "size"
+        ],
+        "title": "DeviceCrashIn",
+        "type": "object"
+      },
+      "DeviceCrashOut": {
+        "additionalProperties": false,
+        "properties": {
+          "backtrace": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Backtrace",
+            "type": "array"
+          },
+          "backtrace_corrupted": {
+            "title": "Backtrace Corrupted",
+            "type": "boolean"
+          },
+          "build": {
+            "title": "Build",
+            "type": "string"
+          },
+          "has_file": {
+            "title": "Has File",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "pc": {
+            "title": "Pc",
+            "type": "string"
+          },
+          "received_at": {
+            "title": "Received At",
+            "type": "string"
+          },
+          "reported_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reported By"
+          },
+          "reset_reason": {
+            "enum": [
+              "panic",
+              "task_watchdog",
+              "interrupt_watchdog"
+            ],
+            "title": "Reset Reason",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "id",
+          "received_at",
+          "version",
+          "build",
+          "reported_by",
+          "task",
+          "pc",
+          "backtrace",
+          "backtrace_corrupted",
+          "reset_reason",
+          "size",
+          "has_file"
+        ],
+        "title": "DeviceCrashOut",
+        "type": "object"
+      },
+      "DeviceCrashesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "crashes": {
+            "items": {
+              "$ref": "#/components/schemas/DeviceCrashOut"
+            },
+            "title": "Crashes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "crashes"
+        ],
+        "title": "DeviceCrashesOut",
+        "type": "object"
+      },
       "DeviceDetailOut": {
         "additionalProperties": false,
         "properties": {
@@ -24034,6 +24219,225 @@
         ]
       }
     },
+    "/api/v1/admin/devices/{device_id}/crashes": {
+      "get": {
+        "operationId": "admin_device_crashes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceCrashesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "The device's crash reports, the newest first.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "devices.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/devices/{device_id}/crashes/{crash_id}": {
+      "delete": {
+        "operationId": "admin_device_crash_remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "crash_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceCrashesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Delete a crash report and its dump.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "devices.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/devices/{device_id}/crashes/{crash_id}/file": {
+      "get": {
+        "operationId": "admin_device_crash_file",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "crash_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The file"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "A crash's core dump (ELF), for ``espcoredump.py info_corefile``.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "devices.manage"
+        ]
+      }
+    },
     "/api/v1/admin/devices/{device_id}/firmware": {
       "put": {
         "operationId": "admin_device_firmware",
@@ -29509,6 +29913,101 @@
           }
         },
         "summary": "Where the link of a QR code the device shows stands: asked every few",
+        "tags": [
+          "Device"
+        ]
+      }
+    },
+    "/api/v1/device/crash": {
+      "post": {
+        "operationId": "device_crash",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceCrashIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceCrashAnswerOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "A crash the device had, as ESP-IDF read it from the core dump after the",
+        "tags": [
+          "Device"
+        ]
+      }
+    },
+    "/api/v1/device/crash/{crash_id}/file": {
+      "put": {
+        "operationId": "device_crash_file",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "crash_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Done."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "The core dump of a crash reported before: the raw ELF as the body",
         "tags": [
           "Device"
         ]

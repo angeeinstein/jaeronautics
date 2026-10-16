@@ -1635,6 +1635,10 @@ class FirmwareRelease(db.Model):
     #: The chip it was built for: "esp32s3".
     chip = db.Column(db.String(20), nullable=True)
     sha256 = db.Column(db.String(64), nullable=False, unique=True)
+    #: The SHA-256 of the program file (ELF) it was made from, as its app
+    #: description has it: a crash report names its build by this. Filled in
+    #: from the file for those uploaded before 2026-10-16.
+    elf_sha256 = db.Column(db.String(64), nullable=True)
     size = db.Column(db.Integer, nullable=False)
     file_name = db.Column(db.String(200), nullable=True)
     notes = db.Column(db.String(300), nullable=True)
@@ -1661,12 +1665,46 @@ class FactoryImage(db.Model):
     built = db.Column(db.String(40), nullable=True)
     idf_version = db.Column(db.String(32), nullable=True)
     sha256 = db.Column(db.String(64), nullable=False)
+    #: The app's program file's SHA-256, as on :class:`FirmwareRelease`.
+    elf_sha256 = db.Column(db.String(64), nullable=True)
     size = db.Column(db.Integer, nullable=False)
     file_name = db.Column(db.String(200), nullable=True)
     uploaded_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     uploaded_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     uploaded_by = db.relationship("User")
+
+
+class DeviceCrash(db.Model):
+    """A crash a device reported after restarting (services/device_crashes.py,
+    docs/devices-plan.md, "Crash reports"): what ESP-IDF read from its core
+    dump, and the dump itself once sent -- ``storage/devices/crashes/<device
+    id>/<crash_id>.elf``. Seen only by admins, on the device's page. Kept 90
+    days; at most 20 dump files a device."""
+
+    __tablename__ = "device_crashes"
+    __table_args__ = (UniqueConstraint("device_id", "crash_id", name="uq_device_crashes_device_crash"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    #: The dump's SHA-256: the same crash sent again has the same.
+    crash_id = db.Column(db.String(64), nullable=False)
+    received_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
+    #: The version the device ran when it reported (``X-Device-Firmware``); the crashed one is found by ``build``.
+    reported_by = db.Column(db.String(32), nullable=True)
+    #: The first 16 hex of the crashed program file's SHA-256.
+    build = db.Column(db.String(16), nullable=False)
+    task = db.Column(db.String(32), nullable=False)
+    pc = db.Column(db.String(10), nullable=False)
+    #: Up to 16 addresses, "0x4209F879".
+    backtrace = db.Column(db.JSON, nullable=False)
+    backtrace_corrupted = db.Column(db.Boolean, nullable=False, default=False)
+    #: "panic", "task_watchdog" or "interrupt_watchdog".
+    reset_reason = db.Column(db.String(24), nullable=False)
+    #: The dump's size, as the device said.
+    size = db.Column(db.Integer, nullable=False)
+    #: When the dump arrived; none while it has not, or once it was let go for room.
+    file_received_at = db.Column(db.DateTime, nullable=True)
 
 
 class Card(db.Model):

@@ -9,7 +9,8 @@ installs) is laid out as:
 - the segments, each an 8-byte header (load address, length) and its data.
   The first one starts with ESP-IDF's app description (``esp_app_desc_t``):
   ``0xABCD5432``, the version, the project's name, when it was built and with
-  which ESP-IDF;
+  which ESP-IDF, and (at 144) the SHA-256 of the program file (ELF) it was
+  made from -- what a crash report names its build by;
 - a checksum byte (every segment's data XORed, from ``0xEF``), placed so it
   ends a 16-byte block;
 - with ``hash_appended``, the SHA-256 of everything before it;
@@ -47,6 +48,8 @@ class Image:
     built: str
     idf_version: str
     chip: str | None
+    #: The SHA-256 of the program file (ELF), hex: what a crash report's ``build`` starts with.
+    elf_sha256: str
     #: Where the app description ends: what a firmware adds of its own
     #: (``.rodata_custom_desc``) starts here, in the first segment.
     custom_offset: int
@@ -108,7 +111,8 @@ def read(data):
     if not version or not project:
         raise NotAnImage("This firmware file names no version or project.")
     return Image(version=version, project=project, built=built, idf_version=_text(segment[112:144]),
-                 chip=CHIPS.get(chip_id), custom_offset=start + APP_DESC_SIZE, size=len(data),
+                 elf_sha256=segment[144:176].hex(), chip=CHIPS.get(chip_id), custom_offset=start + APP_DESC_SIZE,
+                 size=len(data),
                  sha256=hashlib.sha256(data).hexdigest())
 
 
@@ -138,6 +142,7 @@ class FactoryImage:
     built: str
     idf_version: str
     chip: str
+    elf_sha256: str
     #: Where the app sits in it: its partition's offset.
     app_offset: int
     size: int
@@ -194,7 +199,8 @@ def read_factory(data):
         raise NotAnImage(f"The app in this factory image is for the {app.chip or 'unknown chip'}, "
                          f"its bootloader for the {chip}.")
     return FactoryImage(version=app.version, project=app.project, built=app.built, idf_version=app.idf_version,
-                        chip=chip, app_offset=start, size=len(data), sha256=hashlib.sha256(data).hexdigest())
+                        elf_sha256=app.elf_sha256, chip=chip, app_offset=start, size=len(data),
+                        sha256=hashlib.sha256(data).hexdigest())
 
 
 def factory_example(version="1.0.0", project="jae-terminal", chip_id=0x0009, app=None):
@@ -226,6 +232,7 @@ def example(version="1.0.0", project="jae-terminal", payload=b"\x5a" * 300, chip
     desc = struct.pack("<IIII", APP_DESC_MAGIC, 0, 0, 0)
     desc += version.encode().ljust(32, b"\0") + project.encode().ljust(32, b"\0")
     desc += b"09:12:44".ljust(16, b"\0") + b"Oct 14 2026".ljust(16, b"\0") + b"v5.3.1".ljust(32, b"\0")
+    desc += hashlib.sha256(f"{project} {version}".encode()).digest()
     segment = desc.ljust(APP_DESC_SIZE, b"\0") + payload
     header = bytearray(HEADER_SIZE)
     header[0], header[1] = IMAGE_MAGIC, 1

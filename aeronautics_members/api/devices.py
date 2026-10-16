@@ -21,7 +21,7 @@ from ..db_models import Team, db
 from ..permissions import Permission
 from ..security_utils import build_public_url
 from ..services import NotFoundError, ServiceError, ValidationError, credit_sales, device_firmware, device_pairing
-from ..services import card_links, device_starter, device_types
+from ..services import card_links, device_crashes, device_factory, device_starter, device_types
 from ..services import devices as devices_service
 from ._core import Model, UtcDateTime, endpoint
 
@@ -224,6 +224,66 @@ def device_report(body):
     ))
 
 
+class DeviceCrashIn(Model):
+    #: The dump's SHA-256, hex: the same crash sent again has the same.
+    crash_id: str = Field(min_length=64, max_length=64)
+    #: The first 16 hex characters of the crashed program file's SHA-256.
+    build: str = Field(min_length=16, max_length=16)
+    #: The task that crashed: "portal".
+    task: str = Field(max_length=32)
+    #: Where it stopped: "0x4209F87C".
+    pc: str = Field(max_length=10)
+    #: The call path, up to 16 addresses.
+    backtrace: list[str] = Field(default_factory=list, max_length=16)
+    backtrace_corrupted: bool = False
+    reset_reason: Literal["panic", "task_watchdog", "interrupt_watchdog"]
+    #: The dump's size in bytes, at most 128 KB.
+    size: int
+
+
+class DeviceCrashAnswerOut(Model):
+    #: Send the dump now (``PUT /api/v1/device/crash/<crash_id>/file``); false: the portal has it.
+    upload: bool
+
+
+@endpoint("POST", "/device/crash", response=DeviceCrashAnswerOut, body=DeviceCrashIn, public=True, status=201,
+          tag="Device")
+@_limited
+def device_crash(body):
+    """A crash the device had, as ESP-IDF read it from the core dump after the
+    restart (docs/device-protocol.md, 6.5). Bearer key. 201 with ``upload``
+    true: send the dump; 200 with false: the portal has it already. The same
+    ``crash_id`` again is answered as the first time."""
+
+    def answer(device):
+        _crash, upload = device_crashes.report(
+            device, crash_id=body.crash_id, build=body.build, task=body.task, pc=body.pc, backtrace=body.backtrace,
+            backtrace_corrupted=body.backtrace_corrupted, reset_reason=body.reset_reason, size=body.size,
+            firmware=request.headers.get("X-Device-Firmware"))
+        response = jsonify(DeviceCrashAnswerOut(upload=upload).model_dump(mode="json"))
+        response.status_code = 201 if upload else 200
+        return response
+
+    return _as_device(answer)
+
+
+@endpoint("PUT", "/device/crash/<crash_id>/file", public=True, tag="Device")
+@_limited
+def device_crash_file(crash_id):
+    """The core dump of a crash reported before: the raw ELF as the body
+    (``application/octet-stream``), at most 128 KB, checked by its SHA-256.
+    Bearer key. 204; the device may then delete it."""
+
+    def answer(device):
+        if (request.content_length or 0) > device_crashes.MAX_SIZE:
+            raise ValidationError(f"A core dump is at most {device_crashes.MAX_SIZE} bytes.",
+                                  code="crash_file_too_large")
+        device_crashes.store_file(device, crash_id, request.get_data(cache=False)[:device_crashes.MAX_SIZE + 1])
+        return Response(status=204)
+
+    return _as_device(answer)
+
+
 class DeviceFirmwareFileOut(Model):
     version: str
     size: int
@@ -390,7 +450,8 @@ def device_pair_poll(body):
 
 #: The device API's views, exempt from CSRF in app.py: devices have no session.
 DEVICE_VIEWS = (device_hello, device_resource, device_report, device_firmware_info, device_firmware_file,
-                device_firmware_report, device_manager, device_pair_start, device_pair_poll, device_card_link)
+                device_firmware_report, device_manager, device_pair_start, device_pair_poll, device_card_link,
+                device_crash, device_crash_file)
 DEVICE_ENDPOINTS = frozenset(f"api.{view.__name__}" for view in DEVICE_VIEWS)
 
 
@@ -811,6 +872,81 @@ def admin_device_remove(device_id):
     """Remove a device, its key and its events."""
     devices_service.remove(current_user, devices_service.device_of(device_id))
     db.session.commit()
+
+
+# --- Crash reports: on the device's page, admins only ------------------------------------------
+# (services/device_crashes.py, docs/devices-plan.md, "Crash reports".)
+
+
+class DeviceCrashOut(Model):
+    id: int
+    received_at: UtcDateTime
+    #: The crashed firmware's version, found by its build; none for a build never uploaded.
+    version: str | None
+    #: The first 16 hex of the crashed program file's SHA-256.
+    build: str
+    #: What the device ran when it reported.
+    reported_by: str | None
+    task: str
+    pc: str
+    backtrace: list[str]
+    backtrace_corrupted: bool
+    reset_reason: Literal["panic", "task_watchdog", "interrupt_watchdog"]
+    size: int
+    #: The dump can be downloaded.
+    has_file: bool
+
+
+class DeviceCrashesOut(Model):
+    crashes: list[DeviceCrashOut]
+
+
+def _crashes_out(device):
+    builds = {**device_firmware.builds(), **device_factory.builds()}
+    out = []
+    for crash in device_crashes.crashes(device):
+        version = next((name for elf, name in builds.items() if elf.startswith(crash.build)), None)
+        out.append(DeviceCrashOut(
+            id=crash.id, received_at=crash.received_at, version=version, build=crash.build,
+            reported_by=crash.reported_by, task=crash.task, pc=crash.pc, backtrace=list(crash.backtrace or []),
+            backtrace_corrupted=crash.backtrace_corrupted, reset_reason=crash.reset_reason, size=crash.size,
+            has_file=device_crashes.has_file(crash),
+        ))
+    # Build hashes read from files uploaded before they were kept: kept now.
+    db.session.commit()
+    return DeviceCrashesOut(crashes=out)
+
+
+@endpoint("GET", "/admin/devices/<int:device_id>/crashes", response=DeviceCrashesOut, permissions=MANAGE,
+          tag="Admin")
+def admin_device_crashes(device_id):
+    """The device's crash reports, the newest first."""
+    return _crashes_out(devices_service.device_of(device_id))
+
+
+@endpoint("GET", "/admin/devices/<int:device_id>/crashes/<int:crash_id>/file", permissions=MANAGE, tag="Admin",
+          produces="application/octet-stream")
+def admin_device_crash_file(device_id, crash_id):
+    """A crash's core dump (ELF), for ``espcoredump.py info_corefile``."""
+    device = devices_service.device_of(device_id)
+    crash = device_crashes.crash_of(device, crash_id)
+    if not device_crashes.has_file(crash):
+        raise NotFoundError("The dump of this crash is not here.", code="crash_file_missing")
+    name = f"crash-{device.code}-{crash.received_at:%Y-%m-%d-%H%M}.elf"
+    response = send_file(device_crashes.path_of(crash), mimetype="application/octet-stream", download_name=name,
+                         as_attachment=True, max_age=0)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@endpoint("DELETE", "/admin/devices/<int:device_id>/crashes/<int:crash_id>", response=DeviceCrashesOut,
+          permissions=MANAGE, tag="Admin")
+def admin_device_crash_remove(device_id, crash_id):
+    """Delete a crash report and its dump."""
+    device = devices_service.device_of(device_id)
+    device_crashes.remove(current_user, device_crashes.crash_of(device, crash_id))
+    db.session.commit()
+    return _crashes_out(device)
 
 
 @endpoint("POST", "/admin/devices/<int:device_id>/try", response=DeviceTryOut, body=DeviceTryIn,

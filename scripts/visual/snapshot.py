@@ -67,6 +67,7 @@ def build_app(db_path):
         # Beside the throwaway database, never the repository's storage.
         "TEAM_LOGO_DIR": str(Path(db_path).parent / "team_logos"),
         "FIRMWARE_DIR": str(Path(db_path).parent / "firmware"),
+        "DEVICE_CRASH_DIR": str(Path(db_path).parent / "crashes"),
         "BACKUP_STORAGE_DIR": str(Path(db_path).parent / "storage"),
         # In this process, against the throwaway database -- not a second one.
         "BACKUP_RUN_INLINE": True,
@@ -590,6 +591,21 @@ def seed(app, app_module, subscriptions):
     from aeronautics_members.services import device_factory
 
     device_factory.upload(admin_user, firmware_image.factory_example("1.0.0"), file_name="jae-terminal-factory.bin")
+    # A crash the fridge reported: one with its dump, by the version tried on it; one older, of a build never uploaded.
+    import hashlib
+
+    from aeronautics_members.services import device_crashes
+
+    for seed, build, reason, days in ((b"a", release.elf_sha256[:16], "panic", 0),
+                                      (b"b", "0123456789abcdef", "task_watchdog", 3)):
+        dump = b"\x7fELF\x01\x01\x01" + b"\0" * 9 + seed * 41000
+        crash, _upload = device_crashes.report(
+            fridge, crash_id=hashlib.sha256(dump).hexdigest(), build=build, task="portal", pc="0x4209F87C",
+            backtrace=["0x4209F879", "0x4209FB05", "0x4209D2EA", "0x42008809", "0x4037D5A1"],
+            backtrace_corrupted=False, reset_reason=reason, size=len(dump), firmware="1.0.0")
+        crash.received_at = now - timedelta(days=days, hours=2)
+        if days == 0:
+            device_crashes.store_file(fridge, crash.crash_id, dump)
     pairing, _secret = device_pairing.start(hardware="24:6F:28:12:34:56", firmware="1.0.0", board="jae-terminal-s3",
                                             types=["sales_point", "test"], address="10.0.0.40", now=now)
     # Waiting all day: the screenshots of its page come later than ten minutes.
@@ -773,6 +789,8 @@ def seed(app, app_module, subscriptions):
          "path": f"/admin/settings/devices/{fridge.id}"},
         {"name": "admin--settings-device-activity", "user": "admin@example.org",
          "path": f"/admin/settings/devices/{fridge.id}#activity"},
+        {"name": "admin--settings-device-crashes", "user": "admin@example.org",
+         "path": f"/admin/settings/devices/{fridge.id}#crashes"},
         {"name": "admin--settings-sales-point", "user": "admin@example.org",
          "path": f"/admin/settings/devices/{sales_point.id}"},
         {"name": "admin--settings-device-pair", "user": "admin@example.org",

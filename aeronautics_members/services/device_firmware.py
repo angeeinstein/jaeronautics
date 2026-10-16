@@ -102,7 +102,8 @@ def upload(actor, data, *, file_name=None, notes=None):
         raise ValidationError(f"At most {NOTES_MAX} characters.", details={"fields": {"notes": f"At most {NOTES_MAX} characters."}})
     release = FirmwareRelease(
         version=image.version[:32], project=image.project[:32], built=image.built[:40] or None,
-        idf_version=image.idf_version[:32] or None, chip=image.chip, sha256=image.sha256, size=image.size,
+        idf_version=image.idf_version[:32] or None, chip=image.chip, sha256=image.sha256,
+        elf_sha256=image.elf_sha256, size=image.size,
         file_name=os.path.basename(file_name or "")[:200] or None,
         notes=notes or None, uploaded_by_user_id=actor.id if actor is not None else None,
     )
@@ -117,6 +118,21 @@ def upload(actor, data, *, file_name=None, notes=None):
     log_audit_event("devices", "firmware_uploaded", actor_user=actor,
                     metadata={"release_id": release.id, "version": release.version, "sha256": release.sha256})
     return release
+
+
+def builds():
+    """``{program file SHA-256: version}`` of every update file: which version a
+    crash report's ``build`` is (services/device_crashes.py). Files uploaded
+    before the hash was kept have it read from the file now, once."""
+    known = {}
+    for release in releases():
+        if release.elf_sha256 is None:
+            try:
+                release.elf_sha256 = firmware_image.read(path_of(release).read_bytes()).elf_sha256
+            except (OSError, firmware_image.NotAnImage):
+                continue
+        known[release.elf_sha256] = release.version
+    return known
 
 
 def chosen():

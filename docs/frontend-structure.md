@@ -350,7 +350,7 @@ page with only the chosen method.
 - **Tabs on long pages** (`components/PageTabs.tsx`, 2026-10-15): one part
   at a time, the tab in the address (`#history`), the first tab without it.
   The Sales pages (*Price list*, *Sales points*), a device (*Device*,
-  *Activity*), a team's money on Admin › Money (*Balance*, *History*),
+  *Activity*, *Crashes*), a team's money on Admin › Money (*Balance*, *History*),
   Updates (*Update*, *History*) and Backup (*Backup*, *Restore*). "I like
   the tabs on those pages where there is much content." Since 2026-10-16
   also Settings › Email (*Senders*, *What goes out*, *Accounts*, *Test*)

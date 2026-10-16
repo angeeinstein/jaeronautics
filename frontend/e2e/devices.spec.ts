@@ -104,6 +104,21 @@ test.describe('devices', () => {
     await expect(page).toHaveURL(/\/admin\/settings\/devices$/);
   });
 
+  test('a crash it reported: on its page, Crashes, with the dump to download', async ({ page }) => {
+    await page.goto('/admin/settings/devices');
+    await page.getByRole('link', { name: 'Fridge reader' }).first().click();
+    await page.getByRole('tab', { name: 'Crashes' }).click();
+    await expect(page).toHaveURL(/#crashes$/);
+
+    const panel = page.getByRole('region', { name: 'Crashes' });
+    // The example portal: the newest by the version tried on it, the older of a build never uploaded.
+    await expect(panel.getByText('1.1.0 · task portal · reported by 1.0.0')).toBeVisible();
+    await expect(panel.getByText('Build 0123456789abcdef · task portal · reported by 1.0.0')).toBeVisible();
+    const download = page.waitForEvent('download');
+    await panel.getByRole('link', { name: /^Dump/ }).click();
+    expect((await download).suggestedFilename()).toMatch(/^crash-.+\.elf$/);
+  });
+
   test('a new board: the factory image for its chip, and flashing it from the browser', async ({ page }) => {
     await page.goto('/admin/settings/devices/firmware');
     await page.getByRole('tab', { name: 'New device' }).click();

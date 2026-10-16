@@ -231,6 +231,45 @@ normal update to the actual latest firmware version."
 - Note: an update over the air cannot change the partition table; a changed
   layout needs the boards flashed over USB once more.
 
+### Crash reports (agreed 2026-10-16)
+
+Proposed with the firmware ("Device Crash Reports", a handoff page, "shape
+it as fits the portal"): on a crash -- an exception, an assert, a watchdog
+-- ESP-IDF keeps a core dump (an ELF, 20-60 KB, at most 128 KB; only the
+last) and the board restarts; the firmware then sends it to the portal.
+
+- **Two requests**: a summary (`POST /api/v1/device/crash`: `crash_id`, the
+  dump's SHA-256; `build`, the first 16 hex of the crashed program file's
+  SHA-256; task, PC, call path, reset reason, size), answered `201
+  {"upload": true}` or `200 {"upload": false}` -- the file is there already,
+  or not wanted -- then the file (`PUT .../crash/<crash_id>/file`, checked
+  by its SHA-256 and its ELF header). The same `crash_id` again is answered
+  as the first time. Changed from the proposal: no `firmware` field (every
+  request carries `X-Device-Firmware`), the portal's usual error shapes.
+- **The crashed version from `build`**: the SHA-256 of the program file is
+  in every app's description (`app_elf_sha256`); the portal reads it from
+  each update file and factory image and names the version, else shows
+  `build`.
+- **Only on the device's page in Admin › Settings › Devices, a tab of its
+  own, *Crashes*; admins only.** The maintainer: "you only see the log in
+  the admin devices page when you select a device. Only there this thing is
+  seen." Not in the activity list, the devices list or a team's pages.
+- **No email**: "I'm still developing the thing and there could be some
+  issues and I don't want lots of emails ... If I'm interested, I can look
+  this up on the device page."
+- **The whole dump, nothing redacted** -- it can hold what the device had in
+  memory (its key, card IDs, a Wi-Fi password while connecting); "having a
+  complete crash log can make debugging a bit easier ... for the moment, I
+  would just include the complete crash report". Downloaded only by admins.
+- **Not in the privacy policy**: the same data in the same portal, "Amazon
+  doesn't tell me where they keep their crash logs as well".
+- **Kept** 90 days like the device's events, at most 20 dump files per
+  device: a new one lets the oldest file go, its summary staying -- the
+  newest crash is the one that matters. Deleted with the device; an admin
+  can delete one.
+- Decoding stays on a computer: `espcoredump.py info_corefile -c <dump>
+  <program file>`.
+
 ### Open (2026-10-14)
 
 - ~~The marks of "our" firmware~~ -- **settled 2026-10-15: none of our
@@ -361,7 +400,12 @@ version (and the one it should install) and its address.
   *Factory image*: one per chip, uploaded and deleted there
   (`services/device_factory.py`, `firmware_image.read_factory`,
   `storage/firmware/factory/`, in the backup with the rest of `storage`).
-- **One device's page:**
+- **One device's page** -- three tabs, *Device*, *Activity* and, since
+  2026-10-16, *Crashes* (`#crashes`): each crash newest first -- when, the
+  version that crashed (else its build), the task, why (*Crashed*, *Task
+  hung*, *Interrupts hung*), the call path -- with *Dump* to download and
+  *Delete* (`services/device_crashes.py`, `storage/devices/crashes/`).
+  What the other two hold:
   - its state, board (name and MAC address) and what its firmware can be;
   - its settings and the switch, and its type (only one its firmware can
     be; another type starts its settings afresh);

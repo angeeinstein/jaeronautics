@@ -315,6 +315,55 @@ told not to, so a used board flashed again forgets its key and pairs anew.
 An update over the air never changes the partition table: a new layout
 needs the boards flashed over USB again.
 
+### 6.5 Crash reports (built 2026-10-16)
+
+On a crash -- an exception, an assert, a watchdog -- ESP-IDF keeps a core
+dump (an ELF; only the last) and the board restarts. After the first
+successful sign of life, while idle, the device sends what ESP-IDF read from
+it, then the dump when asked. Admins see it on the device's page,
+*Crashes*, and decode the dump on a computer with the firmware's program
+file (`espcoredump.py info_corefile -c <dump> <program file>`).
+
+**1. The summary:** `POST /api/v1/device/crash`
+
+```json
+{
+  "crash_id": "9b1e…64 hex…",
+  "build": "72ce52965e229fed",
+  "task": "portal",
+  "pc": "0x4209F87C",
+  "backtrace": ["0x4209F879", "0x4209FB05", "0x4209D2EA", "0x42008809"],
+  "backtrace_corrupted": false,
+  "reset_reason": "panic",
+  "size": 41260
+}
+```
+
+| Field | |
+| --- | --- |
+| `crash_id` | The dump's SHA-256, 64 hex. The same crash sent again is answered as the first time. |
+| `build` | The first 16 hex of the crashed program file's SHA-256 (`esp_app_desc_t.app_elf_sha256`): the portal names the version by it. |
+| `task` | The task that crashed, at most 32 characters. |
+| `pc`, `backtrace` | Addresses as `0x` and up to 8 hex; at most 16 in the call path. |
+| `reset_reason` | `panic`, `task_watchdog` or `interrupt_watchdog`. |
+| `size` | The dump's size in bytes, at most 131072. |
+
+The running version is the `X-Device-Firmware` header, as always. Answers:
+`201 {"upload": true}` -- send the dump now; `200 {"upload": false}` -- the
+portal has it already: delete it. `400` with `fields`: a field is wrong.
+
+**2. The dump:** `PUT /api/v1/device/crash/<crash_id>/file`, the raw ELF as
+the body (`Content-Type: application/octet-stream`), at most 128 KB. Answer
+`204`: delete it from the flash. Refused: `404 crash_unknown` (no summary
+first), `400 crash_file_mismatch` (its SHA-256 is not `crash_id`), `400
+crash_file_not_elf`, `400 crash_file_too_large`. On a network error, try
+again after the next restart or an hour later; until it is answered, keep
+the dump, also across restarts.
+
+The portal keeps a report 90 days and at most 20 dumps a device: a new one
+lets the oldest dump go, its summary staying. So it always asks for a new
+crash's dump.
+
 ---
 
 ## 7. Reports and resources (built)
@@ -629,6 +678,8 @@ The list (`ICONS` in `aeronautics_members/services/credit_sales.py`):
   whole minutes.
 - **2026-10-16:** the factory image, for a fresh board flashed from the
   portal (section 6.4). Nothing changes for firmware already running.
+- **2026-10-16:** crash reports (section 6.5), from the firmware's proposal,
+  without its `firmware` field (the header says it).
 - **2026-10-14:** the `card` report's `linked` answer is gone (it came only
   while an admin waited at a reader, which was removed). Firmware that still
   handles it is harmless: it never comes.
