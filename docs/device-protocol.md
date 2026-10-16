@@ -292,6 +292,29 @@ file itself, and a version cannot be uploaded twice.
 Nothing of the firmware's own is needed in the file: what ESP-IDF puts in
 every build is what is checked (decided 2026-10-15).
 
+### 6.4 A fresh board: the factory image (built 2026-10-16)
+
+A board without firmware is flashed from the portal, over USB in the
+browser (Admin › Settings › Devices › Firmware, *New device*). It needs one
+file with everything a fresh board needs, written from address `0x0`:
+
+```sh
+idf.py merge-bin -o factory.bin            # ESP-IDF 5.3 and later, after idf.py build
+# or, from the build directory:
+esptool.py --chip esp32s3 merge_bin -o factory.bin @flash_args
+```
+
+The portal reads the bootloader's chip, finds the app through the partition
+table (the `factory` partition, else `ota_0`) and accepts the file only if
+the app is whole, for the same chip as the bootloader and of the same
+project as the update files. It need not be the newest version: after
+flashing, the board asks for its Wi-Fi on its screen, is paired (section 3)
+and updates itself (section 6). The page erases the whole flash first unless
+told not to, so a used board flashed again forgets its key and pairs anew.
+
+An update over the air never changes the partition table: a new layout
+needs the boards flashed over USB again.
+
 ---
 
 ## 7. Reports and resources (built)
@@ -604,6 +627,8 @@ The list (`ICONS` in `aeronautics_members/services/credit_sales.py`):
 - **2026-10-15:** attendance built (section 8.2) as first written down, with
   the refusals `attendance_off` and `not_a_member`; `duration_seconds` counts
   whole minutes.
+- **2026-10-16:** the factory image, for a fresh board flashed from the
+  portal (section 6.4). Nothing changes for firmware already running.
 - **2026-10-14:** the `card` report's `linked` answer is gone (it came only
   while an admin waited at a reader, which was removed). Firmware that still
   handles it is harmless: it never comes.

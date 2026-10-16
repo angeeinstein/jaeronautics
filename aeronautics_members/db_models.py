@@ -1644,6 +1644,31 @@ class FirmwareRelease(db.Model):
     uploaded_by = db.relationship("User")
 
 
+class FactoryImage(db.Model):
+    """What a fresh board is flashed with from the browser: bootloader, partition
+    table and app in one file, written from address 0 (services/device_factory.py,
+    docs/devices-plan.md, "A fresh board flashed from the portal"). One per chip,
+    a new one replacing the old. The file is ``storage/firmware/factory/<sha256>.bin``."""
+
+    __tablename__ = "firmware_factory_images"
+
+    id = db.Column(db.Integer, primary_key=True)
+    #: The chip its bootloader and app are for: "esp32s3".
+    chip = db.Column(db.String(20), nullable=False, unique=True)
+    #: The app in it, as its app description names it.
+    version = db.Column(db.String(32), nullable=False)
+    project = db.Column(db.String(32), nullable=False)
+    built = db.Column(db.String(40), nullable=True)
+    idf_version = db.Column(db.String(32), nullable=True)
+    sha256 = db.Column(db.String(64), nullable=False)
+    size = db.Column(db.Integer, nullable=False)
+    file_name = db.Column(db.String(200), nullable=True)
+    uploaded_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    uploaded_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    uploaded_by = db.relationship("User")
+
+
 class Card(db.Model):
     """A card -- a student card, a key fob -- linked to one person
     (services/cards.py, docs/cards-plan.md). The card is its own record: the

@@ -196,6 +196,41 @@ The firmware can already update itself over the air.
 - **The device installs only this firmware**: it checks the same marks the
   server checks (below).
 
+### A fresh board flashed from the portal (agreed 2026-10-16)
+
+A new board has no firmware, so it cannot pair or update; until now it
+needed a computer with ESP-IDF once. The maintainer: "provision a fresh
+device that does not have any firmware on it yet ... flashed from this
+page. And after that, the device can be paired, and then it just does a
+normal update to the actual latest firmware version."
+
+- **A factory image**: one file built with everything in it -- bootloader,
+  partition table, OTA data, the app -- written from address `0x0`
+  (`idf.py merge-bin`, or `esptool.py merge_bin`). The update files stay as
+  they are. On upload the portal reads what it is from the file: the
+  bootloader's chip, the partition table, and the app in it (its app
+  description: version, project, build date), and refuses it unless the app
+  is whole, of the same chip as the bootloader, and of the same project as
+  the update files. **One per chip**, a new one replacing the old: one chip
+  and one device for now, "maybe in the future I will have other devices so
+  we can keep this open". It need not be the newest version -- the normal
+  update brings the board there.
+- **Flashed in the browser** over Web Serial with Espressif's `esptool-js`:
+  Chrome or Edge on a computer. The page compares the connected board's chip
+  with the image's and refuses another. **"Erase everything first" is on**
+  (the maintainer: "this should be on"): it also clears a used board's key
+  and Wi-Fi, so the page resets one too.
+- **Flashing and pairing stay two steps.** Pairing right after flashing (by
+  the MAC address read while flashing) was offered and not wanted: "pairing
+  is rather easy ... the flashing ... isn't security critical at all. And the
+  other step, the pairing, is a separate thing that is security critical."
+  After flashing, the page says to set up the Wi-Fi on the device's screen
+  (the firmware asks for it at its first start) and to pair it.
+- **Where:** the Firmware page, in tabs: *Updates* (as before) and *New
+  device* (the factory image and the flasher).
+- Note: an update over the air cannot change the partition table; a changed
+  layout needs the boards flashed over USB once more.
+
 ### Open (2026-10-14)
 
 - ~~The marks of "our" firmware~~ -- **settled 2026-10-15: none of our
@@ -316,7 +351,16 @@ version (and the one it should install) and its address.
   every version with how many devices run it, *Install on every device* or
   *Stop offering*, delete a version no device is to run, and each device's
   state: up to date, update waiting, update failed (with the device's
-  reason), refreshed every 5 seconds.
+  reason), refreshed every 5 seconds -- the *Updates* tab. The *New device*
+  tab (`#new`, since 2026-10-16): *Flash a board* -- *Connect and flash*
+  asks for the board's port, finds its chip and MAC address, refuses a chip
+  with no factory image, erases the flash (*Erase everything first*, on),
+  writes the image from 0 with a progress bar, checks it by its MD5 and
+  restarts the board, then points to pairing; what the flasher said is
+  folded below. Chrome or Edge on a computer; elsewhere the page says so.
+  *Factory image*: one per chip, uploaded and deleted there
+  (`services/device_factory.py`, `firmware_image.read_factory`,
+  `storage/firmware/factory/`, in the backup with the rest of `storage`).
 - **One device's page:**
   - its state, board (name and MAC address) and what its firmware can be;
   - its settings and the switch, and its type (only one its firmware can

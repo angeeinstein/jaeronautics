@@ -1,22 +1,24 @@
 /**
- * Settings -> Devices -> Firmware (docs/devices-plan.md, "Firmware updates"):
- * upload a firmware file -- its version, project, build and chip are read
+ * Settings -> Devices -> Firmware (docs/devices-plan.md, "Firmware updates"),
+ * in two tabs. *Updates*: upload a firmware file -- its version, project, build and chip are read
  * from the file, and it is refused unless it is a whole app of the same
  * project as before -- choose which version every device runs, and see where
  * each device stands, refreshed while the page is open. One device can run
  * another version: chosen on its page. Data: /api/v1/admin/devices/firmware
  * (aeronautics_members/api/device_firmware.py). *Device protocol* downloads
  * docs/device-protocol.md, what the firmware has to do, for whoever writes it.
+ * *New device* (NewDevice.tsx): a fresh board flashed over USB from the browser.
  */
 import { Button, FileInput, Group, Stack, Table, Text, TextInput } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { IconCloudDownload, IconCpu, IconUpload } from '@tabler/icons-react';
+import { IconCloudDownload, IconCpu, IconRefresh, IconUpload, IconUsb } from '@tabler/icons-react';
 
 import { api, ApiError, call, type Schemas } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
 import { PageHeader } from '../../../components/PageHeader';
+import { PageTabs } from '../../../components/PageTabs';
 import { Panel } from '../../../components/Panel';
 import { Pill } from '../../../components/Pill';
 import { EmptyState, ErrorState, LoadingState } from '../../../components/States';
@@ -24,6 +26,7 @@ import { formatDateTime } from '../../../lib/format';
 import { EVERY_5_SECONDS, useLiveRefresh } from '../../../lib/live';
 import { notifyDone, notifyFailed } from '../../../lib/notify';
 import { devicesKey, FIRMWARE_STATE, firmwareKey, formatSize } from './deviceParts';
+import { NewDevice } from './NewDevice';
 
 type FirmwareOut = Schemas['FirmwareOut'];
 type Release = Schemas['FirmwareReleaseOut'];
@@ -314,7 +317,7 @@ export function Firmware() {
     <>
       <PageHeader
         title="Firmware"
-        description="One firmware for every device. Each installs the chosen version when it is not in use."
+        description="One firmware for every device. Each installs the chosen version when it is not in use; a new board is flashed over USB."
         crumbs={[
           { label: 'Admin', to: '/admin' },
           { label: 'Settings' },
@@ -328,17 +331,27 @@ export function Firmware() {
           </Button>
         }
       />
-      {loaded.isPending ? (
-        <LoadingState />
-      ) : loaded.isError ? (
-        <ErrorState error={loaded.error} onRetry={() => void loaded.refetch()} />
-      ) : (
-        <Stack gap="lg">
-          <Releases data={loaded.data} />
-          <Upload data={loaded.data} />
-          <DeviceStates data={loaded.data} />
-        </Stack>
-      )}
+      <PageTabs
+        tabs={[
+          {
+            value: 'updates',
+            label: 'Updates',
+            icon: IconRefresh,
+            content: loaded.isPending ? (
+              <LoadingState />
+            ) : loaded.isError ? (
+              <ErrorState error={loaded.error} onRetry={() => void loaded.refetch()} />
+            ) : (
+              <Stack gap="lg">
+                <Releases data={loaded.data} />
+                <Upload data={loaded.data} />
+                <DeviceStates data={loaded.data} />
+              </Stack>
+            ),
+          },
+          { value: 'new', label: 'New device', icon: IconUsb, content: <NewDevice /> },
+        ]}
+      />
     </>
   );
 }

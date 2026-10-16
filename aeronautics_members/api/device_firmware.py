@@ -8,11 +8,11 @@ device API; choosing a version for one device is on its page.
 from pathlib import Path
 from typing import Literal
 
-from flask import Response, current_app, request
+from flask import Response, current_app, request, send_file
 from flask_login import current_user
 
 from ..db_models import db
-from ..services import device_firmware
+from ..services import NotFoundError, device_factory, device_firmware
 from ..services import devices as devices_service
 from ..security_utils import build_public_url, get_public_base_url
 from ..services.clock import get_now_utc
@@ -154,4 +154,82 @@ def admin_firmware_remove(release_id):
     return _out()
 
 
+# --- Factory images: a fresh board flashed from the browser ------------------------------------
+# (services/device_factory.py; the Firmware page's *New device* tab.)
 
+
+class FactoryImageOut(Model):
+    id: int
+    #: The chip it is for: "esp32s3". The page flashes it only to a board of this chip.
+    chip: str
+    #: The app in it, as its app description names it.
+    version: str
+    project: str
+    built: str | None
+    idf_version: str | None
+    sha256: str
+    size: int
+    file_name: str | None
+    uploaded_at: UtcDateTime
+    uploaded_by: str | None
+
+
+class FactoryImagesOut(Model):
+    images: list[FactoryImageOut]
+    #: The project the app in an upload must be of; none before the first update file.
+    project: str | None
+    #: The largest file accepted, in bytes.
+    max_size: int
+
+
+def _factory_out():
+    return FactoryImagesOut(
+        images=[FactoryImageOut(
+            id=image.id, chip=image.chip, version=image.version, project=image.project, built=image.built,
+            idf_version=image.idf_version, sha256=image.sha256, size=image.size, file_name=image.file_name,
+            uploaded_at=image.uploaded_at,
+            uploaded_by=image.uploaded_by.email if image.uploaded_by is not None else None,
+        ) for image in device_factory.images()],
+        project=device_firmware.project(), max_size=device_factory.MAX_SIZE,
+    )
+
+
+@endpoint("GET", "/admin/devices/firmware/factory", response=FactoryImagesOut, permissions=MANAGE, tag="Admin")
+def admin_factory_images():
+    """The factory images, one per chip: what a fresh board is flashed with."""
+    return _factory_out()
+
+
+@endpoint("POST", "/admin/devices/firmware/factory", response=FactoryImagesOut, permissions=MANAGE, status=201,
+          tag="Admin", uploads={"file": True})
+def admin_factory_image_upload(files):
+    """Upload a factory image (``idf.py merge-bin``: bootloader, partition table
+    and app in one file). It replaces the one for its chip."""
+    upload = files["file"]
+    device_factory.upload(current_user, upload.read(device_factory.MAX_SIZE + 1), file_name=upload.filename)
+    db.session.commit()
+    return _factory_out()
+
+
+@endpoint("DELETE", "/admin/devices/firmware/factory/<int:image_id>", response=FactoryImagesOut,
+          permissions=MANAGE, tag="Admin")
+def admin_factory_image_remove(image_id):
+    """Delete a factory image."""
+    device_factory.remove(current_user, device_factory.image_of(image_id))
+    db.session.commit()
+    return _factory_out()
+
+
+@endpoint("GET", "/admin/devices/firmware/factory/<int:image_id>/file", permissions=MANAGE, tag="Admin",
+          produces="application/octet-stream")
+def admin_factory_image_file(image_id):
+    """The factory image itself, for the page to write to a board."""
+    image = device_factory.image_of(image_id)
+    path = device_factory.path_of(image)
+    if not path.is_file():
+        raise NotFoundError("The file of this factory image is missing: upload it again.",
+                            code="factory_image_file_missing")
+    response = send_file(path, mimetype="application/octet-stream", etag=image.sha256, max_age=0,
+                         download_name=f"factory-{image.chip}-{image.version}.bin")
+    response.headers["Cache-Control"] = "no-store"
+    return response

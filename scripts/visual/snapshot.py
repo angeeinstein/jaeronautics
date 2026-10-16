@@ -586,6 +586,10 @@ def seed(app, app_module, subscriptions):
     device_firmware.choose_for_device(admin_user, sales_point, release)
     device_firmware.choose_for_device(admin_user, fridge, release)
     device_firmware.reported(fridge, result="failed", version="1.1.0", detail="Not enough space for the update")
+    # What a fresh board is flashed with (the Firmware page's New device tab).
+    from aeronautics_members.services import device_factory
+
+    device_factory.upload(admin_user, firmware_image.factory_example("1.0.0"), file_name="jae-terminal-factory.bin")
     pairing, _secret = device_pairing.start(hardware="24:6F:28:12:34:56", firmware="1.0.0", board="jae-terminal-s3",
                                             types=["sales_point", "test"], address="10.0.0.40", now=now)
     # Waiting all day: the screenshots of its page come later than ten minutes.
@@ -774,6 +778,8 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--settings-device-pair", "user": "admin@example.org",
          "path": f"/admin/settings/devices/pair?code={device_pairing.shown(pairing.code)}"},
         {"name": "admin--settings-firmware", "user": "admin@example.org", "path": "/admin/settings/devices/firmware"},
+        {"name": "admin--settings-firmware-new", "user": "admin@example.org",
+         "path": "/admin/settings/devices/firmware#new"},
         {"name": "admin--cards", "user": "admin@example.org", "path": "/admin/cards"},
         {"name": "admin--attendance", "user": "admin@example.org", "path": "/admin/attendance"},
         {"name": "teams--devices", "user": "active@example.org", "path": "/teams/rocket-team/manage/devices"},

@@ -112,6 +112,113 @@ def read(data):
                  sha256=hashlib.sha256(data).hexdigest())
 
 
+# --- A factory image: everything a fresh board needs, from address 0 ---------------------
+#
+# ``idf.py merge-bin`` (``esptool.py merge_bin``) writes one file to flash at
+# 0x0: the bootloader -- at 0x0, or after 0xFF padding where the chip starts it
+# later --, the partition table (by default at 0x8000), the OTA data, and the
+# app in its partition. Its partition table is a list of 32-byte entries:
+# ``0xAA 0x50``, type, subtype, offset, size, a 16-byte label, flags; an MD5
+# entry (``0xEB 0xEB``) and 0xFF after the last.
+
+#: Where each chip's ROM looks for the bootloader; 0x0 for the rest.
+BOOTLOADER_OFFSETS = {"esp32": 0x1000, "esp32s2": 0x1000, "esp32p4": 0x2000, "esp32c5": 0x2000}
+PARTITION_MAGIC = b"\xaa\x50"
+PARTITION_ENTRY_SIZE = 32
+#: Where a partition table may start: ESP-IDF's default 0x8000, moved on in 4 KB steps for a larger bootloader.
+PARTITION_TABLE_OFFSETS = range(0x8000, 0x10000 + 1, 0x1000)
+APP_TYPE = 0x00
+FACTORY_SUBTYPE, OTA_0_SUBTYPE = 0x00, 0x10
+
+
+@dataclass(frozen=True)
+class FactoryImage:
+    version: str
+    project: str
+    built: str
+    idf_version: str
+    chip: str
+    #: Where the app sits in it: its partition's offset.
+    app_offset: int
+    size: int
+    sha256: str
+
+
+def _partitions(data, offset):
+    """``[(type, subtype, offset, size, label)]`` of the table at ``offset``; empty if none is there."""
+    entries = []
+    for at in range(offset, min(offset + 0xC00, len(data) - PARTITION_ENTRY_SIZE + 1), PARTITION_ENTRY_SIZE):
+        raw = data[at:at + PARTITION_ENTRY_SIZE]
+        if raw[:2] != PARTITION_MAGIC:
+            break
+        kind, subtype, start, size = struct.unpack_from("<BBII", raw, 2)
+        entries.append((kind, subtype, start, size, _text(raw[12:28])))
+    return entries
+
+
+def read_factory(data):
+    """The :class:`FactoryImage` ``data`` holds; :class:`NotAnImage` if it is not one."""
+    try:
+        read(data)
+    except NotAnImage:
+        pass
+    else:
+        raise NotAnImage("This is an update file (the app alone), not a factory image: build that with "
+                         "idf.py merge-bin.")
+    found = next((offset for offset in (0x0, 0x1000, 0x2000)
+                  if len(data) > offset + HEADER_SIZE and data[offset] == IMAGE_MAGIC), None)
+    if found is None:
+        raise NotAnImage("This is not a factory image: it has no bootloader. Build it with idf.py merge-bin.")
+    chip = CHIPS.get(struct.unpack_from("<H", data, found + 12)[0])
+    if chip is None:
+        raise NotAnImage("This factory image is for a chip the portal does not know.")
+    if BOOTLOADER_OFFSETS.get(chip, 0x0) != found:
+        raise NotAnImage(f"The bootloader is not where the {chip} looks for it: build the image with "
+                         "idf.py merge-bin, to be written from address 0.")
+    table = next((entries for offset in PARTITION_TABLE_OFFSETS if (entries := _partitions(data, offset))), None)
+    if not table:
+        raise NotAnImage("This factory image has no partition table.")
+    apps = {subtype: (start, size) for kind, subtype, start, size, _label in table if kind == APP_TYPE}
+    # What the bootloader starts on a fresh board: the factory app, else the first OTA slot.
+    place = apps.get(FACTORY_SUBTYPE) or apps.get(OTA_0_SUBTYPE)
+    if place is None:
+        raise NotAnImage("The partition table of this factory image has no app partition.")
+    start, size = place
+    if start >= len(data):
+        raise NotAnImage("This factory image has no app in it: build it with idf.py merge-bin after the app.")
+    try:
+        app = read(data[start:start + size])
+    except NotAnImage as exc:
+        raise NotAnImage(f"The app in this factory image: {str(exc)[0].lower()}{str(exc)[1:]}") from exc
+    if app.chip != chip:
+        raise NotAnImage(f"The app in this factory image is for the {app.chip or 'unknown chip'}, "
+                         f"its bootloader for the {chip}.")
+    return FactoryImage(version=app.version, project=app.project, built=app.built, idf_version=app.idf_version,
+                        chip=chip, app_offset=start, size=len(data), sha256=hashlib.sha256(data).hexdigest())
+
+
+def factory_example(version="1.0.0", project="jae-terminal", chip_id=0x0009, app=None):
+    """A factory image laid out as ``idf.py merge-bin`` writes one, around
+    :func:`example` -- for the tests and the example portal: nothing a board could run."""
+    chip = CHIPS[chip_id]
+    bootloader_at = BOOTLOADER_OFFSETS.get(chip, 0x0)
+    bootloader = bytearray(HEADER_SIZE)
+    bootloader[0], bootloader[1] = IMAGE_MAGIC, 0
+    struct.pack_into("<H", bootloader, 12, chip_id)
+    app_at, app_size = 0x10000, 0x100000
+
+    def entry(kind, subtype, start, size, label):
+        return PARTITION_MAGIC + struct.pack("<BBII", kind, subtype, start, size) + label.ljust(16, b"\0") + b"\0" * 4
+
+    table = (entry(0x01, 0x02, 0x9000, 0x6000, b"nvs") + entry(0x01, 0x00, 0xF000, 0x2000, b"otadata")
+             + entry(APP_TYPE, OTA_0_SUBTYPE, app_at, app_size, b"ota_0")
+             + entry(APP_TYPE, OTA_0_SUBTYPE + 1, app_at + app_size, app_size, b"ota_1"))
+    data = bytearray(b"\xff" * app_at)
+    data[bootloader_at:bootloader_at + len(bootloader)] = bootloader
+    data[0x8000:0x8000 + len(table)] = table
+    return bytes(data) + (app if app is not None else example(version=version, project=project, chip_id=chip_id))
+
+
 def example(version="1.0.0", project="jae-terminal", payload=b"\x5a" * 300, chip_id=0x0009):
     """A small app image laid out as ESP-IDF builds one, for the tests and the
     example portal (scripts/visual/snapshot.py): nothing a device could run.

@@ -104,6 +104,20 @@ test.describe('devices', () => {
     await expect(page).toHaveURL(/\/admin\/settings\/devices$/);
   });
 
+  test('a new board: the factory image for its chip, and flashing it from the browser', async ({ page }) => {
+    await page.goto('/admin/settings/devices/firmware');
+    await page.getByRole('tab', { name: 'New device' }).click();
+    await expect(page).toHaveURL(/#new$/);
+
+    // The example portal has one, for the ESP32-S3.
+    await expect(page.getByRole('table', { name: 'Factory images' }).getByRole('row').nth(1)).toContainText(
+      'ESP32-S31.0.0',
+    );
+    // Chromium has Web Serial: the board is chosen in the browser's own dialog, so not clicked here.
+    await expect(page.getByRole('checkbox', { name: /Erase everything first/ })).toBeChecked();
+    await expect(page.getByRole('button', { name: 'Connect and flash' })).toBeEnabled();
+  });
+
   test('a firmware file uploaded and installed by a device', async ({ page, playwright, baseURL }, info) => {
     // One upload of the one file: both browsers at once would find it uploaded already.
     test.skip(info.project.name !== 'desktop', 'one upload is enough');
@@ -118,6 +132,7 @@ test.describe('devices', () => {
 
     await page.goto('/admin/settings/devices/firmware');
     await page
+      .getByRole('tabpanel', { name: 'Updates' })
       .locator('input[type="file"]')
       .setInputFiles(new URL('../../tests/fixtures/firmware-esptool-esp32s3.bin', import.meta.url).pathname);
     await page.getByRole('button', { name: 'Upload' }).click();

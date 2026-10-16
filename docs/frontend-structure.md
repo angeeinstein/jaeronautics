@@ -127,7 +127,7 @@ Entered with the **gear** at the right of the top bar; opens on the Dashboard.
     -- which mail account sends what; *What goes out* -- the welcome email,
     the notifications and their channels, the mailings' pace; *Accounts*;
     *Test*), **Credit**, **Membership fee**, **Forum**, **Devices** (one
-    device's page, pairing one, the firmware), **System health**,
+    device's page, pairing one, the firmware with flashing a new board), **System health**,
     **Updates**, **Backup and restore**.
     Clicking *Settings* opens it on General.
     (The forum's connection test is on the Forum page, beside what it tests.)
@@ -353,7 +353,10 @@ page with only the chosen method.
   *Activity*), a team's money on Admin › Money (*Balance*, *History*),
   Updates (*Update*, *History*) and Backup (*Backup*, *Restore*). "I like
   the tabs on those pages where there is much content." Since 2026-10-16
-  also Settings › Email (*Senders*, *What goes out*, *Accounts*, *Test*).
+  also Settings › Email (*Senders*, *What goes out*, *Accounts*, *Test*)
+  and Devices › Firmware (*Updates*, *New device*: a fresh board flashed
+  over USB in the browser, `NewDevice.tsx`, its flasher -- esptool-js --
+  loaded only when a board is flashed).
 - **A hint under every email field** (`components/EmailHint.tsx`,
   `lib/emailHint.ts`, 2026-10-16): when the address typed looks like a
   mistyped university address -- the domain, dots and hyphens left out, is
