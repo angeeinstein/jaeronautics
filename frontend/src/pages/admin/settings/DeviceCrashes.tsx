@@ -101,7 +101,7 @@ function CrashCard({ deviceId, crash }: { deviceId: number; crash: Crash }) {
       ) : null}
       {crash.has_file ? null : (
         <Text size="xs" c="dimmed">
-          No dump: not sent yet, or one of the device’s 20 oldest.
+          No dump: not sent yet, or let go: only the 20 newest are kept.
         </Text>
       )}
     </Stack>
