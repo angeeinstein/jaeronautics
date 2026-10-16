@@ -430,15 +430,7 @@ function HereNow({ present }: { present: Overview['present'] }) {
   );
 }
 
-function SwitchPanel({
-  api,
-  enabled,
-  where,
-}: {
-  api: AttendanceApi;
-  enabled: boolean;
-  where: string;
-}) {
+function SwitchPanel({ api, enabled, where }: { api: AttendanceApi; enabled: boolean; where: string }) {
   const client = useQueryClient();
   const change = useMutation({
     mutationFn: (on: boolean) => api.setEnabled(on),

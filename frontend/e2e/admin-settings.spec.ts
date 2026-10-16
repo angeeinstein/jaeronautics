@@ -50,7 +50,9 @@ test.describe('settings', () => {
 
     await page.getByRole('tab', { name: 'Senders' }).click();
     const senders = page.getByRole('region', { name: 'Which account sends what' });
-    await expect(senders.getByRole('combobox', { name: 'Replies to contact messages' })).toHaveValue('support');
+    await expect(senders.getByRole('combobox', { name: 'Replies to contact messages' })).toHaveValue(
+      'support',
+    );
   });
 
   test('a mail account: added, listed without its password, removed', async ({ page }) => {
