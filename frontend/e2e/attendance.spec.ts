@@ -47,11 +47,19 @@ test.describe('attendance', () => {
     await person.getByRole('row').last().getByRole('button', { name: 'Change' }).click();
 
     const form = page.getByRole('dialog', { name: /^Change a stay of Carla/ });
-    // Typed key by key, as the time fields move on by themselves.
-    await form.getByLabel('Check-out hours').clear();
-    await form.getByLabel('Check-out hours').pressSequentially('23');
-    await form.getByLabel('Check-out minutes').clear();
-    await form.getByLabel('Check-out minutes').pressSequentially('40');
+    // Typed key by key, as the time fields move on by themselves -- and each
+    // field seen to hold its value before the next: the picker reads the other
+    // field as last drawn, so minutes typed before the hours are drawn leave
+    // the time empty (as on a slow machine).
+    const hours = form.getByLabel('Check-out hours');
+    const minutes = form.getByLabel('Check-out minutes');
+    await hours.clear();
+    await hours.pressSequentially('23', { delay: 50 });
+    await expect(hours).toHaveValue('23');
+    await minutes.clear();
+    await minutes.pressSequentially('40', { delay: 50 });
+    await expect(minutes).toHaveValue('40');
+    await expect(form.getByRole('button', { name: 'Save' })).toBeEnabled();
     await form.getByRole('button', { name: 'Save' }).click();
     await expect(page.getByText('Stay changed.')).toBeVisible();
     await expect(person.getByRole('row').last()).toContainText('23:40');
