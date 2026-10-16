@@ -280,6 +280,21 @@ def members_of(owner):
     ).scalars().all()
 
 
+def eligible(owner):
+    """Who a stay may be added for by hand: whoever may check in at the
+    owner's readers -- a team's active members; for the association, every
+    active member, not only those with a stay already. Sorted by name."""
+    from .teams import is_active_association_member
+
+    if owner is not None:
+        people = members_of(owner)
+    else:
+        people = [user for user in db.session.execute(
+            db.select(User).where(User.deleted_at.is_(None), User.disabled_at.is_(None))).scalars()
+            if is_active_association_member(user)]
+    return sorted(people, key=lambda user: person_name(user).lower())
+
+
 def hours(owner, start, end):
     """Per person between two local days: minutes counted, stays, how many
     not checked out -- every member of a team, with a stay or not, and anyone

@@ -46,6 +46,8 @@ import { type Stay, StayTable } from './StayTable';
 
 type Overview = Schemas['AttendanceOut'];
 type Row = Schemas['HoursRowOut'];
+/** Whom a stay may be added for (``people`` of the overview). */
+type Person = Schemas['AttendancePersonOut'];
 
 export interface AttendanceApi {
   /** Where its answers are kept: everything under it is fetched again after a change. */
@@ -139,7 +141,7 @@ interface StayFormProps {
   stay?: Stay;
   /** Who it is for: fixed for a person's stay, chosen from ``people`` for a new one. */
   userId?: number;
-  people: Row[];
+  people: Person[];
   onDone: () => void;
 }
 
@@ -256,7 +258,7 @@ function PersonStays({
   api: AttendanceApi;
   row: Row;
   period: Period;
-  people: Row[];
+  people: Person[];
 }) {
   const client = useQueryClient();
   const [changing, setChanging] = useState<Stay | null>(null);
@@ -476,7 +478,7 @@ export function AttendanceBoard({ api, where }: { api: AttendanceApi; where: str
 
   if (overview.isPending) return <LoadingState />;
   if (overview.isError) return <ErrorState error={overview.error} onRetry={() => void overview.refetch()} />;
-  const { enabled, rows, present } = overview.data;
+  const { enabled, rows, present, people } = overview.data;
   const recorded = rows.some((row) => row.stays > 0);
   const switchPanel = <SwitchPanel api={api} enabled={enabled} where={where} />;
   return (
@@ -535,7 +537,7 @@ export function AttendanceBoard({ api, where }: { api: AttendanceApi; where: str
         size="xl"
         fullScreen={phone}
       >
-        {person ? <PersonStays api={api} row={person} period={period} people={rows} /> : null}
+        {person ? <PersonStays api={api} row={person} period={period} people={people} /> : null}
       </Modal>
       <StayDialog
         title="Add a stay"
@@ -544,7 +546,7 @@ export function AttendanceBoard({ api, where }: { api: AttendanceApi; where: str
           setAdding(false);
         }}
         api={api}
-        people={rows}
+        people={people}
       />
     </Stack>
   );

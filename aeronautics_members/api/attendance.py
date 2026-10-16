@@ -110,12 +110,19 @@ class PresentOut(Model):
     place: str | None
 
 
+class AttendancePersonOut(Model):
+    user_id: int
+    name: str
+
+
 class AttendanceOut(Model):
     enabled: bool
     start: date
     end: date
     rows: list[HoursRowOut]
     present: list[PresentOut]
+    #: Whom a stay may be added for: a team's active members; for the association, every active member.
+    people: list[AttendancePersonOut]
 
 
 class PersonStaysOut(Model):
@@ -164,6 +171,8 @@ def _overview(owner, query):
         present=[PresentOut(stay_id=stay.id, user_id=stay.user_id, name=attendance.person_name(stay.user),
                             since=stay.started_at, place=attendance.place_of(stay.in_device))
                  for stay in attendance.present(owner)],
+        people=[AttendancePersonOut(user_id=user.id, name=attendance.person_name(user))
+                for user in attendance.eligible(owner)],
     )
 
 

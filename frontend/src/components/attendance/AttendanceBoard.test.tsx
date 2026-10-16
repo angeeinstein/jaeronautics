@@ -29,6 +29,10 @@ function overview(overrides: Partial<Schemas['AttendanceOut']> = {}): Schemas['A
     present: [
       { stay_id: 9, user_id: 8, name: 'Carla Member', since: '2026-10-15T06:30:00Z', place: 'Club room' },
     ],
+    people: [
+      { user_id: 7, name: 'Anna Active' },
+      { user_id: 8, name: 'Carla Member' },
+    ],
     ...overrides,
   };
 }
@@ -59,6 +63,27 @@ describe('running attendance', () => {
       'href',
       '/api/v1/admin/attendance.csv?start=2026-10-01&end=2026-10-15',
     );
+  });
+
+  it('a stay is added for anybody who may check in, not only those with one already', async () => {
+    mockFetch({
+      ...base,
+      '/api/v1/admin/attendance': {
+        body: overview({
+          rows: [{ user_id: 7, name: 'Anna Active', minutes: 205, stays: 3, not_checked_out: 1 }],
+          people: [
+            { user_id: 7, name: 'Anna Active' },
+            { user_id: 11, name: 'Bruno New' },
+          ],
+        }),
+      },
+    });
+    renderPage(<Attendance />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Add a stay' }));
+    const form = await screen.findByRole('dialog', { name: 'Add a stay' });
+    await userEvent.click(within(form).getByRole('combobox', { name: 'Person' }));
+    expect(await screen.findByRole('option', { name: 'Bruno New' })).toBeInTheDocument();
   });
 
   it("a person's stay not checked out, given its check-out by hand", async () => {

@@ -116,6 +116,25 @@ class TestAnswering:
         assert db.session.query(ContactReply).one().sent_at is not None
         assert len(mail) == 1
 
+    def test_a_waiting_answer_whose_account_was_removed_goes_from_the_one_answering_now(
+            self, client, admins, written, mail):  # noqa: F811
+        """Found in review (PR #39): retried with the removed account's name, it
+        failed every time, and the sender never got the answer."""
+        _reply_settings("support")
+        _login(client, admins[0].id)
+        mail.state["fail"] = True
+        send(client, "POST", f"/api/v1/admin/messages/{written.id}/replies", {"body": "Yes."})
+        support = db.session.query(MailAccount).filter_by(account_key="support").one()
+        _login(client, admins[0].id)
+        db.session.delete(support)
+        db.session.commit()
+        mail.state["fail"] = False
+
+        assert messages.deliver_waiting() == 1
+
+        assert mail[-1]["from_account"] == "office"
+        assert db.session.query(ContactReply).one().account_key == "office"
+
     def test_an_empty_answer_is_refused(self, client, admins, written, mail):  # noqa: F811
         _login(client, admins[0].id)
         response = send(client, "POST", f"/api/v1/admin/messages/{written.id}/replies", {"body": "  "})

@@ -1592,6 +1592,13 @@
             "title": "End",
             "type": "string"
           },
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/AttendancePersonOut"
+            },
+            "title": "People",
+            "type": "array"
+          },
           "present": {
             "items": {
               "$ref": "#/components/schemas/PresentOut"
@@ -1617,9 +1624,29 @@
           "start",
           "end",
           "rows",
-          "present"
+          "present",
+          "people"
         ],
         "title": "AttendanceOut",
+        "type": "object"
+      },
+      "AttendancePersonOut": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name"
+        ],
+        "title": "AttendancePersonOut",
         "type": "object"
       },
       "Attention": {

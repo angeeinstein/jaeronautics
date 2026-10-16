@@ -123,8 +123,10 @@ def add_item(actor, *, team=None, name, price_cents, icon="other"):
 
 def update_item(actor, item, *, name=None, price_cents=None, active=None, icon=None):
     """Rename it, change its price or icon, or switch it off and on. Sales made stay at their price."""
-    # A name longer than the limit, from before it, stays until it is changed.
-    new_name = item.name if name is None else _clean_name(name)
+    # A name longer than the limit, from before it, stays until it is changed:
+    # sent again unchanged with a new price or icon, it passes as it is.
+    unchanged = name is None or " ".join(name.split()) == item.name
+    new_name = item.name if unchanged else _clean_name(name)
     _, new_price = _clean("-", item.price_cents if price_cents is None else price_cents)
     before = (item.name, item.price_cents, item.active, item.icon)
     item.name, item.price_cents = new_name, new_price

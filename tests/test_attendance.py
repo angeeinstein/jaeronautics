@@ -198,6 +198,16 @@ class TestCorrections:
         assert db.session.query(AuditLog).filter_by(event_type="attendance_stay_deleted").count() == 1
 
 
+    def test_a_stay_can_be_added_for_anybody_who_may_check_in(self, app, anna, rocket):
+        """Found in review (PR #39): for the association only people with a
+        stay already were offered, so somebody's first stay could not be added."""
+        team, lead = rocket
+        assert anna in attendance.eligible(team)
+        everyone = attendance.eligible(None)
+        assert anna in everyone and lead in everyone
+        assert attendance.hours(None, _at(1, 0, 0).date(), _at(31, 0, 0).date()) == []
+
+
 class TestInTheAccount:
     def test_shown_while_it_is_on_kept_once_there_is_data(self, app, anna, doors, rocket):
         (hangar, _key), _workshop = doors

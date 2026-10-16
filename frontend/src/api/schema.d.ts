@@ -4212,6 +4212,8 @@ export interface components {
              * Format: date
              */
             end: string;
+            /** People */
+            people: components["schemas"]["AttendancePersonOut"][];
             /** Present */
             present: components["schemas"]["PresentOut"][];
             /** Rows */
@@ -4221,6 +4223,13 @@ export interface components {
              * Format: date
              */
             start: string;
+        };
+        /** AttendancePersonOut */
+        AttendancePersonOut: {
+            /** Name */
+            name: string;
+            /** User Id */
+            user_id: number;
         };
         /**
          * Attention

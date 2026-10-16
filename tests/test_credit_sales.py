@@ -303,3 +303,12 @@ class TestDeletingAndNames:
         assert (item.name, item.price_cents) == ("A very long coffee name from before", 120)
         with pytest.raises(ValidationError):
             credit_sales.update_item(None, item, name="Another very long coffee name")
+
+    def test_a_longer_name_sent_again_unchanged_passes(self, credit_on):  # noqa: F811
+        """Found in review (PR #39): the page sends the name with every change,
+        so a price or an icon could not be changed without shortening it."""
+        item = credit_sales.add_item(None, name="Coffee", price_cents=100, icon="coffee")
+        item.name = "A very long coffee name from before"
+        credit_sales.update_item(None, item, name="A very long coffee name from before", price_cents=130,
+                                 icon="tea")
+        assert (item.name, item.price_cents, item.icon) == ("A very long coffee name from before", 130, "tea")

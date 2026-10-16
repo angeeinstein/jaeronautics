@@ -257,6 +257,15 @@ def _send_reply(reply):
 
     message = reply.message
     reply.attempts += 1
+    # Its account deleted or renamed while it waited: from the one answering
+    # now -- the replies' account, else the default, else any there is.
+    from . import mail_senders
+
+    existing = mail_senders.accounts()
+    if reply.account_key not in existing:
+        usable = [key for key in (mailings.reply_account(), mail_senders.default_account(), *existing)
+                  if key in existing]
+        reply.account_key = usable[0] if usable else reply.account_key
     copy = mailings.account_address(reply.account_key) if mailings.reply_copy() else ""
     written = local_time(message.created_at)
     sent, error = send_mail(
