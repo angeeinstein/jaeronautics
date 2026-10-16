@@ -119,9 +119,9 @@ like you proposed."
 - **Only the contact form's:** "when a team leader is contacted, I don't want
   them to reply from the same support email address." Messages to a team's
   leads keep *Answer by email*.
-- **From which account:** Settings › Mailings, *Replies to contact messages*
-  -- a mail account of its own (a *support* address the maintainer adds in
-  Settings › Mail accounts), or, left empty, the mailings' account.
+- **From which account:** Settings › Email, *Senders*, *Replies to contact
+  messages* -- a mail account of its own (a *support* address the
+  maintainer adds on the *Accounts* tab), or, left empty, the default.
 - **The person's answer:** the server receives no mail. A reply goes out
   with no other Reply-To, so an answer to it lands in that account's mailbox,
   read in a mail program ("I could just configure this mailbox in Outlook").
@@ -135,9 +135,9 @@ like you proposed."
   their message. The privacy policy draft (2026-10-08) says so.
 - Code: `services/messages.py` (`reply`), `db_models.ContactReply`,
   `api/messages.py` (`POST /admin/messages/<id>/replies`),
-  `services/mailings.py` (the two settings),
+  `services/mail_senders.py` (the two settings),
   `frontend/src/components/MessageList.tsx`,
-  `frontend/src/pages/admin/settings/MailingSettings.tsx`.
+  `frontend/src/pages/admin/settings/Email.tsx`.
 
 ## Order of building
 

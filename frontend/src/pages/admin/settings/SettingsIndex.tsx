@@ -7,11 +7,11 @@ import { Navigate, useLocation } from 'react-router';
 
 const MOVED: Record<string, string> = {
   '#settings-general': 'general',
-  '#settings-notifications': 'notifications',
+  '#settings-notifications': 'email#sending',
   '#settings-billing': 'billing',
   '#settings-forum': 'forum',
-  '#settings-mail': 'mail',
-  '#settings-test': 'test-email',
+  '#settings-mail': 'email#accounts',
+  '#settings-test': 'email#test',
   '#settings-maintenance': 'health',
   '#backup-restore': 'backup',
 };

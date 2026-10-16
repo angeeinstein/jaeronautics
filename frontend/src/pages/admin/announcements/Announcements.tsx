@@ -10,7 +10,7 @@
  *   Under two weeks before the date it is held back, unless sending anyway
  *   is ticked (statutes § 10 (3)).
  *
- * Sent through a queue within Settings › Mailings' limits. Data: GET|POST
+ * Sent through a queue within the limits in Settings › Email. Data: GET|POST
  * /api/v1/admin/announcements, POST .../count and .../test.
  */
 import {
@@ -315,7 +315,7 @@ export function Announcements() {
           <Text size="sm" c="dimmed">
             {`Sent from ${list.data.limits.sender || 'the notifications’ mail account'}, at most ` +
               `${String(list.data.limits.per_hour)} an hour and ${String(list.data.limits.per_day)} a day ` +
-              '(Settings › Mailings).'}
+              '(Settings › Email).'}
           </Text>
         </Stack>
       )}

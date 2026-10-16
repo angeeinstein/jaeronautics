@@ -115,16 +115,19 @@ Entered with the **gear** at the right of the top bar; opens on the Dashboard.
 - *Overview* -- **Dashboard**
 - *People* -- **Accounts**, **Reviews** (count of what waits), **Cards**
   (every card linked; with `cards.manage`), **Attendance** (the
-  association's readers, `docs/attendance-plan.md`; while on, or stays are
-  kept)
+  association's readers, `docs/attendance-plan.md`; for whoever runs the
+  teams, with its switch on the page)
 - *Money* -- **Money** (the teams' money), **Credit** (members' money: the
   totals, balances, the latest entries), **Sales** (what was sold, by seller
   and item; the association's price list and its sales points' menus)
 - *Teams* -- **Teams**
 - *System* -- **Logs**, **Settings** ▸
-  - Settings folds open in place (chevron) to its parts: **General**,
-    **Notifications**, **Membership fee**, **Forum**, **Mail accounts**,
-    **Test email**, **Devices** (one device's page, pairing one, the firmware), **System health**,
+  - Settings folds open in place (chevron) to its parts: **General**
+    (signing up, the university email domains), **Email** (tabs: *Senders*
+    -- which mail account sends what; *What goes out* -- the welcome email,
+    the notifications and their channels, the mailings' pace; *Accounts*;
+    *Test*), **Credit**, **Membership fee**, **Forum**, **Devices** (one
+    device's page, pairing one, the firmware), **System health**,
     **Updates**, **Backup and restore**.
     Clicking *Settings* opens it on General.
     (The forum's connection test is on the Forum page, beside what it tests.)

@@ -1,5 +1,5 @@
 /**
- * Settings -> Mail accounts: the accounts the portal sends email from --
+ * Settings › Email, *Accounts*: the accounts the portal sends email from --
  * added, changed, tested, removed -- and importing or exporting them as a
  * JSON file. Their passwords never reach the browser, except in an export,
  * which asks for the current password first. Data: /api/v1/admin/settings/mail
@@ -29,7 +29,7 @@ import { EmptyState } from '../../../components/States';
 import { Panel } from '../../../components/Panel';
 import { fileNameOf, saveFile } from '../../../lib/files';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
-import { SettingsPage, useNotMyLogin } from './shared';
+import { SettingsLoaded, useNotMyLogin } from './shared';
 
 type Account = Schemas['MailAccountOut'];
 type AccountIn = Schemas['MailAccountIn'];
@@ -225,8 +225,8 @@ function AccountRow({ account, onEdit }: { account: Account; onEdit: () => void 
       ),
     onSuccess: async (result) => {
       notifyDone(`${account.key} removed.`);
-      if (result.removed_welcome_sender)
-        notifyNote('It sent the welcome email: none is sent until another sender is chosen under General.');
+      if (result.cleared_senders.length)
+        notifyNote('What it sent goes out from the default account now (the Senders tab).');
       await client.invalidateQueries({ queryKey: ['admin', 'settings'] });
     },
     onError: notifyFailed,
@@ -446,14 +446,7 @@ function Accounts({ data }: { data: Schemas['MailOut'] }) {
   );
 }
 
-export function MailAccounts() {
-  return (
-    <SettingsPage
-      title="Mail accounts"
-      description="The accounts the portal sends email from."
-      query={mailQuery}
-    >
-      {(data) => <Accounts data={data} />}
-    </SettingsPage>
-  );
+/** Settings › Email, *Accounts*: the accounts the portal sends email from. */
+export function MailAccountsTab() {
+  return <SettingsLoaded query={mailQuery}>{(data) => <Accounts data={data} />}</SettingsLoaded>;
 }

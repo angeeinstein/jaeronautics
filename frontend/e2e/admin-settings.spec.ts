@@ -43,8 +43,19 @@ test.describe('settings', () => {
     await expect(page.getByText(/None set yet\.|One is set\./).first()).toBeVisible();
   });
 
+  test('email: which account sends what, and the old addresses lead to its tabs', async ({ page }) => {
+    await page.goto('/admin/settings/mailings');
+    await expect(page).toHaveURL(/\/admin\/settings\/email#sending$/);
+    await expect(page.getByRole('region', { name: 'Welcome email' })).toBeVisible();
+
+    await page.getByRole('tab', { name: 'Senders' }).click();
+    const senders = page.getByRole('region', { name: 'Which account sends what' });
+    await expect(senders.getByRole('combobox', { name: 'Replies to contact messages' })).toHaveValue('support');
+  });
+
   test('a mail account: added, listed without its password, removed', async ({ page }) => {
     await page.goto('/admin/settings/mail');
+    await expect(page).toHaveURL(/\/admin\/settings\/email#accounts$/);
     const form = page.getByRole('region', { name: 'Add an account' });
     await form.getByRole('textbox', { name: 'Key', exact: true }).fill('e2e-office');
     await form.getByRole('textbox', { name: 'SMTP server' }).fill('smtp.example.org');
@@ -111,10 +122,11 @@ test.describe('settings', () => {
     test.skip(!isMobile, 'phones only');
     for (const path of [
       '/admin/settings/general',
-      '/admin/settings/notifications',
+      '/admin/settings/email',
+      '/admin/settings/email#sending',
+      '/admin/settings/email#accounts',
+      '/admin/settings/email#test',
       '/admin/settings/forum',
-      '/admin/settings/mail',
-      '/admin/settings/test-email',
       '/admin/settings/health',
       '/admin/settings/updates',
       '/admin/settings/backup',

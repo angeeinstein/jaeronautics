@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Schemas } from '../../../api/client';
 import { makeMe } from '../../../test/fixtures';
 import { type Answers, mockFetch, renderPage } from '../../../test/render';
-import { MailAccounts } from './MailAccounts';
-import { TestEmail } from './TestEmail';
+import { MailAccountsTab as MailAccounts } from './MailAccounts';
+import { TestEmailTab as TestEmail } from './TestEmail';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -116,14 +116,14 @@ describe('mail accounts', () => {
   it('removing asks again', async () => {
     const { calls } = show(<MailAccounts />, {
       [API]: { body: { accounts: [office] } },
-      [`DELETE ${API}/accounts/4`]: { body: { removed_welcome_sender: true } },
+      [`DELETE ${API}/accounts/4`]: { body: { cleared_senders: ['welcome'] } },
     });
 
     await userEvent.click(await screen.findByRole('button', { name: 'Remove' }));
     expect(calls.some((call) => call.method === 'DELETE')).toBe(false);
     await userEvent.click(screen.getByRole('button', { name: 'Yes, remove' }));
 
-    expect(await screen.findByText(/It sent the welcome email/)).toBeInTheDocument();
+    expect(await screen.findByText(/goes out from the default account now/)).toBeInTheDocument();
   });
 
   it('the export needs the current password, and a wrong one is said there', async () => {

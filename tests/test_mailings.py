@@ -255,17 +255,12 @@ class TestTeamMailings:
 
 
 class TestSettings:
-    def test_limits_and_sender_checked(self, client, admin, monkeypatch):
-        monkeypatch.setattr(mailings, "load_mail_accounts_config", lambda: {"office": {}, "news": {}})
-        _login(client, admin.id)
-        saved = client.put("/api/v1/admin/settings/mailings", json={"sender": "news", "per_hour": 50, "per_day": 200})
-        assert saved.status_code == 200, saved.get_json()
-        assert mailings.settings() == {"sender": "news", "per_hour": 50, "per_day": 200, "reply_sender": "",
-                                   "reply_copy": False}
-        bad = client.put("/api/v1/admin/settings/mailings", json={"sender": "nope", "per_hour": 50, "per_day": 200})
-        assert "sender" in bad.get_json()["error"]["fields"]
-        bad = client.put("/api/v1/admin/settings/mailings", json={"sender": "", "per_hour": 500, "per_day": 200})
-        assert "per_hour" in bad.get_json()["error"]["fields"]
+    def test_limits_checked(self, app):
+        mailings.save_settings(None, per_hour=50, per_day=200)
+        assert mailings.settings() == {"per_hour": 50, "per_day": 200}
+        with pytest.raises(mailings.ValidationError) as refused:
+            mailings.save_settings(None, per_hour=500, per_day=200)
+        assert "per_hour" in refused.value.details["fields"]
 
     def test_announcements_need_the_permission(self, client, app):
         _login(client, _staff("money@example.org", "treasurer").id)

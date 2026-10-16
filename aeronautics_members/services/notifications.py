@@ -15,8 +15,8 @@ from datetime import datetime, timedelta, timezone
 from flask import current_app
 from flask_babel import _
 
-from ..db_models import EmailDeliveryJob, MailAccount, Setting, db
-from ..mail_utils import load_mail_accounts_config, send_mail
+from ..db_models import EmailDeliveryJob, MailAccount, db
+from ..mail_utils import send_mail
 from ..notification_service import (
     ADMIN_ERROR_CHANNEL,
     ADMIN_GENERAL_CHANNEL,
@@ -117,16 +117,10 @@ def queue_user_status_notification(event_type, summary, recipient_email, payload
 
 
 def get_default_sender_account():
-    settings = {s.key: s.value for s in Setting.query.all()}
-    preferred_sender = settings.get("welcome_email_sender")
-    if preferred_sender:
-        return preferred_sender
+    """The default mail account (Settings › Email, Senders): account emails go out from it."""
+    from .mail_senders import default_account
 
-    try:
-        mail_accounts = load_mail_accounts_config()
-        return next(iter(mail_accounts.keys()), None)
-    except Exception:
-        return None
+    return default_account() or None
 
 
 def send_account_action_email(

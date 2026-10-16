@@ -8,7 +8,6 @@ The rules are in services/settings_sections.py. Drawn by
 frontend/src/pages/admin/settings/.
 """
 
-from typing import Literal
 
 from flask import current_app
 from flask_login import current_user
@@ -17,7 +16,6 @@ from pydantic import Field
 from ..db_models import db
 from ..forum_service import ForumProviderError, member_category_groups, normalize_forum_settings
 from ..member_categories import CATEGORY_ORDER, category_label
-from ..notification_service import NotificationService, normalize_notification_settings
 from ..permissions import Permission
 from ..security_utils import build_public_url
 from ..services import credit as credit_service
@@ -26,9 +24,8 @@ from ..services import settings_sections as sections
 from ..services.audit import log_audit_event
 from ..services.forum import get_forum_service, get_forum_settings_map
 from ..services.institutional_email import get_staff_domains, get_student_domains
-from ..services.notifications import get_notification_settings_map
 from .admin_mail import ConnectionOut
-from ._core import Model, UtcDateTime, endpoint
+from ._core import Model, endpoint
 
 TAG = "Admin"
 GENERAL = [Permission.SETTINGS_GENERAL]
@@ -49,12 +46,6 @@ def _is_true(value):
 
 class GeneralIn(Model):
     invoice_payments: bool
-    automatic_emails: bool
-    #: The legal texts the member accepted, as PDFs, in the welcome email.
-    legal_pdfs_in_welcome_emails: bool
-    #: The mail account welcome emails come from; empty for none.
-    welcome_email_sender: str | None = Field(None, max_length=100)
-    automatic_email_template: str | None = Field(None, max_length=200)
     #: The domains a student's address must be on, as typed: commas, spaces or lines.
     institutional_email_domains: str | None = Field(None, max_length=2000)
     #: The domains a staff member's address must be on, the same way.
@@ -66,29 +57,20 @@ class GeneralOut(GeneralIn):
     domains_in_use: list[str]
     #: The staff's, the same way.
     staff_domains_in_use: list[str]
-    senders: list[str]
-    templates: list[str]
 
 
 @endpoint("GET", "/admin/settings/general", response=GeneralOut, permissions=GENERAL, tag=TAG)
 def admin_settings_general():
-    """Invoices, automatic emails, the welcome email and the students' and staff's email domains."""
+    """Paying by invoice, and the students' and staff's email domains. Email is
+    on Settings › Email (api/email_settings.py)."""
     stored = settings_service.get_settings_map([
-        "invoice_payments_enabled", "automatic_emails_enabled", "legal_pdfs_in_welcome_emails",
-        "welcome_email_sender", "automatic_email_template", "institutional_email_domains",
-        "staff_email_domains"])
+        "invoice_payments_enabled", "institutional_email_domains", "staff_email_domains"])
     return GeneralOut(
         invoice_payments=_is_true(stored.get("invoice_payments_enabled")),
-        automatic_emails=_is_true(stored.get("automatic_emails_enabled")),
-        legal_pdfs_in_welcome_emails=_is_true(stored.get("legal_pdfs_in_welcome_emails")),
-        welcome_email_sender=stored.get("welcome_email_sender") or None,
-        automatic_email_template=stored.get("automatic_email_template") or None,
         institutional_email_domains=stored.get("institutional_email_domains") or None,
         staff_email_domains=stored.get("staff_email_domains") or None,
         domains_in_use=list(get_student_domains()),
         staff_domains_in_use=list(get_staff_domains()),
-        senders=sections.sender_accounts(),
-        templates=sections.email_templates(),
     )
 
 
@@ -96,84 +78,9 @@ def admin_settings_general():
 def admin_settings_general_save(body):
     """Save the general settings: only these, whatever else there is."""
     changed = sections.save_general(
-        current_user, invoice_payments=body.invoice_payments, automatic_emails=body.automatic_emails,
-        legal_pdfs_in_welcome_emails=body.legal_pdfs_in_welcome_emails,
-        welcome_email_sender=body.welcome_email_sender, automatic_email_template=body.automatic_email_template,
+        current_user, invoice_payments=body.invoice_payments,
         institutional_email_domains=body.institutional_email_domains,
         staff_email_domains=body.staff_email_domains)
-    db.session.commit()
-    return SettingsSavedOut(changed=changed)
-
-
-# --- Notifications ----------------------------------------------------------------------
-
-
-class NotificationsIn(Model):
-    #: The digest of what waits for review, to the admins.
-    admin_general: bool
-    #: Application errors, to the admins.
-    admin_error: bool
-    #: Emails to members about their membership.
-    user_status: bool
-    #: The mail account they come from; empty for the welcome email's.
-    sender: str | None = Field(None, max_length=100)
-
-
-ChannelKey = Literal["admin_general", "admin_error", "user_status"]
-CHANNEL_LABELS = {"admin_general": "Admin review queue", "admin_error": "Admin error queue",
-                  "user_status": "Member status emails"}
-
-
-class ChannelHealth(Model):
-    channel: ChannelKey
-    label: str
-    enabled: bool
-    pending: int
-    #: Kinds held back by their cooldown; empty when everything goes out at once.
-    held_back: list[str]
-    #: ``None``: now.
-    next_send_at: UtcDateTime | None
-    #: After failures, nothing is tried before this.
-    backoff_until: UtcDateTime | None
-    last_failure: str | None
-
-
-class NotificationsOut(NotificationsIn):
-    senders: list[str]
-    health: list[ChannelHealth]
-
-
-@endpoint("GET", "/admin/settings/notifications", response=NotificationsOut, permissions=GENERAL, tag=TAG)
-def admin_settings_notifications():
-    """Which notifications go out, from which account, and how each channel stands."""
-    values = normalize_notification_settings(get_notification_settings_map())
-    health = NotificationService(current_app._get_current_object()).get_health_snapshot()
-    return NotificationsOut(
-        admin_general=values["notification_admin_general_enabled"],
-        admin_error=values["notification_admin_error_enabled"],
-        user_status=values["notification_user_status_enabled"],
-        sender=values["notification_sender"] or None,
-        senders=sections.sender_accounts(),
-        health=[
-            ChannelHealth(channel=channel, label=label, enabled=bool(state.get("enabled")),
-                          pending=state.get("pending_count") or 0,
-                          held_back=list(state.get("throttled_kinds") or []),
-                          next_send_at=state.get("next_allowed_at"),
-                          backoff_until=state.get("failure_backoff_until"),
-                          last_failure=(state.get("last_failure_message") or "")[:300] or None)
-            for channel, label in CHANNEL_LABELS.items()
-            for state in [health.get(channel, {})]
-        ],
-    )
-
-
-@endpoint("PUT", "/admin/settings/notifications", response=SettingsSavedOut, body=NotificationsIn, permissions=GENERAL,
-          tag=TAG)
-def admin_settings_notifications_save(body):
-    """Save which notifications go out, and from which account."""
-    changed = sections.save_notifications(current_user, admin_general=body.admin_general,
-                                                  admin_error=body.admin_error, user_status=body.user_status,
-                                                  sender=body.sender)
     db.session.commit()
     return SettingsSavedOut(changed=changed)
 

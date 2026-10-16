@@ -3,12 +3,13 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Schemas } from '../../../api/client';
+import type { Me } from '../../../api/session';
+import { makeMe } from '../../../test/fixtures';
 import { type Answers, mockFetch, renderPage } from '../../../test/render';
 import { Billing } from './Billing';
 import { Forum } from './Forum';
 import { General } from './General';
-import { MailingSettings } from './MailingSettings';
-import { Notifications } from './Notifications';
+import { Email } from './Email';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -38,15 +39,9 @@ async function sentBody(calls: Request[], method: string, path: string): Promise
 
 const general: Schemas['GeneralOut'] = {
   invoice_payments: false,
-  automatic_emails: true,
-  legal_pdfs_in_welcome_emails: false,
-  welcome_email_sender: 'office',
-  automatic_email_template: 'welcome.html',
   institutional_email_domains: null,
   domains_in_use: ['edu.fh-joanneum.at', 'fh-joanneum.at'],
   staff_domains_in_use: ['fh-joanneum.at'],
-  senders: ['office', 'noreply'],
-  templates: ['welcome.html'],
 };
 
 describe('general', () => {
@@ -61,10 +56,6 @@ describe('general', () => {
 
     expect(await sentBody(calls, 'PUT', `${API}/general`)).toEqual({
       invoice_payments: true,
-      automatic_emails: true,
-      legal_pdfs_in_welcome_emails: false,
-      welcome_email_sender: 'office',
-      automatic_email_template: 'welcome.html',
       institutional_email_domains: null,
     });
     expect(await screen.findByText('Saved.')).toBeInTheDocument();
@@ -90,8 +81,8 @@ describe('general', () => {
         body: {
           error: {
             code: 'settings_invalid',
-            message: 'That sender account does not exist.',
-            fields: { welcome_email_sender: 'That sender account does not exist.' },
+            message: 'Not a domain.',
+            fields: { institutional_email_domains: 'Not a domain.' },
             details: null,
           },
         },
@@ -100,37 +91,97 @@ describe('general', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Save' }));
 
-    expect(await screen.findByText('That sender account does not exist.')).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'From' })).toHaveAttribute('aria-invalid', 'true');
+    expect(await screen.findByText('Not a domain.')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Students' })).toHaveAttribute('aria-invalid', 'true');
   });
 });
 
-describe('notifications', () => {
-  it('each channel, how it stands', async () => {
-    show(<Notifications />, {
-      [`${API}/notifications`]: {
-        body: {
-          admin_general: true,
-          admin_error: true,
-          user_status: false,
-          sender: null,
-          senders: ['office'],
-          health: [
-            {
-              channel: 'admin_general',
-              label: 'Admin review queue',
-              enabled: true,
-              pending: 3,
-              held_back: ['Picture submitted'],
-              next_send_at: null,
-              backoff_until: null,
-              last_failure: null,
-            },
-          ],
-        } satisfies Schemas['NotificationsOut'],
-      },
+const sending: Schemas['SendingOut'] = {
+  automatic_emails: true,
+  legal_pdfs_in_welcome_emails: false,
+  automatic_email_template: 'welcome.html',
+  admin_general: true,
+  admin_error: true,
+  user_status: false,
+  per_hour: 100,
+  per_day: 300,
+  templates: ['welcome.html'],
+  health: [
+    {
+      channel: 'admin_general',
+      label: 'Admin review queue',
+      enabled: true,
+      pending: 3,
+      held_back: ['Picture submitted'],
+      next_send_at: null,
+      backoff_until: null,
+      last_failure: null,
+    },
+  ],
+};
+
+const senders: Schemas['SendersOut'] = {
+  default: '',
+  welcome: '',
+  notifications: '',
+  mailings: '',
+  replies: '',
+  reply_copy: false,
+  accounts: ['office', 'support'],
+  default_in_use: 'office',
+  reply_address: 'office@example.org',
+};
+
+function showEmail(permissions: Me['permissions'], answers: Answers = {}) {
+  return show(<Email />, {
+    '/api/v1/me': { body: makeMe({ permissions }) },
+    [`${API}/email/senders`]: { body: senders },
+    [`${API}/email/sending`]: { body: sending },
+    [`${API}/mail`]: { body: { accounts: [] } },
+    ...answers,
+  });
+}
+
+describe('email', () => {
+  it('which account sends what: a default, each kind empty is the default, the reply copy', async () => {
+    const { calls } = showEmail(['admin.access', 'settings.general'], {
+      [`PUT ${API}/email/senders`]: { body: { changed: ['contact_reply_sender'] } },
     });
 
+    const panel = await screen.findByRole('region', { name: 'Which account sends what' });
+    expect(within(panel).getByRole('combobox', { name: 'Welcome emails' })).toHaveAttribute(
+      'placeholder',
+      'The default (office)',
+    );
+    await userEvent.click(within(panel).getByRole('combobox', { name: 'Replies to contact messages' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'support' }));
+    await userEvent.click(within(panel).getByRole('checkbox', { name: /A copy of each reply/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await sentBody(calls, 'PUT', `${API}/email/senders`)).toEqual({
+      default: '',
+      welcome: '',
+      notifications: '',
+      mailings: '',
+      replies: 'support',
+      reply_copy: true,
+    });
+  });
+
+  it('the accounts and the test only with their permissions', async () => {
+    showEmail(['admin.access', 'settings.general']);
+    expect(await screen.findByRole('tab', { name: 'What goes out' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Accounts' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Test' })).not.toBeInTheDocument();
+  });
+
+  it('what goes out: the welcome email, the notifications, the pace, and each channel', async () => {
+    const user = userEvent.setup();
+    const { calls } = showEmail(['admin.access', 'settings.general'], {
+      [`PUT ${API}/email/sending`]: { body: { changed: ['mailings_per_hour'] } },
+    });
+
+    await user.click(await screen.findByRole('tab', { name: 'What goes out' }));
     const table = await screen.findByRole('table', { name: 'Notification channels' });
     expect(within(table).getAllByRole('row')[1]).toHaveTextContent(
       'Admin review queueOn3Picture submittedNow–',
@@ -138,6 +189,18 @@ describe('notifications', () => {
     expect(
       screen.getByRole('checkbox', { name: 'Emails to members about their membership' }),
     ).not.toBeChecked();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await sentBody(calls, 'PUT', `${API}/email/sending`)).toEqual({
+      automatic_emails: true,
+      legal_pdfs_in_welcome_emails: false,
+      automatic_email_template: 'welcome.html',
+      admin_general: true,
+      admin_error: true,
+      user_status: false,
+      per_hour: 100,
+      per_day: 300,
+    });
   });
 });
 
@@ -238,40 +301,5 @@ describe('forum', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Test the connection' }));
 
     expect(await screen.findByRole('status')).toHaveTextContent('The forum did not answer.');
-  });
-});
-
-describe('mailings', () => {
-  const mailings: Schemas['MailingSettingsOut'] = {
-    sender: '',
-    default_sender: 'office',
-    accounts: ['office', 'support'],
-    per_hour: 100,
-    per_day: 300,
-    reply_sender: '',
-    reply_copy: false,
-    reply_address: 'office@example.org',
-  };
-
-  it('the account replies go out from, and a copy to its own address', async () => {
-    const { calls } = show(<MailingSettings />, {
-      [`${API}/mailings`]: { body: mailings },
-      [`PUT ${API}/mailings`]: { body: { changed: ['contact_reply_sender', 'contact_reply_copy'] } },
-    });
-
-    const replies = await screen.findByRole('region', { name: 'Replies to contact messages' });
-    await userEvent.click(within(replies).getByRole('combobox', { name: 'Mail account' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'support' }));
-    await userEvent.click(within(replies).getByRole('checkbox', { name: /A copy of each reply/ }));
-    expect(within(replies).getByText(/office@example\.org/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-
-    expect(await sentBody(calls, 'PUT', `${API}/mailings`)).toEqual({
-      sender: '',
-      per_hour: 100,
-      per_day: 300,
-      reply_sender: 'support',
-      reply_copy: true,
-    });
   });
 });

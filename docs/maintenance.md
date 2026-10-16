@@ -576,8 +576,8 @@ The plan and what was decided: `docs/messages-plan.md`. Code:
   - Messages are kept on Admin › Messages or the team's Messages page, to be
     marked done.
   - The contact form's are answered with *Reply* on Admin › Messages: sent
-    from the account chosen in Settings › Mailings, *Replies to contact
-    messages* (empty: the mailings' account), optionally with a blind copy to
+    from the account chosen in Settings › Email, *Senders* (*Replies to
+    contact messages*; empty: the default), optionally with a blind copy to
     that account's own address. Answers to a reply arrive in that account's
     mailbox -- set it up in a mail program. A team's messages are answered
     by email.
@@ -590,14 +590,19 @@ The plan and what was decided: `docs/messages-plan.md`. Code:
   mailings** (a team's Messages page, `team.messages`) go to active, paying
   members only, a team's to its active members.
   - Each recipient is a row in `mailing_recipients`, sent by the
-    notification timer (every two minutes) within Settings › Mailings'
-    limits -- per hour and per day, at most 40 a run.
+    notification timer (every two minutes) within the limits on Settings ›
+    Email, *What goes out* -- per hour and per day, at most 40 a run.
   - A send that fails is tried three times, then counted as failed and
     listed on the announcement's page.
   - Three failures in a row end the run: the server is refusing, and the
     next run tries again.
-- **The mail account** for all of these is chosen on Settings › Mailings. It
-  can be a different provider from the notifications'. Its limits belong
+- **Which mail account sends what** is Settings › Email, *Senders*: a
+  default (also the account emails: password reset, confirming an address),
+  and for welcome emails, notifications, announcements and team mailings
+  (with the contact form's messages), and replies to contact messages an
+  account of their own -- each empty is the default
+  (`services/mail_senders.py`). Mailings can go out through a different
+  provider from the notifications'. Its limits belong
   there: Brevo's free plan sends 300 a day, so an invitation to more members
   takes more than a day -- send it early.
 - **News and notices.**

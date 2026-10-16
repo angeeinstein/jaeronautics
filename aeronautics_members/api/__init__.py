@@ -27,6 +27,7 @@ from . import (  # noqa: F401 -- registers their endpoints
     device_owners,
     device_pairings,
     devices,
+    email_settings,
     form_options,
     legal,
     mailings,

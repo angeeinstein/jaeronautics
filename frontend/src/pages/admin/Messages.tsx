@@ -1,7 +1,7 @@
 /**
  * Admin › Messages: what came through the contact form (docs/messages-plan.md),
  * for everybody who receives it (messages.receive). Answered here -- sent from
- * the mail account chosen for replies in Settings › Mailings, not one's own
+ * the mail account chosen for replies in Settings › Email, not one's own
  * mailbox -- and then done. Data: GET /api/v1/admin/messages, PUT .../<id>,
  * POST .../<id>/replies.
  */
@@ -46,7 +46,7 @@ export function Messages() {
       />
       <Text size="sm" c="dimmed" mt="lg">
         Every admin receives these by email. Their answers to a reply arrive in the replies&apos; mailbox
-        (Settings › Mailings). Messages done are deleted after a year, with their answers.
+        (Settings › Email). Messages done are deleted after a year, with their answers.
       </Text>
     </>
   );

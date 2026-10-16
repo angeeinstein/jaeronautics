@@ -1757,6 +1757,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/settings/email/senders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Which mail account sends what. */
+        get: operations["admin_email_senders"];
+        /** Choose the default account, and an account of its own for each kind of email. */
+        put: operations["admin_email_senders_save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/email/sending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The welcome email, which notifications go out and how each channel stands, the mailings' pace. */
+        get: operations["admin_email_sending"];
+        /** Save what goes out: the welcome email, the notifications, the mailings' pace. */
+        put: operations["admin_email_sending_save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/settings/forum": {
         parameters: {
             query?: never;
@@ -1799,7 +1835,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Invoices, automatic emails, the welcome email and the students' and staff's email domains. */
+        /** Paying by invoice, and the students' and staff's email domains. Email is */
         get: operations["admin_settings_general"];
         /** Save the general settings: only these, whatever else there is. */
         put: operations["admin_settings_general_save"];
@@ -1975,42 +2011,6 @@ export interface paths {
         put?: never;
         /** Accounts from a JSON file: this portal's export, the older mapping, or a list of accounts. */
         post: operations["admin_mail_import"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/settings/mailings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The account mailings and messages are sent from, how many an hour and a day, */
-        get: operations["admin_settings_mailings"];
-        /** Choose the account mailings are sent from, and the provider's limits. */
-        put: operations["admin_settings_mailings_save"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/settings/notifications": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Which notifications go out, from which account, and how each channel stands. */
-        get: operations["admin_settings_notifications"];
-        /** Save which notifications go out, and from which account. */
-        put: operations["admin_settings_notifications_save"];
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4987,8 +4987,8 @@ export interface components {
         };
         /** DeletedOut */
         DeletedOut: {
-            /** Removed Welcome Sender */
-            removed_welcome_sender: boolean;
+            /** Cleared Senders */
+            cleared_senders: string[];
         };
         /**
          * DeletionOut
@@ -6158,41 +6158,20 @@ export interface components {
         /** GeneralIn */
         GeneralIn: {
             /**
-             * Automatic Email Template
-             * @default null
-             */
-            automatic_email_template?: string | null;
-            /** Automatic Emails */
-            automatic_emails: boolean;
-            /**
              * Institutional Email Domains
              * @default null
              */
             institutional_email_domains?: string | null;
             /** Invoice Payments */
             invoice_payments: boolean;
-            /** Legal Pdfs In Welcome Emails */
-            legal_pdfs_in_welcome_emails: boolean;
             /**
              * Staff Email Domains
              * @default null
              */
             staff_email_domains?: string | null;
-            /**
-             * Welcome Email Sender
-             * @default null
-             */
-            welcome_email_sender?: string | null;
         };
         /** GeneralOut */
         GeneralOut: {
-            /**
-             * Automatic Email Template
-             * @default null
-             */
-            automatic_email_template?: string | null;
-            /** Automatic Emails */
-            automatic_emails: boolean;
             /** Domains In Use */
             domains_in_use: string[];
             /**
@@ -6202,10 +6181,6 @@ export interface components {
             institutional_email_domains?: string | null;
             /** Invoice Payments */
             invoice_payments: boolean;
-            /** Legal Pdfs In Welcome Emails */
-            legal_pdfs_in_welcome_emails: boolean;
-            /** Senders */
-            senders: string[];
             /** Staff Domains In Use */
             staff_domains_in_use: string[];
             /**
@@ -6213,13 +6188,6 @@ export interface components {
              * @default null
              */
             staff_email_domains?: string | null;
-            /** Templates */
-            templates: string[];
-            /**
-             * Welcome Email Sender
-             * @default null
-             */
-            welcome_email_sender?: string | null;
         };
         /** GoOnOut */
         GoOnOut: {
@@ -6860,52 +6828,6 @@ export interface components {
             /** Waiting */
             waiting: number;
         };
-        /** MailingSettingsIn */
-        MailingSettingsIn: {
-            /** Per Day */
-            per_day: number;
-            /** Per Hour */
-            per_hour: number;
-            /**
-             * Reply Copy
-             * @default null
-             */
-            reply_copy?: boolean | null;
-            /**
-             * Reply Sender
-             * @default null
-             */
-            reply_sender?: string | null;
-            /**
-             * Sender
-             * @default
-             */
-            sender?: string;
-        };
-        /** MailingSettingsOut */
-        MailingSettingsOut: {
-            /** Accounts */
-            accounts: string[];
-            /** Default Sender */
-            default_sender: string;
-            /** Per Day */
-            per_day: number;
-            /** Per Hour */
-            per_hour: number;
-            /** Reply Address */
-            reply_address: string;
-            /** Reply Copy */
-            reply_copy: boolean;
-            /** Reply Sender */
-            reply_sender: string;
-            /** Sender */
-            sender: string;
-        };
-        /** MailingSettingsSavedOut */
-        MailingSettingsSavedOut: {
-            /** Changed */
-            changed: string[];
-        };
         /** MakeIn */
         MakeIn: {
             /** Key */
@@ -7434,38 +7356,6 @@ export interface components {
              * @enum {string}
              */
             tone: "info" | "warning" | "danger";
-        };
-        /** NotificationsIn */
-        NotificationsIn: {
-            /** Admin Error */
-            admin_error: boolean;
-            /** Admin General */
-            admin_general: boolean;
-            /**
-             * Sender
-             * @default null
-             */
-            sender?: string | null;
-            /** User Status */
-            user_status: boolean;
-        };
-        /** NotificationsOut */
-        NotificationsOut: {
-            /** Admin Error */
-            admin_error: boolean;
-            /** Admin General */
-            admin_general: boolean;
-            /** Health */
-            health: components["schemas"]["ChannelHealth"][];
-            /**
-             * Sender
-             * @default null
-             */
-            sender?: string | null;
-            /** Senders */
-            senders: string[];
-            /** User Status */
-            user_status: boolean;
         };
         /**
          * NowOut
@@ -8370,6 +8260,108 @@ export interface components {
             /** Team Slug */
             team_slug: string | null;
         };
+        /** SendersIn */
+        SendersIn: {
+            /**
+             * Default
+             * @default
+             */
+            default?: string;
+            /**
+             * Mailings
+             * @default
+             */
+            mailings?: string;
+            /**
+             * Notifications
+             * @default
+             */
+            notifications?: string;
+            /**
+             * Replies
+             * @default
+             */
+            replies?: string;
+            /**
+             * Reply Copy
+             * @default false
+             */
+            reply_copy?: boolean;
+            /**
+             * Welcome
+             * @default
+             */
+            welcome?: string;
+        };
+        /** SendersOut */
+        SendersOut: {
+            /** Accounts */
+            accounts: string[];
+            /** Default */
+            default: string;
+            /** Default In Use */
+            default_in_use: string;
+            /** Mailings */
+            mailings: string;
+            /** Notifications */
+            notifications: string;
+            /** Replies */
+            replies: string;
+            /** Reply Address */
+            reply_address: string;
+            /** Reply Copy */
+            reply_copy: boolean;
+            /** Welcome */
+            welcome: string;
+        };
+        /** SendingIn */
+        SendingIn: {
+            /** Admin Error */
+            admin_error: boolean;
+            /** Admin General */
+            admin_general: boolean;
+            /**
+             * Automatic Email Template
+             * @default null
+             */
+            automatic_email_template?: string | null;
+            /** Automatic Emails */
+            automatic_emails: boolean;
+            /** Legal Pdfs In Welcome Emails */
+            legal_pdfs_in_welcome_emails: boolean;
+            /** Per Day */
+            per_day: number;
+            /** Per Hour */
+            per_hour: number;
+            /** User Status */
+            user_status: boolean;
+        };
+        /** SendingOut */
+        SendingOut: {
+            /** Admin Error */
+            admin_error: boolean;
+            /** Admin General */
+            admin_general: boolean;
+            /**
+             * Automatic Email Template
+             * @default null
+             */
+            automatic_email_template?: string | null;
+            /** Automatic Emails */
+            automatic_emails: boolean;
+            /** Health */
+            health: components["schemas"]["ChannelHealth"][];
+            /** Legal Pdfs In Welcome Emails */
+            legal_pdfs_in_welcome_emails: boolean;
+            /** Per Day */
+            per_day: number;
+            /** Per Hour */
+            per_hour: number;
+            /** Templates */
+            templates: string[];
+            /** User Status */
+            user_status: boolean;
+        };
         /** SentOut */
         SentOut: {
             /** Ok */
@@ -8381,6 +8373,11 @@ export interface components {
             csrf_token: string;
             /** Signed In */
             signed_in: boolean;
+        };
+        /** SettingsChangedOut */
+        SettingsChangedOut: {
+            /** Changed */
+            changed: string[];
         };
         /** SettingsSavedOut */
         SettingsSavedOut: {
@@ -15957,6 +15954,202 @@ export interface operations {
             };
         };
     };
+    admin_email_senders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SendersOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_email_senders_save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendersIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsChangedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_email_sending: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SendingOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_email_sending_save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendingIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsChangedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     admin_settings_forum: {
         parameters: {
             query?: never;
@@ -16771,202 +16964,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImportOut"];
-                };
-            };
-            /** @description The input is not valid (see error.fields). */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Not signed in. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Signed in, without the permission. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Not possible in the current state. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-        };
-    };
-    admin_settings_mailings: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MailingSettingsOut"];
-                };
-            };
-            /** @description Not signed in. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Signed in, without the permission. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-        };
-    };
-    admin_settings_mailings_save: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MailingSettingsIn"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MailingSettingsSavedOut"];
-                };
-            };
-            /** @description The input is not valid (see error.fields). */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Not signed in. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Signed in, without the permission. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Not possible in the current state. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-        };
-    };
-    admin_settings_notifications: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationsOut"];
-                };
-            };
-            /** @description Not signed in. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Signed in, without the permission. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-        };
-    };
-    admin_settings_notifications_save: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NotificationsIn"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SettingsSavedOut"];
                 };
             };
             /** @description The input is not valid (see error.fields). */

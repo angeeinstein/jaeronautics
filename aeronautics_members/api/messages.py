@@ -97,7 +97,7 @@ class ContactMessageOut(Model):
 class ContactMessagesOut(Model):
     items: list[ContactMessageOut]
     open_count: int
-    #: The address answers written here go out from (Settings › Mailings).
+    #: The address answers written here go out from (Settings › Email, Senders).
     reply_from: str | None
 
 

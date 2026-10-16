@@ -324,10 +324,8 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/admin/settings/General')).General }),
           },
           {
-            path: 'settings/notifications',
-            lazy: async () => ({
-              Component: (await import('../pages/admin/settings/Notifications')).Notifications,
-            }),
+            path: 'settings/email',
+            lazy: async () => ({ Component: (await import('../pages/admin/settings/Email')).Email }),
           },
           {
             path: 'settings/billing',
@@ -340,24 +338,8 @@ export const routes: RouteObject[] = [
             }),
           },
           {
-            path: 'settings/mailings',
-            lazy: async () => ({
-              Component: (await import('../pages/admin/settings/MailingSettings')).MailingSettings,
-            }),
-          },
-          {
             path: 'settings/forum',
             lazy: async () => ({ Component: (await import('../pages/admin/settings/Forum')).Forum }),
-          },
-          {
-            path: 'settings/mail',
-            lazy: async () => ({
-              Component: (await import('../pages/admin/settings/MailAccounts')).MailAccounts,
-            }),
-          },
-          {
-            path: 'settings/test-email',
-            lazy: async () => ({ Component: (await import('../pages/admin/settings/TestEmail')).TestEmail }),
           },
           {
             path: 'settings/devices',

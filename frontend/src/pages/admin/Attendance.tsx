@@ -2,7 +2,7 @@
  * Admin › Attendance (docs/attendance-plan.md): the association's attendance
  * readers -- any active member checks in there. Who is checked in now, hours
  * per person for a period, a person's stays and their corrections, a CSV, and
- * the switch (also in Settings › General). A team's attendance is on its own
+ * the switch. Always in the admin menu. A team's attendance is on its own
  * pages. Data: /api/v1/admin/attendance (aeronautics_members/api/attendance.py).
  */
 import { api, call } from '../../api/client';

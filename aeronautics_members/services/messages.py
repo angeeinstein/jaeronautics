@@ -10,7 +10,7 @@ somebody answers.
 
 The contact form's messages are also answered from the portal (``reply``):
 written in Admin › Messages, emailed to the sender from the mail account
-chosen for replies (Settings › Mailings) -- a *support* address, not an
+chosen for replies (Settings › Email, Senders) -- a *support* address, not an
 admin's own -- with, if chosen there, a blind copy to that address, so the
 conversation is complete in its mailbox. The person's answer goes to that
 mailbox, read in a mail program. Messages to a team's leads are answered by
@@ -257,7 +257,7 @@ def _send_reply(reply):
 
     message = reply.message
     reply.attempts += 1
-    copy = mailings.account_address(reply.account_key) if mailings.settings()["reply_copy"] else ""
+    copy = mailings.account_address(reply.account_key) if mailings.reply_copy() else ""
     written = local_time(message.created_at)
     sent, error = send_mail(
         from_account=reply.account_key,
@@ -288,7 +288,7 @@ def reply(actor, message, body):
     text = _clean(body, "body", BODY_MAX, what="An answer")
     account = mailings.reply_account()
     if not account:
-        raise ValidationError("No mail account to send from (Settings › Mail accounts).", code="reply_no_account")
+        raise ValidationError("No mail account to send from (Settings › Email, Accounts).", code="reply_no_account")
     answer = ContactReply(message=message, author_user_id=actor.id if actor else None, body=text,
                           account_key=account)
     db.session.add(answer)

@@ -4502,13 +4502,16 @@
       "DeletedOut": {
         "additionalProperties": false,
         "properties": {
-          "removed_welcome_sender": {
-            "title": "Removed Welcome Sender",
-            "type": "boolean"
+          "cleared_senders": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cleared Senders",
+            "type": "array"
           }
         },
         "required": [
-          "removed_welcome_sender"
+          "cleared_senders"
         ],
         "title": "DeletedOut",
         "type": "object"
@@ -8024,23 +8027,6 @@
       "GeneralIn": {
         "additionalProperties": false,
         "properties": {
-          "automatic_email_template": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Automatic Email Template"
-          },
-          "automatic_emails": {
-            "title": "Automatic Emails",
-            "type": "boolean"
-          },
           "institutional_email_domains": {
             "anyOf": [
               {
@@ -8058,10 +8044,6 @@
             "title": "Invoice Payments",
             "type": "boolean"
           },
-          "legal_pdfs_in_welcome_emails": {
-            "title": "Legal Pdfs In Welcome Emails",
-            "type": "boolean"
-          },
           "staff_email_domains": {
             "anyOf": [
               {
@@ -8074,25 +8056,10 @@
             ],
             "default": null,
             "title": "Staff Email Domains"
-          },
-          "welcome_email_sender": {
-            "anyOf": [
-              {
-                "maxLength": 100,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Welcome Email Sender"
           }
         },
         "required": [
-          "invoice_payments",
-          "automatic_emails",
-          "legal_pdfs_in_welcome_emails"
+          "invoice_payments"
         ],
         "title": "GeneralIn",
         "type": "object"
@@ -8100,23 +8067,6 @@
       "GeneralOut": {
         "additionalProperties": false,
         "properties": {
-          "automatic_email_template": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Automatic Email Template"
-          },
-          "automatic_emails": {
-            "title": "Automatic Emails",
-            "type": "boolean"
-          },
           "domains_in_use": {
             "items": {
               "type": "string"
@@ -8141,17 +8091,6 @@
             "title": "Invoice Payments",
             "type": "boolean"
           },
-          "legal_pdfs_in_welcome_emails": {
-            "title": "Legal Pdfs In Welcome Emails",
-            "type": "boolean"
-          },
-          "senders": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Senders",
-            "type": "array"
-          },
           "staff_domains_in_use": {
             "items": {
               "type": "string"
@@ -8171,36 +8110,12 @@
             ],
             "default": null,
             "title": "Staff Email Domains"
-          },
-          "templates": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Templates",
-            "type": "array"
-          },
-          "welcome_email_sender": {
-            "anyOf": [
-              {
-                "maxLength": 100,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Welcome Email Sender"
           }
         },
         "required": [
           "invoice_payments",
-          "automatic_emails",
-          "legal_pdfs_in_welcome_emails",
           "domains_in_use",
-          "staff_domains_in_use",
-          "senders",
-          "templates"
+          "staff_domains_in_use"
         ],
         "title": "GeneralOut",
         "type": "object"
@@ -10100,125 +10015,6 @@
         "title": "MailingOut",
         "type": "object"
       },
-      "MailingSettingsIn": {
-        "additionalProperties": false,
-        "properties": {
-          "per_day": {
-            "minimum": 1,
-            "title": "Per Day",
-            "type": "integer"
-          },
-          "per_hour": {
-            "minimum": 1,
-            "title": "Per Hour",
-            "type": "integer"
-          },
-          "reply_copy": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Reply Copy"
-          },
-          "reply_sender": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Reply Sender"
-          },
-          "sender": {
-            "default": "",
-            "title": "Sender",
-            "type": "string"
-          }
-        },
-        "required": [
-          "per_hour",
-          "per_day"
-        ],
-        "title": "MailingSettingsIn",
-        "type": "object"
-      },
-      "MailingSettingsOut": {
-        "additionalProperties": false,
-        "properties": {
-          "accounts": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Accounts",
-            "type": "array"
-          },
-          "default_sender": {
-            "title": "Default Sender",
-            "type": "string"
-          },
-          "per_day": {
-            "title": "Per Day",
-            "type": "integer"
-          },
-          "per_hour": {
-            "title": "Per Hour",
-            "type": "integer"
-          },
-          "reply_address": {
-            "title": "Reply Address",
-            "type": "string"
-          },
-          "reply_copy": {
-            "title": "Reply Copy",
-            "type": "boolean"
-          },
-          "reply_sender": {
-            "title": "Reply Sender",
-            "type": "string"
-          },
-          "sender": {
-            "title": "Sender",
-            "type": "string"
-          }
-        },
-        "required": [
-          "sender",
-          "default_sender",
-          "accounts",
-          "per_hour",
-          "per_day",
-          "reply_sender",
-          "reply_copy",
-          "reply_address"
-        ],
-        "title": "MailingSettingsOut",
-        "type": "object"
-      },
-      "MailingSettingsSavedOut": {
-        "additionalProperties": false,
-        "properties": {
-          "changed": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Changed",
-            "type": "array"
-          }
-        },
-        "required": [
-          "changed"
-        ],
-        "title": "MailingSettingsSavedOut",
-        "type": "object"
-      },
       "MakeIn": {
         "additionalProperties": false,
         "properties": {
@@ -11830,96 +11626,6 @@
           "message"
         ],
         "title": "Notice",
-        "type": "object"
-      },
-      "NotificationsIn": {
-        "additionalProperties": false,
-        "properties": {
-          "admin_error": {
-            "title": "Admin Error",
-            "type": "boolean"
-          },
-          "admin_general": {
-            "title": "Admin General",
-            "type": "boolean"
-          },
-          "sender": {
-            "anyOf": [
-              {
-                "maxLength": 100,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Sender"
-          },
-          "user_status": {
-            "title": "User Status",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "admin_general",
-          "admin_error",
-          "user_status"
-        ],
-        "title": "NotificationsIn",
-        "type": "object"
-      },
-      "NotificationsOut": {
-        "additionalProperties": false,
-        "properties": {
-          "admin_error": {
-            "title": "Admin Error",
-            "type": "boolean"
-          },
-          "admin_general": {
-            "title": "Admin General",
-            "type": "boolean"
-          },
-          "health": {
-            "items": {
-              "$ref": "#/components/schemas/ChannelHealth"
-            },
-            "title": "Health",
-            "type": "array"
-          },
-          "sender": {
-            "anyOf": [
-              {
-                "maxLength": 100,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Sender"
-          },
-          "senders": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Senders",
-            "type": "array"
-          },
-          "user_status": {
-            "title": "User Status",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "admin_general",
-          "admin_error",
-          "user_status",
-          "senders",
-          "health"
-        ],
-        "title": "NotificationsOut",
         "type": "object"
       },
       "NowOut": {
@@ -14745,6 +14451,239 @@
         "title": "SellerSalesOut",
         "type": "object"
       },
+      "SendersIn": {
+        "additionalProperties": false,
+        "properties": {
+          "default": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Default",
+            "type": "string"
+          },
+          "mailings": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Mailings",
+            "type": "string"
+          },
+          "notifications": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Notifications",
+            "type": "string"
+          },
+          "replies": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Replies",
+            "type": "string"
+          },
+          "reply_copy": {
+            "default": false,
+            "title": "Reply Copy",
+            "type": "boolean"
+          },
+          "welcome": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Welcome",
+            "type": "string"
+          }
+        },
+        "title": "SendersIn",
+        "type": "object"
+      },
+      "SendersOut": {
+        "additionalProperties": false,
+        "properties": {
+          "accounts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Accounts",
+            "type": "array"
+          },
+          "default": {
+            "title": "Default",
+            "type": "string"
+          },
+          "default_in_use": {
+            "title": "Default In Use",
+            "type": "string"
+          },
+          "mailings": {
+            "title": "Mailings",
+            "type": "string"
+          },
+          "notifications": {
+            "title": "Notifications",
+            "type": "string"
+          },
+          "replies": {
+            "title": "Replies",
+            "type": "string"
+          },
+          "reply_address": {
+            "title": "Reply Address",
+            "type": "string"
+          },
+          "reply_copy": {
+            "title": "Reply Copy",
+            "type": "boolean"
+          },
+          "welcome": {
+            "title": "Welcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "default",
+          "welcome",
+          "notifications",
+          "mailings",
+          "replies",
+          "reply_copy",
+          "accounts",
+          "default_in_use",
+          "reply_address"
+        ],
+        "title": "SendersOut",
+        "type": "object"
+      },
+      "SendingIn": {
+        "additionalProperties": false,
+        "properties": {
+          "admin_error": {
+            "title": "Admin Error",
+            "type": "boolean"
+          },
+          "admin_general": {
+            "title": "Admin General",
+            "type": "boolean"
+          },
+          "automatic_email_template": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Automatic Email Template"
+          },
+          "automatic_emails": {
+            "title": "Automatic Emails",
+            "type": "boolean"
+          },
+          "legal_pdfs_in_welcome_emails": {
+            "title": "Legal Pdfs In Welcome Emails",
+            "type": "boolean"
+          },
+          "per_day": {
+            "minimum": 1,
+            "title": "Per Day",
+            "type": "integer"
+          },
+          "per_hour": {
+            "minimum": 1,
+            "title": "Per Hour",
+            "type": "integer"
+          },
+          "user_status": {
+            "title": "User Status",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "automatic_emails",
+          "legal_pdfs_in_welcome_emails",
+          "admin_general",
+          "admin_error",
+          "user_status",
+          "per_hour",
+          "per_day"
+        ],
+        "title": "SendingIn",
+        "type": "object"
+      },
+      "SendingOut": {
+        "additionalProperties": false,
+        "properties": {
+          "admin_error": {
+            "title": "Admin Error",
+            "type": "boolean"
+          },
+          "admin_general": {
+            "title": "Admin General",
+            "type": "boolean"
+          },
+          "automatic_email_template": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Automatic Email Template"
+          },
+          "automatic_emails": {
+            "title": "Automatic Emails",
+            "type": "boolean"
+          },
+          "health": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelHealth"
+            },
+            "title": "Health",
+            "type": "array"
+          },
+          "legal_pdfs_in_welcome_emails": {
+            "title": "Legal Pdfs In Welcome Emails",
+            "type": "boolean"
+          },
+          "per_day": {
+            "minimum": 1,
+            "title": "Per Day",
+            "type": "integer"
+          },
+          "per_hour": {
+            "minimum": 1,
+            "title": "Per Hour",
+            "type": "integer"
+          },
+          "templates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Templates",
+            "type": "array"
+          },
+          "user_status": {
+            "title": "User Status",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "automatic_emails",
+          "legal_pdfs_in_welcome_emails",
+          "admin_general",
+          "admin_error",
+          "user_status",
+          "per_hour",
+          "per_day",
+          "templates",
+          "health"
+        ],
+        "title": "SendingOut",
+        "type": "object"
+      },
       "SentOut": {
         "additionalProperties": false,
         "properties": {
@@ -14776,6 +14715,23 @@
           "csrf_token"
         ],
         "title": "SessionOut",
+        "type": "object"
+      },
+      "SettingsChangedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "changed"
+        ],
+        "title": "SettingsChangedOut",
         "type": "object"
       },
       "SettingsSavedOut": {
@@ -26572,6 +26528,238 @@
         ]
       }
     },
+    "/api/v1/admin/settings/email/senders": {
+      "get": {
+        "operationId": "admin_email_senders",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendersOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "Which mail account sends what.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.general"
+        ]
+      },
+      "put": {
+        "operationId": "admin_email_senders_save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendersIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsChangedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Choose the default account, and an account of its own for each kind of email.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.general"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/email/sending": {
+      "get": {
+        "operationId": "admin_email_sending",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendingOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "The welcome email, which notifications go out and how each channel stands, the mailings' pace.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.general"
+        ]
+      },
+      "put": {
+        "operationId": "admin_email_sending_save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendingIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsChangedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Save what goes out: the welcome email, the notifications, the mailings' pace.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.general"
+        ]
+      }
+    },
     "/api/v1/admin/settings/forum": {
       "get": {
         "operationId": "admin_settings_forum",
@@ -26777,7 +26965,7 @@
             "description": "Signed in, without the permission."
           }
         },
-        "summary": "Invoices, automatic emails, the welcome email and the students' and staff's email domains.",
+        "summary": "Paying by invoice, and the students' and staff's email domains. Email is",
         "tags": [
           "Admin"
         ],
@@ -27629,238 +27817,6 @@
         ],
         "x-permissions": [
           "settings.credentials"
-        ]
-      }
-    },
-    "/api/v1/admin/settings/mailings": {
-      "get": {
-        "operationId": "admin_settings_mailings",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MailingSettingsOut"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "Not signed in."
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "Signed in, without the permission."
-          }
-        },
-        "summary": "The account mailings and messages are sent from, how many an hour and a day,",
-        "tags": [
-          "Admin"
-        ],
-        "x-permissions": [
-          "settings.general"
-        ]
-      },
-      "put": {
-        "operationId": "admin_settings_mailings_save",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MailingSettingsIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MailingSettingsSavedOut"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "The input is not valid (see error.fields)."
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "Not signed in."
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "Signed in, without the permission."
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "Not possible in the current state."
-          }
-        },
-        "summary": "Choose the account mailings are sent from, and the provider's limits.",
-        "tags": [
-          "Admin"
-        ],
-        "x-permissions": [
-          "settings.general"
-        ]
-      }
-    },
-    "/api/v1/admin/settings/notifications": {
-      "get": {
-        "operationId": "admin_settings_notifications",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotificationsOut"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "Not signed in."
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "Signed in, without the permission."
-          }
-        },
-        "summary": "Which notifications go out, from which account, and how each channel stands.",
-        "tags": [
-          "Admin"
-        ],
-        "x-permissions": [
-          "settings.general"
-        ]
-      },
-      "put": {
-        "operationId": "admin_settings_notifications_save",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NotificationsIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SettingsSavedOut"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "The input is not valid (see error.fields)."
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "Not signed in."
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "Signed in, without the permission."
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            },
-            "description": "Not possible in the current state."
-          }
-        },
-        "summary": "Save which notifications go out, and from which account.",
-        "tags": [
-          "Admin"
-        ],
-        "x-permissions": [
-          "settings.general"
         ]
       }
     },

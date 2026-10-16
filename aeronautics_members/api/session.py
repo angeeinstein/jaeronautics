@@ -112,7 +112,7 @@ class MeOut(Model):
     #: the association), "data" while only their stays are kept -- then it is
     #: reached from Privacy and data.
     attendance_area: Literal["menu", "data"] | None = None
-    #: Admin › Attendance: the association's readers, while on or with stays.
+    #: Admin › Attendance, for whoever runs the teams: always in the menu.
     attendance_admin: bool = False
     team_labels: TeamLabels
     counts: Counts
@@ -180,11 +180,9 @@ def _attendance_area():
 
 
 def _attendance_admin():
-    from ..services import attendance
-
-    if not current_user.can(Permission.TEAMS_MANAGE):
-        return False
-    return attendance.enabled(None) or bool(attendance.stays(None))
+    """Admin › Attendance: always in the menu of whoever runs the teams -- its
+    switch is there, as a team's is on its own Attendance page."""
+    return current_user.can(Permission.TEAMS_MANAGE)
 
 
 def _cards_area():

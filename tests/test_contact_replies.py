@@ -9,7 +9,7 @@ import pytest
 
 from conftest import db
 from aeronautics_members.db_models import AuditLog, ContactReply, MailAccount
-from aeronautics_members.services import mailings, messages
+from aeronautics_members.services import mail_senders, messages
 from aeronautics_members.services.privacy import erase_account, export_account_data
 from api_helpers import send
 from test_messages import FORM, _verified, admins  # noqa: F401
@@ -58,7 +58,8 @@ def written(app, admins, accounts, mail):  # noqa: F811
 
 
 def _reply_settings(sender="support", copy=False):
-    mailings.save_settings(None, sender="office", per_hour=100, per_day=300, reply_sender=sender, reply_copy=copy)
+    mail_senders.save(None, default="", welcome="", notifications="", mailings="office", replies=sender,
+                      reply_copy=copy)
     db.session.commit()
 
 
@@ -133,30 +134,6 @@ class TestAnswering:
         _login(client, _verified(_association_member("bob@example.com")).id)
         response = send(client, "POST", f"/api/v1/admin/messages/{written.id}/replies", {"body": "Yes."})
         assert response.status_code == 403 and not mail
-
-
-class TestTheSetting:
-    def test_chosen_on_the_mailings_settings_page(self, client, admins, accounts):  # noqa: F811
-        _login(client, admins[0].id)
-        url = "/api/v1/admin/settings/mailings"
-        page = client.get(url).get_json()
-        assert (page["reply_sender"], page["reply_copy"]) == ("", False)
-
-        refused = send(client, "PUT", url, {"sender": "", "per_hour": 100, "per_day": 300,
-                                            "reply_sender": "nonsense"})
-        assert refused.status_code == 400
-
-        saved = send(client, "PUT", url, {"sender": "", "per_hour": 100, "per_day": 300,
-                                          "reply_sender": "support", "reply_copy": True})
-        assert saved.status_code == 200, saved.get_json()
-        page = client.get(url).get_json()
-        assert (page["reply_sender"], page["reply_copy"], page["reply_address"]) == (
-            "support", True, "support@example.org")
-
-    def test_saving_the_mailings_alone_keeps_the_reply_settings(self, app, accounts):
-        _reply_settings(copy=True)
-        mailings.save_settings(None, sender="", per_hour=50, per_day=300)
-        assert (mailings.settings()["reply_sender"], mailings.settings()["reply_copy"]) == ("support", True)
 
 
 class TestTheirData:

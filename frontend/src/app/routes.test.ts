@@ -39,7 +39,9 @@ describe('the pages the app draws', () => {
     ['/admin/money/rocket/transfer-code.svg', false],
     ['/admin/logs?user=12', true],
     ['/admin/settings/forum', true],
-    ['/admin/settings/mail', true],
+    ['/admin/settings/email', true],
+    // Taken over by Settings › Email: Flask sends it to the tab.
+    ['/admin/settings/mail', false],
     ['/admin/settings/updates', true],
     ['/admin/settings#backup-restore', true],
     ['/admin/settings/backup', true],

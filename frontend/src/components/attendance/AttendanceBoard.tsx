@@ -430,7 +430,7 @@ function HereNow({ present }: { present: Overview['present'] }) {
   );
 }
 
-export function SwitchPanel({
+function SwitchPanel({
   api,
   enabled,
   where,
@@ -470,17 +470,6 @@ export function SwitchPanel({
       </Stack>
     </Panel>
   );
-}
-
-/** The switch alone, where settings are: Admin › Settings › General for the association. */
-export function AttendanceSwitch({ api, where }: { api: AttendanceApi; where: string }) {
-  const { start, end } = periodOf('month');
-  const overview = useQuery({
-    queryKey: [...api.key, 'overview', start, end],
-    queryFn: () => api.overview(start, end),
-  });
-  if (!overview.data) return null;
-  return <SwitchPanel api={api} enabled={overview.data.enabled} where={where} />;
 }
 
 export function AttendanceBoard({ api, where }: { api: AttendanceApi; where: string }) {

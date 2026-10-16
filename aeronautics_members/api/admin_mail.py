@@ -89,17 +89,18 @@ def admin_mail_account_change(account_id, body):
 
 
 class DeletedOut(Model):
-    #: It was the welcome email's sender: no welcome email until another is chosen.
-    removed_welcome_sender: bool
+    #: What it was chosen to send (Settings › Email, Senders): "default", "welcome",
+    #: "notifications", "mailings", "replies". That goes out from the default now.
+    cleared_senders: list[str]
 
 
 @endpoint("DELETE", "/admin/settings/mail/accounts/<int:account_id>", response=DeletedOut,
           permissions=CREDENTIALS, tag=TAG)
 def admin_mail_account_delete(account_id):
     """Remove an account."""
-    removed = mail.delete(current_user, account_id)
+    cleared = mail.delete(current_user, account_id)
     db.session.commit()
-    return DeletedOut(removed_welcome_sender=removed)
+    return DeletedOut(cleared_senders=cleared)
 
 
 class ConnectionOut(Model):

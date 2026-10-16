@@ -90,8 +90,9 @@ team's members earn ECTS and must be there for a number of hours.
     period, the switch. In the side menu under People while on, under
     Settings while off.
   - Admin › Attendance (`/admin/attendance`, for whoever runs the teams):
-    the same for the association's readers; in the side menu while it is on
-    or stays are kept. Its switch is also in Settings › General.
+    the same for the association's readers, always in the admin menu, with
+    its switch on the page -- as a team's is (changed 2026-10-16: "more
+    consistent if we have this sidebar menu for attendance always shown").
 - **Corrections** are written to the log (`attendance_stay_added`,
   `_changed`, `_deleted`, `attendance_switched`), with the stay before and
   after.

@@ -11,7 +11,7 @@ import re
 
 from sqlalchemy.exc import IntegrityError
 
-from ..db_models import MailAccount, Setting, db
+from ..db_models import MailAccount, db
 from . import ConflictError, NotFoundError, PermissionError_, ValidationError
 from .audit import log_audit_event, snapshot_mail_account_for_audit
 from .notifications import (
@@ -84,19 +84,18 @@ def save(actor, account_id, *, key, host, port, username, password, starttls, fr
 
 
 def delete(actor, account_id):
-    """Remove an account. Welcome emails sent from it stop until another sender is chosen;
-    whether that happened is answered."""
+    """Remove an account. What it was chosen to send (Settings › Email, Senders)
+    goes out from the default from now on; those kinds are answered."""
+    from .mail_senders import forget_account
+
     account = _get(account_id)
-    welcome = db.session.get(Setting, "welcome_email_sender")
-    removed_welcome_sender = welcome is not None and welcome.value == account.account_key
-    if removed_welcome_sender:
-        db.session.delete(welcome)
+    cleared = forget_account(account.account_key)
     log_audit_event("settings", "mail_account_deleted", actor_user=actor, target_user=actor,
                     before=snapshot_mail_account_for_audit(account),
                     metadata={"mail_account_id": account.id, "account_key": account.account_key,
-                              "removed_welcome_sender": removed_welcome_sender})
+                              "cleared_senders": cleared})
     db.session.delete(account)
-    return removed_welcome_sender
+    return cleared
 
 
 def test_connection(actor, account_id):

@@ -17,8 +17,8 @@ teams, or all team leads.
 
 **Sending.** A mailing becomes one row per recipient, sent by the
 notification timer every two minutes, as many at a time as the provider
-allows (Settings › Mailings: the mail account, and how many per hour and
-per day). A failed send is tried again twice. The mailing keeps its counts;
+allows (Settings › Email: the mail account under Senders, how many per hour
+and per day under What goes out). A failed send is tried again twice. The mailing keeps its counts;
 the recipient rows are forgotten a year later.
 
 **The general assembly.** Statutes § 10 (3): every member is invited at
@@ -33,7 +33,7 @@ from markdown_it import MarkdownIt
 from markupsafe import Markup
 
 from ..db_models import Mailing, MailingRecipient, Member, Team, TeamMembership, User, db
-from ..mail_utils import load_mail_accounts_config, send_mail
+from ..mail_utils import send_mail
 from ..member_categories import CATEGORY_LABELS, CATEGORY_ORDER
 from ..security_utils import build_public_url
 from . import NotFoundError, ValidationError
@@ -61,15 +61,10 @@ STOPPED = "stopped"
 PENDING = "pending"
 FAILED = "failed"
 
-SETTING_SENDER = "mailings_sender"
+# Which account they go out from is Settings › Email, Senders (services/mail_senders.py).
 SETTING_PER_HOUR = "mailings_per_hour"
 SETTING_PER_DAY = "mailings_per_day"
-#: The account answers to contact messages go out from (services/messages.py);
-#: empty: the one above.
-SETTING_REPLY_SENDER = "contact_reply_sender"
-#: "1": each answer also goes, as a blind copy, to that account's own address.
-SETTING_REPLY_COPY = "contact_reply_copy"
-SETTING_KEYS = (SETTING_SENDER, SETTING_PER_HOUR, SETTING_PER_DAY, SETTING_REPLY_SENDER, SETTING_REPLY_COPY)
+SETTING_KEYS = (SETTING_PER_HOUR, SETTING_PER_DAY)
 DEFAULT_PER_HOUR = 100
 #: Brevo's free plan: 300 a day.
 DEFAULT_PER_DAY = 300
@@ -116,49 +111,43 @@ def settings():
             return default
 
     return {
-        "sender": (stored.get(SETTING_SENDER) or "").strip(),
         "per_hour": number(SETTING_PER_HOUR, DEFAULT_PER_HOUR),
         "per_day": number(SETTING_PER_DAY, DEFAULT_PER_DAY),
-        "reply_sender": (stored.get(SETTING_REPLY_SENDER) or "").strip(),
-        "reply_copy": (stored.get(SETTING_REPLY_COPY) or "") == "1",
     }
 
 
 def sender_account():
-    """The mail account mailings and messages go out from: the one chosen
-    here, else the one the notifications use."""
-    chosen = settings()["sender"]
-    if chosen:
-        return chosen
-    from .notifications import get_default_sender_account, get_notification_service
+    """The mail account mailings and the contact form's messages go out from."""
+    from .mail_senders import account_for
 
-    return get_notification_service().get_sender_account() or get_default_sender_account() or ""
+    return account_for("mailings")
 
 
 def reply_account():
-    """The mail account answers to contact messages go out from: the one
-    chosen for them, else the mailings' one."""
-    return settings()["reply_sender"] or sender_account()
+    """The mail account answers to contact messages go out from."""
+    from .mail_senders import account_for
+
+    return account_for("replies")
+
+
+def reply_copy():
+    """Whether each answer also goes, as a blind copy, to that account's own address."""
+    from .mail_senders import stored
+
+    return stored()["reply_copy"]
 
 
 def account_address(key):
-    """The address a mail account sends as: its sender address, else its login."""
-    config = load_mail_accounts_config().get(key) or {}
-    return (config.get("from") or config.get("user") or "").strip()
+    """The address a mail account sends as."""
+    from .mail_senders import address_of
+
+    return address_of(key)
 
 
-def save_settings(actor, *, sender, per_hour, per_day, reply_sender=None, reply_copy=None):
+def save_settings(actor, *, per_hour, per_day):
+    """How many mailings may go out an hour and a day."""
     from .settings_sections import _write
 
-    accounts = load_mail_accounts_config()
-    sender = (sender or "").strip()
-    if sender and sender not in accounts:
-        _fail("sender", "No such mail account (Settings › Mail accounts).")
-    current = settings()
-    reply_sender = current["reply_sender"] if reply_sender is None else reply_sender.strip()
-    reply_copy = current["reply_copy"] if reply_copy is None else bool(reply_copy)
-    if reply_sender and reply_sender not in accounts:
-        _fail("reply_sender", "No such mail account (Settings › Mail accounts).")
     if not 1 <= per_hour <= MOST_PER_HOUR:
         _fail("per_hour", f"Between 1 and {MOST_PER_HOUR}.")
     if not 1 <= per_day <= MOST_PER_DAY:
@@ -166,11 +155,8 @@ def save_settings(actor, *, sender, per_hour, per_day, reply_sender=None, reply_
     if per_hour > per_day:
         _fail("per_hour", "Not more per hour than per day.")
     return _write(actor, "mailings", {
-        SETTING_SENDER: sender or None,
         SETTING_PER_HOUR: str(per_hour) if per_hour != DEFAULT_PER_HOUR else None,
         SETTING_PER_DAY: str(per_day) if per_day != DEFAULT_PER_DAY else None,
-        SETTING_REPLY_SENDER: reply_sender or None,
-        SETTING_REPLY_COPY: "1" if reply_copy else None,
     })
 
 
