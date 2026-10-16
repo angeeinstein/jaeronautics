@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 from flask import current_app
 from flask_babel import _
+from markupsafe import Markup
 
 from ..db_models import EmailDeliveryJob, MailAccount, db
 from ..mail_utils import send_mail
@@ -25,7 +26,7 @@ from ..notification_service import (
 )
 from ..security_utils import build_public_url
 from .clock import first_day_of_year, get_membership_today, get_now_utc, last_day_of_year
-from .membership import format_datetime_display, format_membership_date_display
+from .membership import format_date_display, format_datetime_display, format_membership_date_display
 from .settings import get_settings_map
 
 EMAIL_JOB_TYPE_WELCOME = "welcome_email"
@@ -390,6 +391,60 @@ def sample_email_for(template_name):
                 "omitted_count": 0,
                 "action_url": build_public_url("admin.admin_logs"),
                 "action_label": _("Open Audit Logs"),
+            },
+        ),
+        # The rest as services/messages.py, mailings.py, money_checks.py and
+        # teams.py send them; tests/test_email_samples.py renders each.
+        "contact_message.html": (
+            "Workshop on Monday?",
+            {
+                "heading": "Workshop on Monday?",
+                "details": ["From: Anna Muster <anna.muster@example.org>", "Topic: Membership"],
+                "body_text": "Hello,\n\nis the workshop open on Monday evening? I would like to finish my part.\n\n"
+                             "Thanks, Anna",
+                "action_url": build_public_url("public.index"),
+                "action_label": "Open in the portal",
+            },
+        ),
+        "contact_reply.html": (
+            "Re: Workshop on Monday?",
+            {
+                "body_html": Markup("<p>Hello Anna,</p><p>yes, from 18:00. See you there!</p>"),
+                "quoted_intro": f"On {today:%d.%m.%Y} at 09:41, Anna Muster wrote:",
+                "quoted_text": "Hello,\n\nis the workshop open on Monday evening?\n\nThanks, Anna",
+            },
+        ),
+        "mailing.html": (
+            "General assembly on 12 November",
+            {
+                "heading": "General assembly on 12 November",
+                "body_html": Markup("<p>Dear members,</p><p>the general assembly takes place on 12 November "
+                                    "at 18:00 in the club room. The agenda follows a week before.</p>"),
+                "team_badge_name": None,
+                "why": "You receive this as a member of Joanneum Aeronautics.",
+                "unsubscribe_url": build_public_url("public.index"),
+            },
+        ),
+        "money_differences.html": (
+            "Stripe and the portal differ: 1 thing to look at",
+            {
+                "heading": "Stripe and the portal differ",
+                "lines": ["Membership · paid at Stripe, not recorded here · in_1Example · Stripe € 30.00"],
+                "action_url": build_public_url("public.index"),
+                "action_label": "Open Money",
+            },
+        ),
+        "team_access_list.html": (
+            f"Rocket Team: current members ({format_date_display(today)})",
+            {
+                "preview_text": "2 current member(s) of Rocket Team.",
+                "heading": "Current members of Rocket Team",
+                "intro": f"These members of Rocket Team should have access, as of {format_date_display(today)}:",
+                "rows": [{"name": "Anna Muster", "email": "anna.muster@example.org", "new": False},
+                         {"name": "Carla Beispiel", "email": None, "new": True}],
+                "gone": [{"name": "Dieter Probe", "email": "dieter.probe@example.org"}],
+                "compared_note": "New: not on our list of the last time.",
+                "team_badge_name": "Rocket Team",
             },
         ),
     }
