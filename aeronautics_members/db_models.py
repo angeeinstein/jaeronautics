@@ -1307,7 +1307,7 @@ class ContactReply(db.Model):
     incoming = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     #: The email's Message-ID: made by the portal for an answer sent, so a
     #: reply to it is recognised; the reply's own, so it is taken once.
-    email_message_id = db.Column(db.String(255), nullable=True, index=True)
+    email_message_id = db.Column(db.String(255), nullable=True, index=True, unique=True)
     #: An incoming reply had files attached; they stay in the mailbox.
     has_attachments = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
 

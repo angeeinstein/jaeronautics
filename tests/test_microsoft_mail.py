@@ -470,6 +470,62 @@ class TestARepliesComesBack:
 
         assert db.session.query(ContactReply).filter_by(incoming=True).count() == 1
 
+    def test_its_own_copy_is_left_alone_whatever_its_id(self, app, answered, mailboxes, microsoft):
+        """Exchange may give the copy a Message-ID of its own; it is from the portal's mailbox still."""
+        _message, answer = answered
+        copy = {**_incoming("<exchange-made@example.org>", replying_to=answer.email_message_id),
+                "from": {"emailAddress": {"address": "Support@example.org"}}}
+        microsoft.answer("GET", "/users/support@example.org/messages/AAMk-1", body=copy)
+
+        assert mail_replies.take_notified(mailboxes.id, "AAMk-1") is None
+        assert not db.session.query(ContactReply).filter_by(incoming=True).count()
+
+    def test_the_answers_id_is_kept_before_it_is_sent(self, app, admins, mailboxes, microsoft, monkeypatch):  # noqa: F811
+        """Graph's notification of the copy can come before the request that sent it has ended."""
+        from sqlalchemy import text
+
+        seen = []
+        sending = messages.send_mail
+
+        def looking(**kwargs):
+            with db.engine.connect() as other:
+                seen.extend(other.execute(text("SELECT email_message_id FROM contact_replies")).scalars())
+            return sending(**kwargs)
+
+        monkeypatch.setattr(messages, "send_mail", looking)
+        anna = _association_member("anna@example.com")
+        message = messages.send_contact(user=anna, topic=FORM["topic"], subject=FORM["subject"],
+                                        body=FORM["message"], seconds=FORM["seconds"])
+
+        answer = messages.reply(admins[0], message, "It was paid on Monday.")
+
+        assert seen == [answer.email_message_id]
+
+    def test_taken_once_when_both_ways_take_it_at_the_same_moment(self, app, answered, mailboxes, microsoft,
+                                                                monkeypatch):
+        from sqlalchemy import text
+
+        _message, answer = answered
+        microsoft.answer("GET", "/users/support@example.org/messages/AAMk-1",
+                         body={**_incoming("<r1@anna.example>", replying_to=answer.email_message_id),
+                               "uniqueBody": {"content": "Thanks"}})
+        finding = mail_replies._thread_of
+
+        def meanwhile_the_other_took_it(item):
+            found = finding(item)
+            with db.engine.begin() as other:
+                other.execute(text("INSERT INTO contact_replies (message_id, body, account_key, created_at, "
+                                   "attempts, incoming, email_message_id, has_attachments) VALUES "
+                                   "(:message, 'Thanks', 'support', CURRENT_TIMESTAMP, 0, 1, '<r1@anna.example>', 0)"),
+                              {"message": found.id})
+            return found
+
+        monkeypatch.setattr(mail_replies, "_thread_of", meanwhile_the_other_took_it)
+
+        assert mail_replies.take_notified(mailboxes.id, "AAMk-1") is None
+        db.session.commit()
+        assert db.session.query(ContactReply).filter_by(incoming=True).count() == 1
+
     def test_one_missed_is_found_by_the_look_through(self, app, answered, mailboxes, microsoft):
         _message, answer = answered
         microsoft.answer("GET", "/users/support@example.org/mailFolders/inbox/messages", body={"value": [
@@ -543,3 +599,16 @@ class TestSystemHealth:
 
     def test_replies_without_notifications_are_a_warning(self, app, mailboxes, microsoft):
         assert any("every 15 minutes only" in line for line in self._health()["warnings"])
+
+
+class TestAMailboxAddress:
+    def test_is_quoted_into_graphs_paths(self):
+        assert microsoft_mail.mailbox_path("support@example.org") == "/users/support@example.org"
+        assert microsoft_mail.mailbox_path("a/../../me?x@example.org") == "/users/a%2F..%2F..%2Fme%3Fx@example.org"
+
+    @pytest.mark.parametrize("address", ["a/b@example.org", "a?b@example.org", "a#b@example.org", "a%2f@example.org"])
+    def test_with_what_could_mean_something_else_is_refused(self, app, address):
+        from aeronautics_members.services import ValidationError, mail_accounts
+
+        with pytest.raises(ValidationError):
+            mail_accounts.save(None, None, key="odd", from_email=address, kind=MailAccount.MICROSOFT)

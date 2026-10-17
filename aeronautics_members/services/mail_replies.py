@@ -20,10 +20,20 @@ import threading
 from datetime import timedelta
 from urllib.parse import quote
 
+from sqlalchemy.exc import IntegrityError
+
 from ..db_models import ContactReply, MailAccount, db
 from .audit import log_audit_event
 from .clock import get_now_utc
-from .microsoft_mail import MicrosoftError, as_utc, graph, microsoft_accounts, ready, utc_from_graph
+from .microsoft_mail import (
+    MicrosoftError,
+    as_utc,
+    graph,
+    mailbox_path,
+    microsoft_accounts,
+    ready,
+    utc_from_graph,
+)
 
 #: Where Graph's notifications arrive (blueprints/microsoft_mail.py).
 NOTIFY_PATH = "/webhooks/microsoft-mail"
@@ -66,7 +76,7 @@ def unsubscribe(account):
     Microsoft unreachable: it runs out by itself."""
     if account.inbox_subscription_id:
         try:
-            graph("DELETE", f"/subscriptions/{quote(account.inbox_subscription_id)}")
+            graph("DELETE", f"/subscriptions/{quote(account.inbox_subscription_id, safe='')}")
         except MicrosoftError:
             pass
     account.inbox_subscription_id = account.inbox_client_state = None
@@ -106,7 +116,7 @@ def keep_watching(now=None):
         if watched.inbox_subscription_id:
             try:
                 new_expiry = now + SUBSCRIPTION_LASTS
-                _status, renewed = graph("PATCH", f"/subscriptions/{quote(watched.inbox_subscription_id)}",
+                _status, renewed = graph("PATCH", f"/subscriptions/{quote(watched.inbox_subscription_id, safe='')}",
                                          body={"expirationDateTime": f"{new_expiry:%Y-%m-%dT%H:%M:%S}Z"})
                 watched.inbox_subscription_expires_at = (utc_from_graph(renewed.get("expirationDateTime"))
                                                          or new_expiry)
@@ -138,7 +148,7 @@ def _thread_of(item):
 
 
 def _text_of(account, graph_id):
-    _status, full = graph("GET", f"/users/{quote(account.from_email)}/messages/{quote(graph_id, safe='')}"
+    _status, full = graph("GET", f"{mailbox_path(account.from_email)}/messages/{quote(graph_id, safe='')}"
                           "?$select=uniqueBody,body", headers={"Prefer": 'outlook.body-content-type="text"'})
     for part in ("uniqueBody", "body"):
         text = ((full.get(part) or {}).get("content") or "").replace("\r\n", "\n").strip()
@@ -147,11 +157,22 @@ def _text_of(account, graph_id):
     return "(No text.)"
 
 
+def _from_the_portal(item):
+    """Sent from one of the portal's own addresses: its answer's copy in the
+    mailbox (whatever Message-ID Exchange gave it), or an admin answering in
+    Outlook -- never the sender's reply."""
+    sender = (((item.get("from") or {}).get("emailAddress") or {}).get("address") or "").strip().lower()
+    if not sender:
+        return False
+    own = db.session.execute(db.select(MailAccount.from_email).where(MailAccount.from_email.isnot(None))).scalars()
+    return sender in {address.strip().lower() for address in own}
+
+
 def _take(account, item):
     """One email from the mailbox: kept as an incoming reply when it answers
     an answer, and not taken already. The reply, or None."""
-    internet_id = (item.get("internetMessageId") or "").strip()
-    if not internet_id or db.session.execute(
+    internet_id = (item.get("internetMessageId") or "").strip()[:255]
+    if not internet_id or _from_the_portal(item) or db.session.execute(
             db.select(ContactReply.id).filter_by(email_message_id=internet_id)).first():
         # Taken already -- or one of the portal's own answers, in the mailbox
         # as its copy.
@@ -160,18 +181,25 @@ def _take(account, item):
     if message is None:
         return None
     arrived = utc_from_graph(item.get("receivedDateTime")) or get_now_utc().replace(tzinfo=None)
-    reply = ContactReply(message=message, incoming=True, body=_text_of(account, item["id"]),
-                         account_key=account.account_key, created_at=arrived, sent_at=arrived,
-                         email_message_id=internet_id[:255], has_attachments=bool(item.get("hasAttachments")))
-    db.session.add(reply)
+    body = _text_of(account, item["id"])
+    try:
+        # The notification and the 15-minute look can take the same email at
+        # the same moment; its Message-ID is unique, so the second one stops.
+        with db.session.begin_nested():
+            reply = ContactReply(message=message, incoming=True, body=body, account_key=account.account_key,
+                                 created_at=arrived, sent_at=arrived, email_message_id=internet_id,
+                                 has_attachments=bool(item.get("hasAttachments")))
+            db.session.add(reply)
+            db.session.flush()
+    except IntegrityError:
+        return None
     message.done_at = message.done_by_user_id = None
-    db.session.flush()
     log_audit_event(category="messages", event_type="message_reply_received",
                     metadata={"message_id": message.id, "reply_id": reply.id, "account": account.account_key})
     return reply
 
 
-_FIELDS = "id,internetMessageId,internetMessageHeaders,receivedDateTime,hasAttachments"
+_FIELDS = "id,internetMessageId,internetMessageHeaders,receivedDateTime,hasAttachments,from"
 
 
 def take_notified(account_id, graph_id):
@@ -179,7 +207,7 @@ def take_notified(account_id, graph_id):
     account = db.session.get(MailAccount, account_id)
     if account is None or not account.is_microsoft:
         return None
-    _status, item = graph("GET", f"/users/{quote(account.from_email)}/messages/{quote(graph_id, safe='')}"
+    _status, item = graph("GET", f"{mailbox_path(account.from_email)}/messages/{quote(graph_id, safe='')}"
                           f"?$select={_FIELDS}")
     return _take(account, item)
 
@@ -206,7 +234,7 @@ def look_through(account, now=None):
     sure), each taken if it is a reply. How many were."""
     now = (now or get_now_utc()).replace(tzinfo=None)
     since = (account.inbox_checked_at - OVERLAP) if account.inbox_checked_at else now - FIRST_LOOK
-    path = (f"/users/{quote(account.from_email)}/mailFolders/inbox/messages?$select={_FIELDS}"
+    path = (f"{mailbox_path(account.from_email)}/mailFolders/inbox/messages?$select={_FIELDS}"
             f"&$filter=receivedDateTime ge {as_utc(since):%Y-%m-%dT%H:%M:%SZ}&$orderby=receivedDateTime&$top=50")
     taken = 0
     while path:

@@ -57,6 +57,12 @@ IONOS is to go. Brevo (300 emails a day, free) is the stand-in.
     keeps (`contact_replies.email_message_id`). A reply to it names that ID in
     `In-Reply-To` / `References`; that is how it is recognised -- not by the
     sender's address (people answer from another one) and not by the subject.
+    The ID is saved before the answer goes, so a notification quicker than
+    the sending request still knows it; an email from one of the portal's own
+    addresses (the answer's copy, or an admin answering in Outlook) is never
+    taken as the sender's reply; and each incoming ID is stored once
+    (unique), even when the notification and the safety net below take it at
+    the same moment.
   - Graph tells the portal at once when a message arrives in the replies
     account's inbox (a change-notification subscription; the URL is
     `/webhooks/microsoft-mail`). The portal answers at once and reads the

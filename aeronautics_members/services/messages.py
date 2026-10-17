@@ -274,6 +274,9 @@ def _send_reply(reply):
     if not reply.email_message_id:
         reply.email_message_id = make_msgid(domain=mailings.account_address(reply.account_key).rpartition("@")[2]
                                             or None)
+    # Kept before it goes: a notification of its copy in the mailbox can be
+    # quicker than this request, and must find it is the portal's own.
+    db.session.commit()
     headers = {"Message-ID": reply.email_message_id}
     earlier = [answer.email_message_id for answer in sorted(message.replies, key=lambda answer: answer.id)
                if answer.email_message_id and answer.id < reply.id]

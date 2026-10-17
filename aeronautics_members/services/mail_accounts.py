@@ -24,6 +24,9 @@ from .notifications import (
 
 KEY_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# A mailbox goes into Microsoft Graph's paths: what an Exchange address holds,
+# nothing that could mean something else there (/, ?, #, %).
+_MAILBOX = re.compile(r"^[a-z0-9._'+-]+@[a-z0-9-]+(\.[a-z0-9-]+)+$")
 
 
 def accounts():
@@ -56,6 +59,8 @@ def save(actor, account_id, *, key, host=None, port=None, username=None, passwor
     if microsoft:
         if not from_email:
             raise _invalid("from_email", "Enter the mailbox's address.")
+        if not _MAILBOX.fullmatch(from_email):
+            raise _invalid("from_email", "That does not look like a mailbox's address.")
     else:
         if not host:
             raise _invalid("host", "Enter the SMTP server.")
@@ -153,6 +158,9 @@ def import_file(actor, data, *, overwrite):
     except ValueError as exc:
         raise _invalid("file", str(exc)) from None
 
+    for record in records:
+        if record["kind"] == MailAccount.MICROSOFT and not _MAILBOX.fullmatch(record["from_email"] or ""):
+            raise _invalid("file", f"{record['account_key']}: that does not look like a mailbox's address.")
     created, updated, skipped = 0, 0, []
     for record in records:
         account = db.session.execute(

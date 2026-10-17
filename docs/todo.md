@@ -21,31 +21,12 @@ checked by its chip), attendance with the same cards
 (`docs/attendance-plan.md`), answering contact messages from the portal
 (`docs/messages-plan.md`), and the batch of 2026-10-16 (Settings › Email
 with its tabs, Admin › Attendance always in the menu, a hint under every
-email field when a university address looks mistyped). The price-list
-proposal below waits for the maintainer's answer.
+email field when a university address looks mistyped), and, with the
+security fixes of 2026-10-17, no browser autofill in the Microsoft 365 fields
+and the export password. The price-list proposal below waits for the
+maintainer's answer.
 
 ## Open
-
-### No browser autofill in the Microsoft 365 fields and the export password
-
-- **Added:** 2026-10-17
-- **What:** the browser (Chrome / Google's password manager) fills the
-  admin's own sign-in into fields that are not a sign-in: the
-  maintainer's screenshot of Settings › Email › Accounts shows their own
-  email address in *Application (client) ID* of the *Microsoft 365* panel,
-  and a saved password in *Your current password* of *Import and export*.
-  "The same small annoyance again ... it doesn't make sense that there's
-  autofill on these things."
-- **Where:** `frontend/src/pages/admin/settings/MailAccounts.tsx` --
-  `MicrosoftConnection` (tenant ID, client ID) and `ImportExport` (the
-  password, now `autoComplete="current-password"`). Then a look over the
-  other settings forms for the same.
-- **How:** as the SMTP account's login already is: `useNotMyLogin()` from
-  `pages/admin/settings/shared.tsx` (read-only until focused,
-  `autocomplete` off, the password managers' ignore attributes). The export
-  password does ask for the admin's own password, but filled in by itself
-  it defeats the point of asking -- it is typed on purpose, so no autofill
-  there either (`useNotMyLogin(true)`).
 
 ### Price lists: deleted items folded into one row
 

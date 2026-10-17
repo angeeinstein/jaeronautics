@@ -428,10 +428,14 @@ function MicrosoftConnection({ microsoft }: { microsoft: Microsoft }) {
       else notifyFailed(new ApiError(200, 'microsoft_check_failed', result.message));
     },
   );
+  // IDs, not a sign-in: the browser's saved login must not land here.
+  const notLogin = useNotMyLogin();
   const field = (key: 'tenant_id' | 'client_id', label: string, placeholder: string) => (
     <TextInput
       label={label}
       placeholder={placeholder}
+      name={`microsoft-${key}`}
+      {...notLogin}
       value={app[key]}
       error={saved.errors[key] ?? null}
       onChange={(event) => {
@@ -518,6 +522,8 @@ function ImportExport() {
   const [file, setFile] = useState<File | null>(null);
   const [overwrite, setOverwrite] = useState(false);
   const [password, setPassword] = useState('');
+  // Asked for on purpose: filled in by the browser, asking would prove nothing.
+  const notFilledIn = useNotMyLogin(true);
   const imported = useMailChange(
     async () => {
       if (!file) throw new Error('Choose a file.');
@@ -607,7 +613,8 @@ function ImportExport() {
           <Group align="flex-end" gap="md">
             <PasswordInput
               label="Your current password"
-              autoComplete="current-password"
+              name="export-confirm"
+              {...notFilledIn}
               value={password}
               error={exported.errors.password ?? null}
               onChange={(event) => {

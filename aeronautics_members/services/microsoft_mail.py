@@ -259,7 +259,7 @@ def _fetch_token(found, key_pem, certificate_pem):
         "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
         "client_assertion": _assertion(found, key_pem, certificate_pem),
     }).encode()
-    status, _headers, answer = http("POST", f"{LOGIN}/{quote(found.tenant_id)}/oauth2/v2.0/token", data=body,
+    status, _headers, answer = http("POST", f"{LOGIN}/{quote(found.tenant_id, safe='')}/oauth2/v2.0/token", data=body,
                                     headers={"Content-Type": "application/x-www-form-urlencoded"})
     data = _json(answer)
     if status != 200 or "access_token" not in data:
@@ -330,15 +330,17 @@ def graph(method, path, *, body=None, data=None, content_type=None, headers=None
     raise MicrosoftError(said, status=status, code=code)
 
 
-def _mailbox_path(mailbox):
-    return f"/users/{quote(mailbox)}"
+def mailbox_path(mailbox):
+    """Graph's path to a mailbox. Quoted, a slash too: an address must not be
+    able to reach another part of the API. "@" may stand in a path as it is."""
+    return f"/users/{quote(mailbox, safe='@')}"
 
 
 def send_mime(mailbox, mime):
     """Send a finished email (MIME bytes) from ``mailbox``; it is kept in the
     mailbox's Sent Items. Raises ``MicrosoftError``."""
     try:
-        graph("POST", f"{_mailbox_path(mailbox)}/sendMail", data=base64.b64encode(mime),
+        graph("POST", f"{mailbox_path(mailbox)}/sendMail", data=base64.b64encode(mime),
               content_type="text/plain")
     except MicrosoftError as exc:
         if exc.status == 403:
@@ -360,7 +362,7 @@ def probe(account):
         return False, str(exc)
     reads = True
     try:
-        graph("GET", f"{_mailbox_path(mailbox)}/mailFolders/inbox?$select=id")
+        graph("GET", f"{mailbox_path(mailbox)}/mailFolders/inbox?$select=id")
     except MicrosoftError as exc:
         if exc.status == 404:
             return False, f"There is no mailbox {mailbox} in the tenant."
