@@ -425,6 +425,27 @@ describe('my account: profile', () => {
     expect(await sentBody(calls, 'PUT', '/api/v1/account/contact')).toEqual({
       ...member.contact,
       city: 'Vienna',
+      current_password: null,
+    });
+    expect(within(contact).queryByLabelText(/Current password/)).not.toBeInTheDocument();
+  });
+
+  it('changing an address asks for the current password', async () => {
+    const { calls, contact } = await editContact({
+      'PUT /api/v1/account/contact': {
+        body: { messages: [{ tone: 'success', text: 'Saved.' }], account },
+      },
+    });
+
+    expect(within(contact).queryByLabelText(/Current password/)).not.toBeInTheDocument();
+    const field = within(contact).getByRole('textbox', { name: /University email/ });
+    fireEvent.change(field, { target: { value: 'anna@elsewhere.example' } });
+    await userEvent.type(within(contact).getByLabelText(/Current password/), 'secret-1');
+    await userEvent.click(within(contact).getByRole('button', { name: 'Save' }));
+
+    expect(await sentBody(calls, 'PUT', '/api/v1/account/contact')).toMatchObject({
+      email_work: 'anna@elsewhere.example',
+      current_password: 'secret-1',
     });
   });
 

@@ -637,6 +637,26 @@ class NotificationService:
                     ],
                 },
             )
+        if event.event_type == "account_email_changed":
+            # To the address that was replaced, changed by somebody signed in
+            # to the account: the member, or whoever has their password.
+            return (
+                _("The email address of your Joanneum Aeronautics account was changed"),
+                {
+                    "preview_text": _("Your account signs in with a new address now."),
+                    "action_url": None,
+                    "action_label": None,
+                    "heading": _("Your account's email address was changed"),
+                    "body_lines": [
+                        greeting,
+                        _("The email address of your account was changed to %(new)s. You sign in with it "
+                          "now, and we write to it.", new=payload.get("new_email_masked")),
+                        _("If that was you, there is nothing to do. If it was not, please tell us at once "
+                          "through the contact form: %(contact)s",
+                          contact=payload.get("contact_url") or payload.get("contact_email")),
+                    ],
+                },
+            )
         if event.event_type == "account_email_changed_by_admin":
             # To the address that was replaced: whoever reads it learns of the
             # change, in case it was not at their request.

@@ -3407,6 +3407,19 @@
             "title": "Country",
             "type": "string"
           },
+          "current_password": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Current Password"
+          },
           "email_private": {
             "maxLength": 255,
             "title": "Email Private",
@@ -19034,7 +19047,7 @@
             "description": "Not possible in the current state."
           }
         },
-        "summary": "Address, phones and both email addresses: saved at once. A new address waits to be confirmed.",
+        "summary": "Address, phones and both email addresses: saved at once. A new address waits to be confirmed;",
         "tags": [
           "Account"
         ]

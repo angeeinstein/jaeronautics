@@ -79,7 +79,7 @@ class TestApi:
         assert (row.page, row.signed_in, row.typed_at is not None) == ("/join", False, True)
 
     def test_signed_in_is_taken_from_the_session(self, client, app):
-        signed_in(client, make_member(email="m@example.com"))
+        signed_in(client, make_member(email="m@example.com").user)
         _say(client, page="/account")
         assert db.session.get(Presence, TAB_A).signed_in is True
 
@@ -98,5 +98,5 @@ class TestApi:
         assert "tab" not in str(body)
 
     def test_not_for_members(self, client, app):
-        signed_in(client, make_member(email="m@example.com"))
+        signed_in(client, make_member(email="m@example.com").user)
         assert client.get(ADMIN_URL).status_code == 403

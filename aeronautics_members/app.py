@@ -413,7 +413,7 @@ def get_rate_limit_identity():
     downloading their data. The network address for everybody else.
     """
     if current_user and current_user.is_authenticated:
-        return f"user:{current_user.get_id()}"
+        return f"user:{current_user.id}"
     return rate_limit_network()
 
 
@@ -440,7 +440,7 @@ def rate_limit_person():
     """The account for somebody signed in, else the network address plus the
     address typed into the form: one person's budget, not a lecture hall's."""
     if current_user and current_user.is_authenticated:
-        return f"user:{current_user.get_id()}"
+        return f"user:{current_user.id}"
     return rate_limit_network_and_address()
 
 
@@ -463,8 +463,18 @@ limiter = Limiter(
 
 
 @login_manager.user_loader
-def load_user(user_id):
-    user = db.session.get(User, int(user_id))
+def load_user(session_id):
+    # "<account>" or "<account>.<generation>" (User.get_id).
+    user_id, _, generation = str(session_id).partition(".")
+    try:
+        user = db.session.get(User, int(user_id))
+        generation = int(generation or 0)
+    except ValueError:
+        return None
+    # Issued before the password or the login address last changed: whoever
+    # holds it, the member changed them to shut them out.
+    if user is not None and generation != user.session_generation:
+        return None
     # An erased account must not keep browsing on a session issued before the
     # erasure. Clearing the password hash stops new logins but says nothing
     # about sessions that already exist, and an expelled member being signed in
@@ -737,12 +747,15 @@ def _stand_down_while_paused(job_name):
 
 
 def is_safe_next_url(target):
-    if not target:
-        return False
+    """A path on this site, and nothing a browser could read as another site.
 
-    ref_url = urlsplit(request.host_url)
-    test_url = urlsplit(urljoin(request.host_url, target))
-    return test_url.scheme in {"http", "https"} and ref_url.netloc == test_url.netloc
+    Browsers are looser than Python's URL parser: they take a backslash for a
+    slash ("/\\evil.example" is "//evil.example") and drop tabs and line
+    breaks ("/<tab>/evil.example" too). So a single leading slash, and no
+    backslash or control character anywhere."""
+    if not isinstance(target, str) or not target.startswith("/") or target.startswith("//"):
+        return False
+    return not any(char == "\\" or ord(char) < 0x20 or ord(char) == 0x7F for char in target)
 
 
 

@@ -11,8 +11,8 @@ forms.py, checked through api/_forms.py. Drawn by frontend/src/pages/account/.
 from datetime import date
 from typing import Literal
 
-from flask import current_app, flash, request, url_for
-from flask_login import current_user, logout_user
+from flask import current_app, flash, g, request, url_for
+from flask_login import current_user, login_user, logout_user
 from pydantic import Field
 
 from ..config import RATELIMIT_ACCOUNT_DELETION, RATELIMIT_EMAIL_RESEND, RATELIMIT_PASSWORD_CHANGE
@@ -444,16 +444,40 @@ class ContactIn(Model):
     email_work: str | None = Field(None, max_length=255)
     #: Left out, the one saved stays.
     company_name: str | None = Field(None, max_length=255)
+    #: Needed when either email address changes.
+    current_password: str | None = Field(None, max_length=128)
+
+
+def _wrong_password_counts(_response):
+    return g.get("wrong_password", False)
+
+
+def _keep_this_browser_signed_in(user, generation_before):
+    """After the password or the login address changed, every session ended
+    (User.end_sessions); the one that made the change goes on."""
+    if user.session_generation != generation_before:
+        login_user(user)
 
 
 @endpoint("PUT", "/account/contact", response=AccountSavedOut, body=ContactIn, tag=TAG)
+@limiter.limit(RATELIMIT_PASSWORD_CHANGE, deduct_when=_wrong_password_counts)
 def account_contact(body):
-    """Address, phones and both email addresses: saved at once. A new address waits to be confirmed."""
+    """Address, phones and both email addresses: saved at once. A new address waits to be confirmed;
+    changing an address asks for the current password."""
     member = _member()
-    values = checked(MemberProfileForm, body.model_dump(), member_category_value=member.member_category)
+    values = checked(MemberProfileForm, body.model_dump(exclude={"current_password"}),
+                     member_category_value=member.member_category)
     if "company_name" not in body.model_fields_set:
         values["company_name"] = member.company_name
-    return _saved(*account_service.save_contact_details(current_user, member, values))
+    user = current_user._get_current_object()
+    generation = user.session_generation
+    try:
+        messages = account_service.save_contact_details(user, member, values, body.current_password)
+    except ValidationError as exc:
+        g.wrong_password = exc.code == "wrong_password"
+        raise
+    _keep_this_browser_signed_in(user, generation)
+    return _saved(*messages)
 
 
 class ChangeRequestIn(Model):
@@ -600,8 +624,11 @@ def account_password(body):
     if len(body.new_password) < 8:
         raise ValidationError("Please check the form.",
                               details={"fields": {"new_password": "At least 8 characters, please."}})
-    account_service.change_password(current_user, body.current_password, body.new_password)
-    return MessageOut(tone="success", text="Your password has been changed.")
+    user = current_user._get_current_object()
+    generation = user.session_generation
+    account_service.change_password(user, body.current_password, body.new_password)
+    _keep_this_browser_signed_in(user, generation)
+    return MessageOut(tone="success", text="Your password has been changed. Everywhere else you are signed out.")
 
 
 # --- Deleting the account, from the emailed link ---------------------------------------------
