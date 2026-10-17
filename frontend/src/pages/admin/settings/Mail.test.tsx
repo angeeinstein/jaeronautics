@@ -17,6 +17,7 @@ const API = '/api/v1/admin/settings/mail';
 const office: Schemas['MailAccountOut'] = {
   id: 4,
   key: 'office',
+  kind: 'smtp',
   host: 'smtp.example.org',
   port: 587,
   username: 'office@example.org',
@@ -24,6 +25,18 @@ const office: Schemas['MailAccountOut'] = {
   from_email: 'noreply@example.org',
   from_name: 'Joanneum Aeronautics',
 };
+
+const notConnected: Schemas['MicrosoftOut'] = {
+  tenant_id: null,
+  client_id: null,
+  certificate: null,
+  new_certificate: null,
+  ready: false,
+};
+
+function listed(accounts: Schemas['MailAccountOut'][], microsoft = notConnected): Schemas['MailOut'] {
+  return { accounts, microsoft };
+}
 
 function show(element: React.ReactNode, answers: Answers) {
   const fetched = mockFetch({
@@ -45,7 +58,7 @@ function lastBody(calls: Request[], method: string, path: string) {
 
 describe('mail accounts', () => {
   it('each account, as it sends', async () => {
-    show(<MailAccounts />, { [API]: { body: { accounts: [office] } } });
+    show(<MailAccounts />, { [API]: { body: listed([office]) } });
 
     const table = await screen.findByRole('table', { name: 'Mail accounts' });
     expect(within(table).getAllByRole('row')[1]).toHaveTextContent(
@@ -54,7 +67,7 @@ describe('mail accounts', () => {
   });
 
   it('the browser leaves its saved login out of the SMTP login', async () => {
-    show(<MailAccounts />, { [API]: { body: { accounts: [] } } });
+    show(<MailAccounts />, { [API]: { body: listed([]) } });
 
     const username = await screen.findByLabelText('Username');
     const password = screen.getByLabelText('Password');
@@ -71,16 +84,16 @@ describe('mail accounts', () => {
 
   it('a change keeps the password unless one is typed', async () => {
     const { calls } = show(<MailAccounts />, {
-      [API]: { body: { accounts: [office] } },
+      [API]: { body: listed([office]) },
       [`PUT ${API}/accounts/4`]: { body: { ...office, host: 'smtp2.example.org' } },
     });
 
     await userEvent.click(await screen.findByRole('button', { name: 'Change' }));
-    expect(screen.getByRole('region', { name: 'Change office' })).toBeInTheDocument();
-    const host = screen.getByRole('textbox', { name: 'SMTP server' });
+    const form = screen.getByRole('region', { name: 'Change office' });
+    const host = within(form).getByRole('textbox', { name: 'SMTP server' });
     await userEvent.clear(host);
     await userEvent.type(host, 'smtp2.example.org');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(within(form).getByRole('button', { name: 'Save' }));
 
     await waitFor(async () => {
       expect(await lastBody(calls, 'PUT', `${API}/accounts/4`)).toMatchObject({
@@ -93,7 +106,7 @@ describe('mail accounts', () => {
 
   it('a refusal is shown at its field', async () => {
     show(<MailAccounts />, {
-      [API]: { body: { accounts: [] } },
+      [API]: { body: listed([]) },
       [`POST ${API}/accounts`]: {
         status: 409,
         body: {
@@ -115,7 +128,7 @@ describe('mail accounts', () => {
 
   it('removing asks again', async () => {
     const { calls } = show(<MailAccounts />, {
-      [API]: { body: { accounts: [office] } },
+      [API]: { body: listed([office]) },
       [`DELETE ${API}/accounts/4`]: { body: { cleared_senders: ['welcome'] } },
     });
 
@@ -128,7 +141,7 @@ describe('mail accounts', () => {
 
   it('the export needs the current password, and a wrong one is said there', async () => {
     show(<MailAccounts />, {
-      [API]: { body: { accounts: [office] } },
+      [API]: { body: listed([office]) },
       [`POST ${API}/export`]: {
         status: 403,
         body: {
@@ -180,5 +193,78 @@ describe('the test email', () => {
     });
 
     expect(await screen.findByText(/Add one under Mail accounts/)).toBeInTheDocument();
+  });
+});
+
+describe('Microsoft 365 accounts', () => {
+  const support: Schemas['MailAccountOut'] = {
+    id: 7,
+    key: 'support',
+    kind: 'microsoft',
+    host: null,
+    port: null,
+    username: null,
+    starttls: false,
+    from_email: 'support@example.org',
+    from_name: 'Joanneum Aeronautics',
+  };
+  const connected: Schemas['MicrosoftOut'] = {
+    tenant_id: 'example.onmicrosoft.com',
+    client_id: '11111111-2222-3333-4444-555555555555',
+    certificate: {
+      thumbprint: 'AB12CD34EF56AB12CD34EF56AB12CD34EF56AB12',
+      expires_at: '2029-10-16T20:00:00Z',
+    },
+    new_certificate: null,
+    ready: true,
+  };
+
+  it('beside the SMTP ones, as their mailbox', async () => {
+    show(<MailAccounts />, { [API]: { body: listed([office, support], connected) } });
+
+    const table = await screen.findByRole('table', { name: 'Mail accounts' });
+    expect(within(table).getAllByRole('row')[2]).toHaveTextContent(
+      'supportMicrosoft 365Graphsupport@example.orgas Joanneum Aeronautics',
+    );
+    expect(screen.getByText('AB12CD34EF56AB12CD34EF56AB12CD34EF56AB12')).toBeInTheDocument();
+  });
+
+  it('one is added with its mailbox alone', async () => {
+    const { calls } = show(<MailAccounts />, {
+      [API]: { body: listed([], connected) },
+      [`POST ${API}/accounts`]: { status: 201, body: support },
+    });
+
+    await userEvent.click(await screen.findByRole('radio', { name: 'Microsoft 365' }));
+    expect(screen.queryByRole('textbox', { name: 'SMTP server' })).not.toBeInTheDocument();
+    await userEvent.type(screen.getByRole('textbox', { name: 'Key' }), 'support');
+    await userEvent.type(screen.getByRole('textbox', { name: 'Mailbox' }), 'support@example.org');
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(async () => {
+      expect(await lastBody(calls, 'POST', `${API}/accounts`)).toMatchObject({
+        key: 'support',
+        kind: 'microsoft',
+        from_email: 'support@example.org',
+      });
+    });
+  });
+
+  it('a certificate is made here, and a sign-in checked', async () => {
+    const { calls } = show(<MailAccounts />, {
+      [API]: { body: listed([], { ...connected, certificate: null, ready: false }) },
+      [`POST ${API}/microsoft/certificate`]: { status: 201, body: connected },
+      [`POST ${API}/microsoft/check`]: {
+        body: { ok: true, message: 'Signed in to Microsoft.', microsoft: connected },
+      },
+    });
+
+    expect(await screen.findByRole('button', { name: 'Check sign-in' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Make a certificate' }));
+    await waitFor(() => {
+      expect(
+        calls.some((call) => call.method === 'POST' && call.url.endsWith('/microsoft/certificate')),
+      ).toBe(true);
+    });
   });
 });

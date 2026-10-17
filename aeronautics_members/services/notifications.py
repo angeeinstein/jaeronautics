@@ -492,6 +492,17 @@ def normalize_imported_mail_account_record(raw_record, fallback_key=None):
         or raw_record.get("name")
         or fallback_key
     )
+    if raw_record.get("kind") == "microsoft":
+        # A Microsoft 365 mailbox: its address is all it has; it signs in
+        # with the portal's app (services/microsoft_mail.py).
+        from_email = (raw_record.get("from_email") or "").strip().lower()
+        if not account_key:
+            raise ValueError("Every imported mail account needs a valid account key.")
+        if not from_email:
+            raise ValueError(f"Mail account '{account_key}' is missing its mailbox (from_email).")
+        return {"account_key": account_key, "kind": "microsoft", "host": None, "port": None, "username": None,
+                "password": None, "starttls": False, "from_email": from_email[:255],
+                "from_name": (raw_record.get("from_name") or "").strip()[:120] or None}
     host = (raw_record.get("host") or raw_record.get("smtp_host") or raw_record.get("server") or "").strip()
     username = (
         raw_record.get("username")
@@ -535,6 +546,7 @@ def normalize_imported_mail_account_record(raw_record, fallback_key=None):
 
     return {
         "account_key": account_key,
+        "kind": "smtp",
         "host": host,
         "port": port,
         "username": username,
@@ -584,6 +596,7 @@ def build_mail_accounts_export_payload():
         "mail_accounts": [
             {
                 "account_key": mail_account.account_key,
+                "kind": mail_account.kind,
                 "host": mail_account.host,
                 "port": mail_account.port,
                 "username": mail_account.username,

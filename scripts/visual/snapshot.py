@@ -160,6 +160,15 @@ def go_offline(app_module):
         raise ForumProviderError("Offline for screenshots.")
 
     DiscourseConnectProvider._request = offline
+    # Microsoft 365: signing in works, Graph takes every email and sends none.
+    from aeronautics_members.services import microsoft_mail
+
+    def microsoft_offline(method, url, *, data=None, headers=None):
+        if "login.microsoftonline.com" in url:
+            return 200, {}, b'{"access_token": "offline", "expires_in": 3600}'
+        return 202, {}, b"{}"
+
+    microsoft_mail.http = microsoft_offline
     # What joining costs, as Stripe would say it; paying itself stays offline.
     billing._price_shown_cached = lambda: {"id": "price_example", "currency": "eur", "unit_amount": 4000,
                                            "interval": "year", "interval_count": 1}
@@ -503,7 +512,15 @@ def seed(app, app_module, subscriptions):
                     password="offline", from_name="Joanneum Aeronautics"),
         MailAccount(account_key="support", host="smtp.example.org", port=465, username="u-4711",
                     password="offline", from_email="support@example.org", from_name="Joanneum Aeronautics"),
+        # A Microsoft 365 mailbox beside them, through the portal's app and certificate.
+        MailAccount(account_key="noreply", kind=MailAccount.MICROSOFT, from_email="noreply@example.org",
+                    from_name="Joanneum Aeronautics"),
     ])
+    from aeronautics_members.services import microsoft_mail
+
+    microsoft_mail.save_app(None, tenant_id="example.onmicrosoft.com",
+                            client_id="11111111-2222-3333-4444-555555555555")
+    microsoft_mail.make_certificate(None)
     db.session.add_all([Setting(key="contact_reply_sender", value="support"),
                         Setting(key="contact_reply_copy", value="1")])
 

@@ -78,6 +78,28 @@ test.describe('settings', () => {
     await expect(row).toHaveCount(0);
   });
 
+  test('a Microsoft 365 mailbox beside them, signing in with the certificate made here', async ({ page }) => {
+    await page.goto('/admin/settings/email#accounts');
+    const microsoft = page.getByRole('region', { name: 'Microsoft 365' });
+    await expect(microsoft.getByText('Certificate in use')).toBeVisible();
+    await microsoft.getByRole('button', { name: 'Check sign-in' }).click();
+    await expect(page.getByText('Signed in to Microsoft.')).toBeVisible();
+
+    const form = page.getByRole('region', { name: 'Add an account' });
+    await form.getByText('Microsoft 365', { exact: true }).click();
+    await expect(form.getByRole('textbox', { name: 'SMTP server' })).toHaveCount(0);
+    await form.getByRole('textbox', { name: 'Key', exact: true }).fill('e2e-support');
+    await form.getByRole('textbox', { name: 'Mailbox' }).fill('e2e-support@example.org');
+    await form.getByRole('button', { name: 'Add' }).click();
+
+    const row = page.getByRole('table', { name: 'Mail accounts' }).getByRole('row', { name: /e2e-support/ });
+    await expect(row).toContainText('Microsoft 365');
+    await expect(row).toContainText('e2e-support@example.org');
+    await row.getByRole('button', { name: 'Remove' }).click();
+    await page.getByRole('button', { name: 'Yes, remove' }).click();
+    await expect(row).toHaveCount(0);
+  });
+
   test('system health: the report, and the figures behind it', async ({ page }) => {
     await page.goto('/admin/settings/health');
 

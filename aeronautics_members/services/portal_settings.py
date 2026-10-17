@@ -98,12 +98,17 @@ def export_settings(*, with_secrets=False):
     ).scalars():
         row = {
             "account_key": account.account_key,
+            "kind": account.kind,
             "host": account.host,
             "port": account.port,
             "username": account.username,
             "starttls": bool(account.starttls),
+            "from_email": account.from_email,
+            "from_name": account.from_name,
         }
-        if with_secrets:
+        if account.is_microsoft:
+            pass  # nothing secret: it signs in with the portal's app
+        elif with_secrets:
             row["password"] = account.password
         else:
             held_back.append(f"mail account {account.account_key}")
@@ -180,10 +185,14 @@ def import_settings(payload, *, dry_run=False):
         if not key:
             continue
         password = row.get("password")
+        microsoft = row.get("kind") == MailAccount.MICROSOFT
         account = db.session.execute(
             db.select(MailAccount).where(MailAccount.account_key == key)
         ).scalar_one_or_none()
-        if account is None and not password:
+        if microsoft and not row.get("from_email"):
+            report["problems"].append(f"mail account {key} has no mailbox address; add it by hand")
+            continue
+        if account is None and not password and not microsoft:
             # A mail account cannot exist without one, and inventing a blank
             # would produce an account that fails at the first send rather than
             # one that is visibly missing.
@@ -198,6 +207,16 @@ def import_settings(payload, *, dry_run=False):
         if account is None:
             account = MailAccount(account_key=key)
             db.session.add(account)
+        if row.get("from_email") is not None:
+            account.from_email = row.get("from_email")
+        if row.get("from_name") is not None:
+            account.from_name = row.get("from_name")
+        if microsoft:
+            account.kind = MailAccount.MICROSOFT
+            account.host = account.port = account.username = account.password = None
+            account.starttls = False
+            continue
+        account.kind = MailAccount.SMTP
         account.host = row.get("host") or ""
         account.port = int(row.get("port") or 587)
         account.username = row.get("username") or ""

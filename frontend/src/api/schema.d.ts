@@ -2024,7 +2024,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The accounts the portal sends email from, without their passwords. */
+        /** The accounts the portal sends email from, without their passwords, and the connection to Microsoft. */
         get: operations["admin_mail_accounts"];
         put?: never;
         post?: never;
@@ -2114,6 +2114,75 @@ export interface paths {
         put?: never;
         /** Accounts from a JSON file: this portal's export, the older mapping, or a list of accounts. */
         post: operations["admin_mail_import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/mail/microsoft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** The tenant and the app registration the Microsoft accounts sign in with. */
+        put: operations["admin_mail_microsoft_save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/mail/microsoft/certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The certificate, to upload to the app registration. Only the public part: the key stays here. */
+        get: operations["admin_mail_microsoft_certificate_file"];
+        put?: never;
+        /** Make a certificate, valid three years. With one in use, the new one waits */
+        post: operations["admin_mail_microsoft_certificate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/mail/microsoft/certificate/new": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Drop the new certificate that waits; the one in use goes on. */
+        delete: operations["admin_mail_microsoft_certificate_discard"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/mail/microsoft/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sign in to Microsoft once. A new certificate that waits is tried first, and is used from then on if it works. */
+        post: operations["admin_mail_microsoft_check"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4582,6 +4651,22 @@ export interface components {
             /** Label */
             label: string;
         };
+        /** CertificateOut */
+        CertificateOut: {
+            /** Expires At */
+            expires_at: string;
+            /** Thumbprint */
+            thumbprint: string;
+        };
+        /** CertificateQuery */
+        CertificateQuery: {
+            /**
+             * Which
+             * @default current
+             * @enum {string}
+             */
+            which?: "current" | "new";
+        };
         /** Change */
         Change: {
             /** Current */
@@ -4897,8 +4982,12 @@ export interface components {
             created_at: string;
             /** Error */
             error: string | null;
+            /** Has Attachments */
+            has_attachments: boolean;
             /** Id */
             id: number;
+            /** Incoming */
+            incoming: boolean;
             /** Sent At */
             sent_at: string | null;
         };
@@ -6948,24 +7037,39 @@ export interface components {
              * @default null
              */
             from_name?: string | null;
-            /** Host */
-            host: string;
+            /**
+             * Host
+             * @default null
+             */
+            host?: string | null;
             /** Key */
             key: string;
+            /**
+             * Kind
+             * @default smtp
+             * @enum {string}
+             */
+            kind?: "smtp" | "microsoft";
             /**
              * Password
              * @default null
              */
             password?: string | null;
-            /** Port */
-            port: number;
+            /**
+             * Port
+             * @default null
+             */
+            port?: number | null;
             /**
              * Starttls
              * @default true
              */
             starttls?: boolean;
-            /** Username */
-            username: string;
+            /**
+             * Username
+             * @default null
+             */
+            username?: string | null;
         };
         /** MailAccountOut */
         MailAccountOut: {
@@ -6974,22 +7078,28 @@ export interface components {
             /** From Name */
             from_name: string | null;
             /** Host */
-            host: string;
+            host: string | null;
             /** Id */
             id: number;
             /** Key */
             key: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "smtp" | "microsoft";
             /** Port */
-            port: number;
+            port: number | null;
             /** Starttls */
             starttls: boolean;
             /** Username */
-            username: string;
+            username: string | null;
         };
         /** MailOut */
         MailOut: {
             /** Accounts */
             accounts: components["schemas"]["MailAccountOut"][];
+            microsoft: components["schemas"]["MicrosoftOut"];
         };
         /** MailingDetailOut */
         MailingDetailOut: {
@@ -7455,6 +7565,32 @@ export interface components {
              * @enum {string}
              */
             state?: "open" | "done" | "all";
+        };
+        /** MicrosoftAppIn */
+        MicrosoftAppIn: {
+            /** Client Id */
+            client_id: string;
+            /** Tenant Id */
+            tenant_id: string;
+        };
+        /** MicrosoftCheckOut */
+        MicrosoftCheckOut: {
+            /** Message */
+            message: string;
+            microsoft: components["schemas"]["MicrosoftOut"];
+            /** Ok */
+            ok: boolean;
+        };
+        /** MicrosoftOut */
+        MicrosoftOut: {
+            certificate: components["schemas"]["CertificateOut"] | null;
+            /** Client Id */
+            client_id: string | null;
+            new_certificate: components["schemas"]["CertificateOut"] | null;
+            /** Ready */
+            ready: boolean;
+            /** Tenant Id */
+            tenant_id: string | null;
         };
         /** MoneyOut */
         MoneyOut: {
@@ -17584,6 +17720,256 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_mail_microsoft_save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MicrosoftAppIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MicrosoftOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_mail_microsoft_certificate_file: {
+        parameters: {
+            query?: {
+                which?: "current" | "new";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-x509-ca-cert": string;
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_mail_microsoft_certificate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MicrosoftOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_mail_microsoft_certificate_discard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MicrosoftOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_mail_microsoft_check: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MicrosoftCheckOut"];
                 };
             };
             /** @description Not signed in. */

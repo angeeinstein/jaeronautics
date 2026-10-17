@@ -1,9 +1,12 @@
 /**
  * Settings › Email, *Accounts*: the accounts the portal sends email from --
- * added, changed, tested, removed -- and importing or exporting them as a
- * JSON file. Their passwords never reach the browser, except in an export,
- * which asks for the current password first. Data: /api/v1/admin/settings/mail
- * (aeronautics_members/api/admin_mail.py).
+ * SMTP servers and Microsoft 365 mailboxes, side by side, added, changed,
+ * tested, removed -- the connection to Microsoft those sign in with (its app
+ * registration and the certificate the portal makes), and importing or
+ * exporting the accounts as a JSON file. SMTP passwords never reach the
+ * browser, except in an export, which asks for the current password first.
+ * Data: /api/v1/admin/settings/mail (aeronautics_members/api/admin_mail.py;
+ * docs/microsoft-mail-plan.md).
  */
 import {
   Button,
@@ -12,6 +15,7 @@ import {
   Group,
   NumberInput,
   PasswordInput,
+  SegmentedControl,
   SimpleGrid,
   Stack,
   Table,
@@ -21,18 +25,20 @@ import {
 } from '@mantine/core';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { IconMail, IconPencil, IconTransfer } from '@tabler/icons-react';
+import { IconBrandWindows, IconMail, IconPencil, IconTransfer } from '@tabler/icons-react';
 
 import { api, ApiError, call, type Schemas } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
 import { EmptyState } from '../../../components/States';
 import { Panel } from '../../../components/Panel';
 import { fileNameOf, saveFile } from '../../../lib/files';
+import { formatDayOf } from '../../../lib/format';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
 import { SettingsLoaded, useNotMyLogin } from './shared';
 
 type Account = Schemas['MailAccountOut'];
 type AccountIn = Schemas['MailAccountIn'];
+type Microsoft = Schemas['MicrosoftOut'];
 
 const mailQuery = {
   queryKey: ['admin', 'settings', 'mail'] as const,
@@ -41,6 +47,7 @@ const mailQuery = {
 
 const EMPTY: AccountIn = {
   key: '',
+  kind: 'smtp',
   host: '',
   port: 587,
   username: '',
@@ -78,9 +85,10 @@ function AccountForm({ editing, onDone }: { editing: Account | null; onDone: () 
     editing
       ? {
           key: editing.key,
-          host: editing.host,
-          port: editing.port,
-          username: editing.username,
+          kind: editing.kind,
+          host: editing.host ?? '',
+          port: editing.port ?? 587,
+          username: editing.username ?? '',
           password: null,
           starttls: editing.starttls,
           from_email: editing.from_email,
@@ -124,6 +132,8 @@ function AccountForm({ editing, onDone }: { editing: Account | null; onDone: () 
     />
   );
 
+  const microsoft = value.kind === 'microsoft';
+
   return (
     <Panel
       icon={IconPencil}
@@ -137,55 +147,84 @@ function AccountForm({ editing, onDone }: { editing: Account | null; onDone: () 
       }
     >
       <Stack gap="md">
-        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
-          {text('key', 'Key', {
-            placeholder: 'office',
-            description: 'How it is chosen elsewhere: letters, digits, - and _.',
-          })}
-          {text('host', 'SMTP server', { placeholder: 'smtp.example.com' })}
-          <NumberInput
-            label="Port"
-            min={1}
-            max={65535}
-            allowDecimal={false}
-            value={value.port}
-            error={errors.port ?? null}
-            onChange={(port) => {
-              set('port', typeof port === 'number' ? port : 0);
-            }}
-          />
-        </SimpleGrid>
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-          {text('username', 'Username', {
-            placeholder: 'noreply@example.com',
-            name: 'smtp-login',
-            ...notLogin,
-          })}
-          <PasswordInput
-            label="Password"
-            description={editing ? 'Leave empty to keep the one it has.' : undefined}
-            name="smtp-secret"
-            {...notPassword}
-            value={value.password ?? ''}
-            error={errors.password ?? null}
-            onChange={(event) => {
-              set('password', event.currentTarget.value || null);
-            }}
-          />
-          {text('from_email', 'Sends as (optional)', {
-            placeholder: 'Same as the username',
-            description: 'Where the login is not an address, such as Brevo: the address emails come from.',
-          })}
-          {text('from_name', 'Sender name (optional)', { placeholder: 'Joanneum Aeronautics' })}
-        </SimpleGrid>
-        <Checkbox
-          label="STARTTLS"
-          description="On a port such as 587. Off: SSL/TLS from the start, such as on 465."
-          checked={value.starttls ?? true}
-          onChange={(event) => {
-            set('starttls', event.currentTarget.checked);
+        <SegmentedControl
+          aria-label="Kind of account"
+          w="fit-content"
+          data={[
+            { value: 'smtp', label: 'SMTP' },
+            { value: 'microsoft', label: 'Microsoft 365' },
+          ]}
+          value={value.kind ?? 'smtp'}
+          onChange={(kind) => {
+            set('kind', kind as AccountIn['kind']);
           }}
         />
+        {microsoft ? (
+          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+            {text('key', 'Key', {
+              placeholder: 'support',
+              description: 'How it is chosen elsewhere: letters, digits, - and _.',
+            })}
+            {text('from_email', 'Mailbox', {
+              placeholder: 'support@example.org',
+              description: 'A shared mailbox the app may use (Microsoft 365 below).',
+            })}
+            {text('from_name', 'Sender name (optional)', { placeholder: 'Joanneum Aeronautics' })}
+          </SimpleGrid>
+        ) : (
+          <Stack gap="md">
+            <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+              {text('key', 'Key', {
+                placeholder: 'office',
+                description: 'How it is chosen elsewhere: letters, digits, - and _.',
+              })}
+              {text('host', 'SMTP server', { placeholder: 'smtp.example.com' })}
+              <NumberInput
+                label="Port"
+                min={1}
+                max={65535}
+                allowDecimal={false}
+                value={value.port ?? 587}
+                error={errors.port ?? null}
+                onChange={(port) => {
+                  set('port', typeof port === 'number' ? port : 0);
+                }}
+              />
+            </SimpleGrid>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+              {text('username', 'Username', {
+                placeholder: 'noreply@example.com',
+                name: 'smtp-login',
+                ...notLogin,
+              })}
+              <PasswordInput
+                label="Password"
+                description={editing ? 'Leave empty to keep the one it has.' : undefined}
+                name="smtp-secret"
+                {...notPassword}
+                value={value.password ?? ''}
+                error={errors.password ?? null}
+                onChange={(event) => {
+                  set('password', event.currentTarget.value || null);
+                }}
+              />
+              {text('from_email', 'Sends as (optional)', {
+                placeholder: 'Same as the username',
+                description:
+                  'Where the login is not an address, such as Brevo: the address emails come from.',
+              })}
+              {text('from_name', 'Sender name (optional)', { placeholder: 'Joanneum Aeronautics' })}
+            </SimpleGrid>
+            <Checkbox
+              label="STARTTLS"
+              description="On a port such as 587. Off: SSL/TLS from the start, such as on 465."
+              checked={value.starttls ?? true}
+              onChange={(event) => {
+                set('starttls', event.currentTarget.checked);
+              }}
+            />
+          </Stack>
+        )}
         <Group justify="flex-end">
           <Button
             loading={mutation.isPending}
@@ -235,20 +274,42 @@ function AccountRow({ account, onEdit }: { account: Account; onEdit: () => void 
   return (
     <Table.Tr>
       <Table.Td fw={600}>{account.key}</Table.Td>
-      <Table.Td>
-        {account.host}:{account.port}
-        <Text size="xs" c="dimmed">
-          {account.starttls ? 'STARTTLS' : 'SSL/TLS'}
-        </Text>
-      </Table.Td>
-      <Table.Td>
-        {account.username}
-        {account.from_email ? (
-          <Text size="xs" c="dimmed">
-            sends as {account.from_name ? `${account.from_name} <${account.from_email}>` : account.from_email}
-          </Text>
-        ) : null}
-      </Table.Td>
+      {account.kind === 'microsoft' ? (
+        <>
+          <Table.Td>
+            Microsoft 365
+            <Text size="xs" c="dimmed">
+              Graph
+            </Text>
+          </Table.Td>
+          <Table.Td>
+            {account.from_email}
+            {account.from_name ? (
+              <Text size="xs" c="dimmed">
+                as {account.from_name}
+              </Text>
+            ) : null}
+          </Table.Td>
+        </>
+      ) : (
+        <>
+          <Table.Td>
+            {account.host}:{account.port}
+            <Text size="xs" c="dimmed">
+              {account.starttls ? 'STARTTLS' : 'SSL/TLS'}
+            </Text>
+          </Table.Td>
+          <Table.Td>
+            {account.username}
+            {account.from_email ? (
+              <Text size="xs" c="dimmed">
+                sends as{' '}
+                {account.from_name ? `${account.from_name} <${account.from_email}>` : account.from_email}
+              </Text>
+            ) : null}
+          </Table.Td>
+        </>
+      )}
       <Table.Td>
         <Group gap="xs" justify="flex-end" wrap="nowrap">
           <Button size="xs" variant="default" onClick={onEdit}>
@@ -277,6 +338,179 @@ function AccountRow({ account, onEdit }: { account: Account; onEdit: () => void 
         </Group>
       </Table.Td>
     </Table.Tr>
+  );
+}
+
+/** One certificate: its thumbprint as Entra ID shows it, how long it is valid, and its file. */
+function CertificateLine({
+  label,
+  certificate,
+  which,
+  extra,
+}: {
+  label: string;
+  certificate: NonNullable<Microsoft['certificate']>;
+  which: 'current' | 'new';
+  extra?: React.ReactNode;
+}) {
+  const download = useMutation({
+    mutationFn: async () => {
+      const { data, error, response } = await api.GET('/api/v1/admin/settings/mail/microsoft/certificate', {
+        params: { query: { which } },
+        parseAs: 'blob',
+      });
+      if (!response.ok || !(data instanceof Blob)) {
+        await call(Promise.resolve({ data: undefined, error, response }));
+        throw new ApiError(response.status, 'unexpected', 'The certificate could not be fetched just now.');
+      }
+      saveFile(data, fileNameOf(response, 'portal-mail.cer'));
+    },
+    onError: notifyFailed,
+  });
+  return (
+    <Group justify="space-between" align="flex-start" gap="sm" wrap="wrap">
+      <Stack gap={2}>
+        <Text size="sm" fw={600}>
+          {label}
+        </Text>
+        <Text size="xs" c="dimmed" ff="monospace" style={{ wordBreak: 'break-all' }}>
+          {certificate.thumbprint}
+        </Text>
+        <Text size="xs" c="dimmed">
+          Valid until {formatDayOf(certificate.expires_at)}
+        </Text>
+      </Stack>
+      <Group gap="xs">
+        <Button
+          size="xs"
+          variant="default"
+          loading={download.isPending}
+          onClick={() => {
+            download.mutate();
+          }}
+        >
+          Download
+        </Button>
+        {extra}
+      </Group>
+    </Group>
+  );
+}
+
+/** Microsoft 365: the app registration the Microsoft accounts sign in with, and its certificate. */
+function MicrosoftConnection({ microsoft }: { microsoft: Microsoft }) {
+  const [app, setApp] = useState({
+    tenant_id: microsoft.tenant_id ?? '',
+    client_id: microsoft.client_id ?? '',
+  });
+  const saved = useMailChange(
+    () => call(api.PUT('/api/v1/admin/settings/mail/microsoft', { body: app })),
+    () => {
+      notifyDone('Saved.');
+    },
+  );
+  const made = useMailChange(
+    () => call(api.POST('/api/v1/admin/settings/mail/microsoft/certificate')),
+    () => {
+      notifyDone('Made. Download it and upload it to the app registration.');
+    },
+  );
+  const dropped = useMailChange(
+    () => call(api.DELETE('/api/v1/admin/settings/mail/microsoft/certificate/new')),
+    () => {
+      notifyDone('Dropped.');
+    },
+  );
+  const checked = useMailChange(
+    () => call(api.POST('/api/v1/admin/settings/mail/microsoft/check')),
+    (result) => {
+      if (result.ok) notifyDone(result.message);
+      else notifyFailed(new ApiError(200, 'microsoft_check_failed', result.message));
+    },
+  );
+  const field = (key: 'tenant_id' | 'client_id', label: string, placeholder: string) => (
+    <TextInput
+      label={label}
+      placeholder={placeholder}
+      value={app[key]}
+      error={saved.errors[key] ?? null}
+      onChange={(event) => {
+        setApp({ ...app, [key]: event.currentTarget.value });
+        saved.setErrors({});
+      }}
+    />
+  );
+
+  return (
+    <Panel icon={IconBrandWindows} title="Microsoft 365">
+      <Stack gap="lg">
+        <Text size="sm" c="dimmed">
+          Microsoft 365 accounts sign in as the portal&apos;s app in Entra ID, with a certificate made here:
+          its key never leaves the server. Setting it up: docs/microsoft-mail-setup.md.
+        </Text>
+        <Group align="flex-end" gap="md">
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" flex="1 1 24rem">
+            {field('tenant_id', 'Directory (tenant) ID', 'example.onmicrosoft.com')}
+            {field('client_id', 'Application (client) ID', '00000000-0000-0000-0000-000000000000')}
+          </SimpleGrid>
+          <Button
+            loading={saved.mutation.isPending}
+            onClick={() => {
+              saved.mutation.mutate(undefined);
+            }}
+          >
+            Save
+          </Button>
+        </Group>
+        <Stack gap="md">
+          {microsoft.certificate ? (
+            <CertificateLine label="Certificate in use" certificate={microsoft.certificate} which="current" />
+          ) : null}
+          {microsoft.new_certificate ? (
+            <CertificateLine
+              label="New certificate, used once it signs in"
+              certificate={microsoft.new_certificate}
+              which="new"
+              extra={
+                <ConfirmButton
+                  size="xs"
+                  confirmLabel="Yes, drop it"
+                  loading={dropped.mutation.isPending}
+                  onConfirm={() => {
+                    dropped.mutation.mutate(undefined);
+                  }}
+                >
+                  Drop
+                </ConfirmButton>
+              }
+            />
+          ) : null}
+          <Group gap="sm">
+            {microsoft.new_certificate ? null : (
+              <Button
+                variant={microsoft.certificate ? 'default' : 'filled'}
+                loading={made.mutation.isPending}
+                onClick={() => {
+                  made.mutation.mutate(undefined);
+                }}
+              >
+                {microsoft.certificate ? 'Make a new certificate' : 'Make a certificate'}
+              </Button>
+            )}
+            <Button
+              variant="default"
+              disabled={!microsoft.certificate && !microsoft.new_certificate}
+              loading={checked.mutation.isPending}
+              onClick={() => {
+                checked.mutation.mutate(undefined);
+              }}
+            >
+              Check sign-in
+            </Button>
+          </Group>
+        </Stack>
+      </Stack>
+    </Panel>
   );
 }
 
@@ -329,7 +563,8 @@ function ImportExport() {
         <Stack gap="sm">
           <Text size="sm" c="dimmed">
             SMTP providers have no common export, so a JSON file: this portal&apos;s export, the older
-            MAIL_ACCOUNTS_JSON mapping, or a list of accounts with the usual SMTP keys.
+            MAIL_ACCOUNTS_JSON mapping, or a list of accounts with the usual SMTP keys. Microsoft 365 accounts
+            go with it; their connection does not.
           </Text>
           <Group align="flex-end" gap="md">
             <FileInput
@@ -366,7 +601,8 @@ function ImportExport() {
         </Stack>
         <Stack gap="sm">
           <Text size="sm" c="dimmed">
-            The export has every password in it, readable: export only when needed, and keep the file safe.
+            The export has every SMTP password in it, readable: export only when needed, and keep the file
+            safe.
           </Text>
           <Group align="flex-end" gap="md">
             <PasswordInput
@@ -409,7 +645,7 @@ function Accounts({ data }: { data: Schemas['MailOut'] }) {
                 <Table.Tr>
                   <Table.Th scope="col">Key</Table.Th>
                   <Table.Th scope="col">Server</Table.Th>
-                  <Table.Th scope="col">Username</Table.Th>
+                  <Table.Th scope="col">Login or mailbox</Table.Th>
                   <Table.Th scope="col">
                     <VisuallyHidden>Actions</VisuallyHidden>
                   </Table.Th>
@@ -440,6 +676,10 @@ function Accounts({ data }: { data: Schemas['MailOut'] }) {
         onDone={() => {
           setEditing(null);
         }}
+      />
+      <MicrosoftConnection
+        key={`${data.microsoft.tenant_id ?? ''}|${data.microsoft.client_id ?? ''}`}
+        microsoft={data.microsoft}
       />
       <ImportExport />
     </Stack>

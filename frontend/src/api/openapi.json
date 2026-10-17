@@ -2753,6 +2753,41 @@
         "title": "CategoryGroup",
         "type": "object"
       },
+      "CertificateOut": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "thumbprint": {
+            "title": "Thumbprint",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thumbprint",
+          "expires_at"
+        ],
+        "title": "CertificateOut",
+        "type": "object"
+      },
+      "CertificateQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "which": {
+            "default": "current",
+            "enum": [
+              "current",
+              "new"
+            ],
+            "title": "Which",
+            "type": "string"
+          }
+        },
+        "title": "CertificateQuery",
+        "type": "object"
+      },
       "Change": {
         "additionalProperties": false,
         "properties": {
@@ -3863,9 +3898,17 @@
             ],
             "title": "Error"
           },
+          "has_attachments": {
+            "title": "Has Attachments",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "incoming": {
+            "title": "Incoming",
+            "type": "boolean"
           },
           "sent_at": {
             "anyOf": [
@@ -3885,7 +3928,9 @@
           "author",
           "created_at",
           "sent_at",
-          "error"
+          "error",
+          "incoming",
+          "has_attachments"
         ],
         "title": "ContactReplyOut",
         "type": "object"
@@ -9979,13 +10024,30 @@
             "title": "From Name"
           },
           "host": {
-            "maxLength": 255,
-            "title": "Host",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Host"
           },
           "key": {
             "maxLength": 80,
             "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "default": "smtp",
+            "enum": [
+              "smtp",
+              "microsoft"
+            ],
+            "title": "Kind",
             "type": "string"
           },
           "password": {
@@ -10002,8 +10064,16 @@
             "title": "Password"
           },
           "port": {
-            "title": "Port",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Port"
           },
           "starttls": {
             "default": true,
@@ -10011,16 +10081,21 @@
             "type": "boolean"
           },
           "username": {
-            "maxLength": 255,
-            "title": "Username",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Username"
           }
         },
         "required": [
-          "key",
-          "host",
-          "port",
-          "username"
+          "key"
         ],
         "title": "MailAccountIn",
         "type": "object"
@@ -10051,8 +10126,15 @@
             "title": "From Name"
           },
           "host": {
-            "title": "Host",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
           },
           "id": {
             "title": "Id",
@@ -10062,22 +10144,45 @@
             "title": "Key",
             "type": "string"
           },
+          "kind": {
+            "enum": [
+              "smtp",
+              "microsoft"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
           "port": {
-            "title": "Port",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port"
           },
           "starttls": {
             "title": "Starttls",
             "type": "boolean"
           },
           "username": {
-            "title": "Username",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
           }
         },
         "required": [
           "id",
           "key",
+          "kind",
           "host",
           "port",
           "username",
@@ -10097,10 +10202,14 @@
             },
             "title": "Accounts",
             "type": "array"
+          },
+          "microsoft": {
+            "$ref": "#/components/schemas/MicrosoftOut"
           }
         },
         "required": [
-          "accounts"
+          "accounts",
+          "microsoft"
         ],
         "title": "MailOut",
         "type": "object"
@@ -11545,6 +11654,110 @@
           }
         },
         "title": "MessagesQuery",
+        "type": "object"
+      },
+      "MicrosoftAppIn": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "maxLength": 64,
+            "title": "Client Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "maxLength": 100,
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "client_id"
+        ],
+        "title": "MicrosoftAppIn",
+        "type": "object"
+      },
+      "MicrosoftCheckOut": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "microsoft": {
+            "$ref": "#/components/schemas/MicrosoftOut"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "message",
+          "microsoft"
+        ],
+        "title": "MicrosoftCheckOut",
+        "type": "object"
+      },
+      "MicrosoftOut": {
+        "additionalProperties": false,
+        "properties": {
+          "certificate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CertificateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "new_certificate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CertificateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "client_id",
+          "certificate",
+          "new_certificate",
+          "ready"
+        ],
+        "title": "MicrosoftOut",
         "type": "object"
       },
       "MoneyOut": {
@@ -28148,7 +28361,7 @@
             "description": "Signed in, without the permission."
           }
         },
-        "summary": "The accounts the portal sends email from, without their passwords.",
+        "summary": "The accounts the portal sends email from, without their passwords, and the connection to Microsoft.",
         "tags": [
           "Admin"
         ],
@@ -28633,6 +28846,311 @@
           }
         },
         "summary": "Accounts from a JSON file: this portal's export, the older mapping, or a list of accounts.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/mail/microsoft": {
+      "put": {
+        "operationId": "admin_mail_microsoft_save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MicrosoftAppIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MicrosoftOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "The tenant and the app registration the Microsoft accounts sign in with.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/mail/microsoft/certificate": {
+      "get": {
+        "operationId": "admin_mail_microsoft_certificate_file",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "which",
+            "required": false,
+            "schema": {
+              "default": "current",
+              "enum": [
+                "current",
+                "new"
+              ],
+              "title": "Which",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/x-x509-ca-cert": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The file"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "The certificate, to upload to the app registration. Only the public part: the key stays here.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      },
+      "post": {
+        "operationId": "admin_mail_microsoft_certificate",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MicrosoftOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Make a certificate, valid three years. With one in use, the new one waits",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/mail/microsoft/certificate/new": {
+      "delete": {
+        "operationId": "admin_mail_microsoft_certificate_discard",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MicrosoftOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Drop the new certificate that waits; the one in use goes on.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/mail/microsoft/check": {
+      "post": {
+        "operationId": "admin_mail_microsoft_check",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MicrosoftCheckOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Sign in to Microsoft once. A new certificate that waits is tried first, and is used from then on if it works.",
         "tags": [
           "Admin"
         ],

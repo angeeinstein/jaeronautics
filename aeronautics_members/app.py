@@ -1146,9 +1146,11 @@ def create_app(config_overrides=None):
     from .blueprints.public import public_bp
     from .blueprints.teams import teams_bp
     from .blueprints.webhook import webhook_bp
+    from .blueprints.microsoft_mail import microsoft_mail_bp
     from .api import api_bp
 
     csrf.exempt(webhook_bp)
+    csrf.exempt(microsoft_mail_bp)
     # Devices sign in with their key, never a session (api/devices.py).
     from .api.devices import DEVICE_VIEWS
 
@@ -1156,6 +1158,7 @@ def create_app(config_overrides=None):
         csrf.exempt(f"{view.__module__}.{view.__name__}")
     app.register_blueprint(api_bp)
     app.register_blueprint(webhook_bp)
+    app.register_blueprint(microsoft_mail_bp)
     app.register_blueprint(public_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(account_bp)
@@ -4223,8 +4226,13 @@ def create_app(config_overrides=None):
         from .services import mailings as mailings_service
         from .services import messages as messages_service
 
+        from .services import mail_replies as mail_replies_service
+
         for step, done_text in ((messages_service.deliver_waiting, "Delivered {} waiting message(s)."),
-                                (mailings_service.process, "Sent {} mailing email(s).")):
+                                (mailings_service.process, "Sent {} mailing email(s)."),
+                                # Replies by email to answers from Admin › Messages: the
+                                # inbox's subscription kept, and a look for any missed.
+                                (mail_replies_service.run, "Took {} reply(ies) from the replies' mailbox.")):
             try:
                 count = step()
             except Exception:  # noqa: BLE001 -- logged; tried again on the next run

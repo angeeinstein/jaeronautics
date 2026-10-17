@@ -6,7 +6,7 @@ import smtplib
 import ssl
 from datetime import datetime, timezone
 from email.mime.text import MIMEText
-from email.utils import formataddr
+from email.utils import formataddr, make_msgid
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 from email.mime.application import MIMEApplication
@@ -195,7 +195,8 @@ def html_to_text(html):
 
 def send_mail(from_account, to_email, subject, template_name=None, body=None, attachments=None, bcc_emails=None, return_error=False, cc_emails=None, files=None, reply_to=None, headers=None, from_name=None, **template_vars):
     """
-    Sends an email using pre-configured SMTP accounts.
+    Sends an email from one of the portal's mail accounts: an SMTP server, or
+    a Microsoft 365 mailbox through Graph (services/microsoft_mail.py).
 
     ``attachments`` are images shown in the body (``{"path", "cid"}``);
     ``files`` are documents attached to it (``{"filename", "data", "mimetype"}``),
@@ -255,6 +256,10 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
             message["Reply-To"] = reply_to
         for header, value in (headers or {}).items():
             message[header] = value
+        # Its own ID, so a reply to it can be recognised (an answer from
+        # Admin › Messages brings the one it keeps).
+        if "Message-ID" not in message:
+            message["Message-ID"] = make_msgid(domain=sender.rpartition("@")[2] or None)
         if cc_list:
             message["Cc"] = ", ".join(dict.fromkeys(cc_list))
 
@@ -304,7 +309,15 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
                 message.attach(part)
 
         context = ssl.create_default_context()
-        if config.get("starttls", False):
+        if config.get("kind") == "microsoft":
+            # A Microsoft 365 mailbox, through Graph: the same email, whole.
+            # Exchange takes the blind copies from their header, and drops it.
+            from .services.microsoft_mail import send_mime
+
+            if bcc_list:
+                message["Bcc"] = ", ".join(dict.fromkeys(bcc_list))
+            send_mime(sender, message.as_bytes())
+        elif config.get("starttls", False):
             with smtplib.SMTP(config["host"], config["port"], timeout=SMTP_SEND_TIMEOUT_SECONDS) as server:
                 server.starttls(context=context)
                 server.login(config["user"], config["pass"])
@@ -319,7 +332,7 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
         if has_app_context():
             current_app.logger.info("Email sent successfully to %s from %s", ", ".join(recipients), sender)
         else:
-            print(f"Email sent successfully to {', '.join(recipients)} from {config['user']}")
+            print(f"Email sent successfully to {', '.join(recipients)} from {sender}")
         return (True, None) if return_error else True
 
     except Exception as exc:

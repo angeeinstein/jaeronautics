@@ -1,9 +1,11 @@
 """The accounts the portal sends email from: adding, changing, removing,
 testing, importing and exporting them -- and a test email from one.
 
-Their passwords are kept for sending and leave the server only in an export,
-which asks for the current password first. Every change is in the log,
-without the password.
+An account is an SMTP server, or a Microsoft 365 mailbox reached through
+Microsoft Graph (services/microsoft_mail.py), which has no server, login or
+password of its own. SMTP passwords are kept for sending and leave the server
+only in an export, which asks for the current password first. Every change is
+in the log, without the password.
 """
 
 import json
@@ -39,37 +41,50 @@ def _get(account_id):
     return account
 
 
-def save(actor, account_id, *, key, host, port, username, password, starttls, from_email, from_name):
-    """Add an account (``account_id`` None; a password is needed) or change one
-    (an empty password keeps the one it has)."""
+def save(actor, account_id, *, key, host=None, port=None, username=None, password=None, starttls=True,
+         from_email=None, from_name=None, kind=MailAccount.SMTP):
+    """Add an account (``account_id`` None) or change one. An SMTP account
+    needs its server, login and -- when new -- password (an empty one keeps
+    the one it has); a Microsoft account only its mailbox, ``from_email``."""
     key, host, username = (key or "").strip(), (host or "").strip(), (username or "").strip()
     from_email = (from_email or "").strip().lower() or None
+    microsoft = kind == MailAccount.MICROSOFT
+    if kind not in (MailAccount.SMTP, MailAccount.MICROSOFT):
+        raise _invalid("kind", "Choose SMTP or Microsoft 365.")
     if not KEY_PATTERN.fullmatch(key):
         raise _invalid("key", "Use only letters, digits, dashes and underscores.")
-    if not host:
-        raise _invalid("host", "Enter the SMTP server.")
-    if not username:
-        raise _invalid("username", "Enter the SMTP username.")
-    if not 1 <= int(port or 0) <= 65535:
-        raise _invalid("port", "Enter a port between 1 and 65535.")
+    if microsoft:
+        if not from_email:
+            raise _invalid("from_email", "Enter the mailbox's address.")
+    else:
+        if not host:
+            raise _invalid("host", "Enter the SMTP server.")
+        if not username:
+            raise _invalid("username", "Enter the SMTP username.")
+        if not 1 <= int(port or 0) <= 65535:
+            raise _invalid("port", "Enter a port between 1 and 65535.")
     if from_email and not _EMAIL.fullmatch(from_email):
         raise _invalid("from_email", "That does not look like an email address.")
     clash = db.session.execute(db.select(MailAccount).filter_by(account_key=key)).scalar_one_or_none()
     if clash is not None and clash.id != account_id:
         raise ConflictError("A mail account with this key already exists.", code="mail_account_key_taken",
                             details={"fields": {"key": "A mail account with this key already exists."}})
+    account = MailAccount() if account_id is None else _get(account_id)
+    if not microsoft and not password and not account.password:
+        raise _invalid("password", "A new account needs its password.")
     if account_id is None:
-        if not password:
-            raise _invalid("password", "A new account needs its password.")
-        account = MailAccount()
         db.session.add(account)
-    else:
-        account = _get(account_id)
     before = snapshot_mail_account_for_audit(account) if account_id is not None else None
-    account.account_key, account.host, account.port, account.username = key, host, int(port), username
-    if password:
-        account.password = password
-    account.starttls = bool(starttls)
+    account.account_key, account.kind = key, kind
+    if microsoft:
+        account.host = account.port = account.username = account.password = None
+        account.starttls = False
+    else:
+        account.host, account.port, account.username = host, int(port), username
+        if password:
+            account.password = password
+        account.starttls = bool(starttls)
+        _stop_watching(account)
     account.from_email = from_email
     account.from_name = (from_name or "").strip() or None
     try:
@@ -83,6 +98,15 @@ def save(actor, account_id, *, key, host, port, username, password, starttls, fr
     return account
 
 
+def _stop_watching(account):
+    """No longer a Microsoft account, or removed: Graph's subscription to its
+    inbox ends (it would run out by itself within days)."""
+    if account.inbox_subscription_id:
+        from .mail_replies import unsubscribe
+
+        unsubscribe(account)
+
+
 def delete(actor, account_id):
     """Remove an account. What it was chosen to send (Settings › Email, Senders)
     goes out from the default from now on; those kinds are answered."""
@@ -90,6 +114,7 @@ def delete(actor, account_id):
 
     account = _get(account_id)
     cleared = forget_account(account.account_key)
+    _stop_watching(account)
     log_audit_event("settings", "mail_account_deleted", actor_user=actor, target_user=actor,
                     before=snapshot_mail_account_for_audit(account),
                     metadata={"mail_account_id": account.id, "account_key": account.account_key,
@@ -103,7 +128,12 @@ def test_connection(actor, account_id):
     from ..mail_utils import probe_mail_account_connection
 
     account = _get(account_id)
-    ok, message = probe_mail_account_connection(account.to_config())
+    if account.is_microsoft:
+        from .microsoft_mail import probe
+
+        ok, message = probe(account)
+    else:
+        ok, message = probe_mail_account_connection(account.to_config())
     log_audit_event("settings", "mail_account_connection_tested", actor_user=actor, target_user=actor,
                     before=snapshot_mail_account_for_audit(account),
                     metadata={"mail_account_id": account.id, "account_key": account.account_key,
@@ -134,7 +164,8 @@ def import_file(actor, data, *, overwrite):
         if account is None:
             account = MailAccount()
             db.session.add(account)
-        for field in ("account_key", "host", "port", "username", "password", "starttls", "from_email", "from_name"):
+        for field in ("account_key", "kind", "host", "port", "username", "password", "starttls", "from_email",
+                      "from_name"):
             setattr(account, field, record[field])
         db.session.flush()
         log_audit_event("settings", "mail_account_created" if before is None else "mail_account_updated",

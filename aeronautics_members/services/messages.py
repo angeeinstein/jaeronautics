@@ -27,6 +27,7 @@ faster than a person types, and rate limits on the endpoint.
 """
 
 from datetime import timedelta, timezone
+from email.utils import make_msgid
 
 from flask import current_app
 
@@ -268,6 +269,18 @@ def _send_reply(reply):
         reply.account_key = usable[0] if usable else reply.account_key
     copy = mailings.account_address(reply.account_key) if mailings.reply_copy() else ""
     written = local_time(message.created_at)
+    # Its Message-ID, kept: a reply to it is recognised by it
+    # (services/mail_replies.py). Made once, so a retry is the same email.
+    if not reply.email_message_id:
+        reply.email_message_id = make_msgid(domain=mailings.account_address(reply.account_key).rpartition("@")[2]
+                                            or None)
+    headers = {"Message-ID": reply.email_message_id}
+    earlier = [answer.email_message_id for answer in sorted(message.replies, key=lambda answer: answer.id)
+               if answer.email_message_id and answer.id < reply.id]
+    if earlier:
+        # After the sender's reply: in the same thread in their mail app.
+        headers["References"] = " ".join(earlier[-20:])
+        headers["In-Reply-To"] = earlier[-1]
     sent, error = send_mail(
         from_account=reply.account_key,
         to_email=message.sender_email,
@@ -277,6 +290,7 @@ def _send_reply(reply):
         quoted_intro=f"On {written:%d.%m.%Y} at {written:%H:%M}, {message.sender_name} wrote:",
         quoted_text=message.body,
         bcc_emails=[copy] if copy and copy.lower() != message.sender_email.lower() else None,
+        headers=headers,
         return_error=True,
     )
     if not sent:
@@ -409,7 +423,10 @@ def sent_by(user):
     return [
         {"at": message.created_at, "to": message.team.name if message.team_id else "The association",
          "topic": TOPICS.get(message.topic), "subject": message.subject, "message": message.body,
-         "answers": [{"at": answer.created_at, "answer": answer.body} for answer in message.replies]}
+         "answers": [{"at": answer.created_at, "answer": answer.body} for answer in message.replies
+                     if not answer.incoming],
+         "your_replies": [{"at": answer.created_at, "reply": answer.body} for answer in message.replies
+                          if answer.incoming]}
         for message in db.session.execute(
             db.select(ContactMessage).where(ContactMessage.sender_user_id == user.id)
             .order_by(ContactMessage.created_at)

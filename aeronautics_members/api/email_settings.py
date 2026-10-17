@@ -86,6 +86,10 @@ def admin_email_senders_save(body):
                                     notifications=body.notifications, mailings=body.mailings, replies=body.replies,
                                     reply_copy=body.reply_copy)
     db.session.commit()
+    # Replies come back from the mailbox chosen for them, if it is a Microsoft one.
+    from .admin_mail import watch_soon
+
+    watch_soon()
     return SettingsChangedOut(changed=changed)
 
 

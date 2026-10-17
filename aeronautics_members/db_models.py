@@ -1284,7 +1284,8 @@ class ContactMessage(db.Model):
 class ContactReply(db.Model):
     """An answer to a contact-form message, written in Admin › Messages and
     emailed to its sender from the mail account chosen for replies
-    (services/messages.py). Kept, and deleted, with the message.
+    (services/messages.py) -- or the sender's reply to one, by email
+    (``incoming``). Kept, and deleted, with the message.
     """
 
     __tablename__ = "contact_replies"
@@ -1300,6 +1301,15 @@ class ContactReply(db.Model):
     sent_at = db.Column(db.DateTime, nullable=True)
     attempts = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     error = db.Column(db.Text, nullable=True)
+    #: The sender's own answer, by email, to one written here
+    #: (services/mail_replies.py): ``sent_at`` is when it arrived,
+    #: ``account_key`` the mailbox it arrived in, no author.
+    incoming = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    #: The email's Message-ID: made by the portal for an answer sent, so a
+    #: reply to it is recognised; the reply's own, so it is taken once.
+    email_message_id = db.Column(db.String(255), nullable=True, index=True)
+    #: An incoming reply had files attached; they stay in the mailbox.
+    has_attachments = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
 
     message = db.relationship("ContactMessage", back_populates="replies")
     author = db.relationship("User")
@@ -1443,14 +1453,26 @@ class TeamNote(db.Model):
 
 
 class MailAccount(db.Model):
+    """An account the portal sends email from: an SMTP server, or a Microsoft
+    365 mailbox reached through Microsoft Graph (``kind`` "microsoft";
+    services/microsoft_mail.py, docs/microsoft-mail-plan.md). A Microsoft one
+    has no server, login or password -- it signs in with the portal's app and
+    certificate (``MicrosoftConnection``) -- and sends as ``from_email``, the
+    mailbox.
+    """
+
     __tablename__ = "mail_accounts"
+
+    SMTP = "smtp"
+    MICROSOFT = "microsoft"
 
     id = db.Column(db.Integer, primary_key=True)
     account_key = db.Column(db.String(80), unique=True, nullable=False)
-    host = db.Column(db.String(255), nullable=False)
-    port = db.Column(db.Integer, nullable=False)
-    username = db.Column(db.String(255), nullable=False)
-    password = db.Column(db.String(255), nullable=False)
+    kind = db.Column(db.String(20), nullable=False, default=SMTP, server_default=SMTP)
+    host = db.Column(db.String(255), nullable=True)
+    port = db.Column(db.Integer, nullable=True)
+    username = db.Column(db.String(255), nullable=True)
+    password = db.Column(db.String(255), nullable=True)
     starttls = db.Column(db.Boolean, nullable=False, default=False)
     # Who the email is from, when that is not the login. Most providers sign in
     # with the address they send from; Brevo and similar relays sign in with an
@@ -1458,8 +1480,24 @@ class MailAccount(db.Model):
     # login is the sender, as before.
     from_email = db.Column(db.String(255), nullable=True)
     from_name = db.Column(db.String(120), nullable=True)
+    # A Microsoft account chosen for replies is watched for answers to them
+    # (services/mail_replies.py): Graph's subscription to its inbox, the
+    # secret Graph's notifications carry, and the last look through it.
+    inbox_subscription_id = db.Column(db.String(100), nullable=True)
+    inbox_subscription_expires_at = db.Column(db.DateTime, nullable=True)
+    inbox_client_state = db.Column(db.String(64), nullable=True)
+    inbox_checked_at = db.Column(db.DateTime, nullable=True)
+
+    @property
+    def is_microsoft(self):
+        return self.kind == self.MICROSOFT
 
     def to_config(self):
+        if self.is_microsoft:
+            config = {"kind": self.MICROSOFT, "from": self.from_email or ""}
+            if self.from_name:
+                config["from_name"] = self.from_name
+            return config
         config = {
             "host": self.host,
             "port": self.port,
@@ -1474,6 +1512,33 @@ class MailAccount(db.Model):
             config["from_name"] = self.from_name
         return config
 
+
+class MicrosoftConnection(db.Model):
+    """The portal's app registration in Microsoft Entra ID, through which its
+    Microsoft 365 mail accounts are reached (services/microsoft_mail.py). One
+    row. The portal signs in with a certificate it made itself: the private
+    key never leaves the server; the certificate is uploaded to the app
+    registration. A new one (``new_*``) waits beside the one in use until it
+    signs in, so renewing never stops the email.
+    """
+
+    __tablename__ = "mail_microsoft_connection"
+
+    id = db.Column(db.Integer, primary_key=True)
+    #: The directory (tenant) ID, or a domain of the tenant.
+    tenant_id = db.Column(db.String(100), nullable=True)
+    #: The app registration's application (client) ID.
+    client_id = db.Column(db.String(64), nullable=True)
+    private_key = db.Column(db.Text, nullable=True)
+    certificate = db.Column(db.Text, nullable=True)
+    #: SHA-1 of the certificate, in hex: what Entra ID shows as its thumbprint.
+    thumbprint = db.Column(db.String(40), nullable=True)
+    certificate_expires_at = db.Column(db.DateTime, nullable=True)
+    new_private_key = db.Column(db.Text, nullable=True)
+    new_certificate = db.Column(db.Text, nullable=True)
+    new_thumbprint = db.Column(db.String(40), nullable=True)
+    new_certificate_expires_at = db.Column(db.DateTime, nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
 
 class Device(db.Model):

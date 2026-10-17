@@ -103,7 +103,12 @@ def _check_mail():
         return "failed", "No mail account is set up, so no email can be sent. Add one under Mail Accounts."
     failing = []
     for account in accounts:
-        success, _message = probe_mail_account_connection(account.to_config())
+        if account.is_microsoft:
+            from .microsoft_mail import probe
+
+            success, _message = probe(account)
+        else:
+            success, _message = probe_mail_account_connection(account.to_config())
         if not success:
             failing.append(account.account_key)
     if failing:
