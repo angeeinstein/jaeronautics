@@ -116,9 +116,17 @@ def member_on_forum(app, forum):
     return member
 
 
+
+def _session_id(user_id):
+    """What a session names: the account and its session generation."""
+    from aeronautics_members.db_models import User, db as _db
+
+    return _db.session.get(User, int(user_id)).get_id()
+
+
 def _login(client, user_id):
     with client.session_transaction() as session:
-        session["_user_id"] = str(user_id)
+        session["_user_id"] = _session_id(user_id)
 
 
 def _change_email(client, member, new_email):
@@ -134,6 +142,7 @@ def _change_email(client, member, new_email):
         "email_private": new_email,
         "phone_work": "",
         "email_work": member.email_work or "",
+        "current_password": "initial-password",
     })
 
 

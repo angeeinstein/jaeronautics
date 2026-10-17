@@ -84,3 +84,19 @@ def test_the_comparison_is_not_vacuous(schemas):
     assert len(from_migrations) > 10
     assert "users" in from_migrations
     assert "membership_periods" in from_migrations
+
+
+def test_one_line_of_migrations():
+    """Two branches that each add a migration after the same one merge into two
+    heads, and the update then stops at "Multiple head revisions". The pull
+    request's checks run on the merged code, so this catches it there."""
+    from pathlib import Path
+
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    config = Config()
+    config.set_main_option("script_location", str(Path(__file__).resolve().parent.parent / "migrations"))
+    heads = ScriptDirectory.from_config(config).get_heads()
+
+    assert len(heads) == 1, f"the migrations end in more than one head: {heads}"

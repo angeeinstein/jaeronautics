@@ -226,6 +226,8 @@ def sync_member_primary_email(member, new_email):
         # mailbox must not be able to take the account back through it.
         rotate_email_verification_nonce(member.user)
         member.user.password_reset_nonce = None
+        # The login changed: sessions issued for the old one end.
+        member.user.end_sessions()
 
     if email_changed and member.stripe_customer_id:
         try:

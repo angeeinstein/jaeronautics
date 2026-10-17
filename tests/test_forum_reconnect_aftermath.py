@@ -32,9 +32,17 @@ def _now():
     return datetime.now(timezone.utc)
 
 
+
+def _session_id(user_id):
+    """What a session names: the account and its session generation."""
+    from aeronautics_members.db_models import User, db as _db
+
+    return _db.session.get(User, int(user_id)).get_id()
+
+
 def _sign_in(client, user_id):
     with client.session_transaction() as session:
-        session["_user_id"] = str(user_id)
+        session["_user_id"] = _session_id(user_id)
 
 
 def _archive(uid, username, address):
@@ -60,6 +68,7 @@ def _save_contact(client, private, work):
     response = client.put("/api/v1/account/contact", json={
         "street": "Main", "house_number": "1", "postal_code": "8010", "city": "Graz",
         "country": "Austria", "phone_private": "+43123", "email_private": private, "email_work": work,
+        "current_password": "initial-password",
     })
     assert response.status_code == 200, response.get_json()
 

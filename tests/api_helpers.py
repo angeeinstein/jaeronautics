@@ -9,7 +9,7 @@ always so the tests read like the front end's calls.
 
 def signed_in(client, user):
     with client.session_transaction() as session:
-        session["_user_id"] = str(user.id)
+        session["_user_id"] = user.get_id()
     return client
 
 

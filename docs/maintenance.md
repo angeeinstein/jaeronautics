@@ -1844,6 +1844,24 @@ reaches the person. Two ways back:
   old one is emailed if it was ever confirmed, Stripe's customer and the forum
   get the new address, and the change is in the audit log with both.
 
+### Sessions end when the password or the login changes
+
+Each session names the account and its `session_generation`
+(`User.get_id`); `load_user` turns away a session whose generation is not the
+account's. The generation goes up when a password replaces another (changed,
+reset by link, set by the `create-admin` command) and when the private
+address changes (by the member or an admin) -- so whoever had a session
+before is out at their next request. The browser that made the change is
+signed in again and goes on (`api/account.py`). Sessions from before
+generations existed name the plain id, which is generation 0: they work
+until the first change.
+
+Changing either email address in the profile asks for the current password
+(both sign in once confirmed; wrong guesses count against
+`RATELIMIT_PASSWORD_CHANGE`), and a new private address emails the old one,
+if it was ever confirmed. So a borrowed or stolen session is not enough to
+take an account over with "Forgot password".
+
 ## Planned: Archival Forum Accounts (not built)
 
 Roughly 500–600 people have used the forum over the last decade. The intention

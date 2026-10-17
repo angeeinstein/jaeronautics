@@ -36,7 +36,7 @@ def _member(work_verified=False, private_verified=True):
 
 def _signed_in(client, member):
     with client.session_transaction() as session:
-        session["_user_id"] = str(member.user_id)
+        session["_user_id"] = member.user.get_id()
     return client
 
 

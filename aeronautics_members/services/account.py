@@ -54,7 +54,11 @@ from .members import (
     normalize_optional_member_value,
 )
 from .membership import member_has_active_access
-from .notifications import flush_marked_notification_channels, queue_curated_admin_notification
+from .notifications import (
+    flush_marked_notification_channels,
+    queue_curated_admin_notification,
+    queue_user_status_notification,
+)
 from .outbox import enqueue_forum_sync
 from .privacy import (
     INITIATED_BY_MEMBER,
@@ -77,12 +81,31 @@ def _has_forum_account(member):
 # --- Contact details -------------------------------------------------------------------
 
 
-def save_contact_details(user, member, values):
+def _same_address(a, b):
+    return (a or "").strip().lower() == (b or "").strip().lower()
+
+
+def save_contact_details(user, member, values, current_password=None):
     """Address, phones and both email addresses: changed at once, no review.
     A new private address is the login, and waits to be confirmed; a new
-    university address too. Returns the messages for the page."""
+    university address too. Returns the messages for the page.
+
+    Either address is a way to sign in, so changing one asks for the current
+    password: a session left open or stolen must not be enough to take the
+    account over. A new private address also ends every other session, and
+    the old address is told."""
     has_forum_account = _has_forum_account(member)
     new_email = (values.get("email_private") or "").strip().lower()
+    private_changes = bool(new_email) and not _same_address(new_email, member.email_private)
+    work_changes = not _same_address(values.get("email_work"), member.email_work)
+    if (private_changes or work_changes) and not user.check_password(current_password or ""):
+        raise ValidationError(
+            "Please check the form.", code="wrong_password",
+            details={"fields": {"current_password": (
+                "This is not your current password." if current_password
+                else "Your current password, please: it is needed to change an email address.")}},
+        )
+    old_email, old_was_confirmed = user.email, user.email_verified_at is not None
     if has_forum_account and new_email and new_email != (member.email_private or "").strip().lower():
         # Checked before anything is saved: the forum refuses an address
         # another of its accounts has, and taking it here anyway left the
@@ -126,10 +149,13 @@ def save_contact_details(user, member, values):
                "member": snapshot_member_for_audit(member, fields=DIRECT_MEMBER_PROFILE_FIELDS)},
         metadata={"email_changed": email_changed},
     )
+    if email_changed and old_was_confirmed and old_email:
+        _tell_the_old_address(user, member, old_email)
     forum_result = None
     if has_forum_account:
         forum_result, _forum_service = sync_member_forum_state(member)
     db.session.commit()
+    flush_marked_notification_channels()
 
     app = current_app._get_current_object()
     messages = []
@@ -160,6 +186,22 @@ def save_contact_details(user, member, values):
     if forum_result and forum_result.error:
         messages.append(("warning", "Your forum profile could not be updated right now. We will try again."))
     return messages
+
+
+def _tell_the_old_address(user, member, old_email):
+    """To the address that was replaced, if it was ever confirmed: whoever reads
+    it learns of the change, in case it was not theirs."""
+    from ..security_utils import build_public_url
+
+    new_local, _at, new_domain = user.email.partition("@")
+    queue_user_status_notification(
+        "account_email_changed",
+        f"The email address of account {user.id} was changed in its profile.",
+        old_email,
+        payload={"first_name": member.first_name, "new_email_masked": f"{new_local[:2]}…@{new_domain}",
+                 "contact_url": build_public_url("public.contact")},
+        target_user=user, target_member=member,
+    )
 
 
 # --- Name and kind of membership: asked for, decided by an admin -----------------------

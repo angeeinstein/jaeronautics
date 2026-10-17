@@ -132,7 +132,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Address, phones and both email addresses: saved at once. A new address waits to be confirmed. */
+        /** Address, phones and both email addresses: saved at once. A new address waits to be confirmed; */
         put: operations["account_contact"];
         post?: never;
         delete?: never;
@@ -4765,6 +4765,11 @@ export interface components {
             company_name?: string | null;
             /** Country */
             country: string;
+            /**
+             * Current Password
+             * @default null
+             */
+            current_password?: string | null;
             /** Email Private */
             email_private: string;
             /**

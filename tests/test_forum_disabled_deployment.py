@@ -52,9 +52,17 @@ def _admin(client, email="offlineadmin@example.com"):
     return user
 
 
+
+def _session_id(user_id):
+    """What a session names: the account and its session generation."""
+    from aeronautics_members.db_models import User, db as _db
+
+    return _db.session.get(User, int(user_id)).get_id()
+
+
 def _login(client, user_id):
     with client.session_transaction() as session:
-        session["_user_id"] = str(user_id)
+        session["_user_id"] = _session_id(user_id)
 
 
 class TestTheMemberJourney:
@@ -87,6 +95,7 @@ class TestTheMemberJourney:
             "phone_private": "+43660000000", "email_private": member.email_private,
             # A student's profile now carries a university address.
             "email_work": "profile@edu.fh-joanneum.at",
+            "current_password": "Str0ngPassw0rd!x",
         })
 
         assert response.status_code == 200
