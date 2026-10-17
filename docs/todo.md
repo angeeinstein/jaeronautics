@@ -173,6 +173,26 @@ Talked about, not agreed as work. Not built unless the maintainer brings them up
     (interaction limits last at most 6 months). The GPU does not help.
   - Suggested order: the split first; measure `time python -m pytest -q -n
     24` on the PC before deciding on a runner.
+- **CI passes a push that changes only `docs/` in under a minute** --
+  2026-10-17. Every push runs the whole of CI, a to-do item too ("this
+  obviously doesn't make any sense when it's just a to-do list item"). Put
+  off: "Let's do this some point later." Talked through:
+  - Not `[skip ci]` or `paths-ignore`: the commit is then left without a
+    CI result -- a pull request whose last commit it is cannot be merged
+    (the required check waits forever), and `install.sh` waits 3 minutes
+    for a run that never comes, then installs "without its result"; the
+    Updates page shows no run.
+  - Instead, in job `tested` of `.github/workflows/ci.yml`: when the commit
+    before passed (its tree's `ci-passed-<tree>` mark is there) and every
+    file changed since is under `docs/`, count it as passed -- skip the
+    tests, leave the mark for the new tree. About 30-40 seconds; the check
+    green, the installer and the Updates page see "passed".
+  - Only `docs/` (not `legal/`: rendered and made into PDFs, tested).
+    `docs/device-protocol.md` is offered as a download on the Firmware page
+    but no test reads it.
+  - The pull-request run (on GitHub's merge commit) needs the same rule,
+    compared with the pull request's previous head.
+  - Not holding to-do commits back: the list is pushed the moment it changes.
 - **Each version in its own folder, built beside the running one** --
   2026-10-11. As `angeeinstein/study-helper` does: a folder per version with
   its own Python environment, switched to only once healthy, the previous one
