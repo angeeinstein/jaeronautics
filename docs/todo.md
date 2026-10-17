@@ -173,6 +173,26 @@ Talked about, not agreed as work. Not built unless the maintainer brings them up
     (interaction limits last at most 6 months). The GPU does not help.
   - Suggested order: the split first; measure `time python -m pytest -q -n
     24` on the PC before deciding on a runner.
+- **Connected services beside the forum (Telegram and others)** --
+  2026-10-17. Asked only how it would look: "I am not planning on
+  implementing anything of those services just yet." What was sketched:
+  - Today the forum is the only outside service that follows a membership
+    (queued sync at the change, started at once, retried; every night all
+    members again -- `services/outbox.py`, `forum_service.sync_member`,
+    "desired state" then the difference). Teams end with the association
+    (`team_payments.follow_association_end`); the rest is checked live.
+  - Plug-ins like the device types: each service declares its settings,
+    what a member should have there, how to make it so, how an account is
+    linked. One "membership changed" trigger queues a job per enabled
+    service; one nightly check for all; one table of linked accounts
+    (service, external ID, state, last error) shown on My Account, the
+    admin's account page and System health. The forum the first plug-in.
+  - Telegram: the member links their account once through the bot; the
+    group approves join requests, the bot approves only active members;
+    at the end the bot removes them (ban, then unban). Fits Discord, Slack,
+    Microsoft 365 groups through Graph, a GitHub organisation, Nextcloud.
+  - Open: which service first; teams too (a group per team); removal on the
+    last day or a grace period.
 - **CI passes a push that changes only `docs/` in under a minute** --
   2026-10-17. Every push runs the whole of CI, a to-do item too ("this
   obviously doesn't make any sense when it's just a to-do list item"). Put
