@@ -260,7 +260,7 @@ class TestTheTestEmail:
 
         assert send(client, "POST", "/api/v1/admin/settings/test-email", {
             "sender": "office", "recipient": "me@example.org", "template": template,
-        }).get_json() == {"ok": True}
+        }).get_json() == {"ok": True, "error": None}
 
         (text,) = _parts(outbox[-1], "text/plain")
         body = text.get_payload(decode=True).decode()
