@@ -65,15 +65,14 @@ answer.
   the admin area, Settings and a team's area, so all three change. My
   Account's menu has no groups and stays ("not necessary because it has no
   categories").
-- **Two ways, open question which:**
-  - The maintainer's: the headings in cyan.
-  - Suggested instead: a 1px hairline above each group but the first, more
-    room above a heading (about 1.25rem instead of 0.875rem), and the
-    heading in the secondary text colour rather than the muted one, still
-    small capitals. Because `docs/design.md` keeps cyan for "act here"
-    ("It is not decoration") and the current page in the menu is already
-    cyan -- cyan headings would compete with it.
-- The maintainer was "open for" another idea; asked 2026-10-18.
+- **Decided (2026-10-18):** a 1px hairline above each group but the first,
+  more room above a heading (about 1.25rem instead of 0.875rem), and the
+  heading in the secondary text colour rather than the muted one, still
+  small capitals. "I think your idea works well."
+- **Ruled out:** the headings in cyan (the maintainer's first idea) --
+  `docs/design.md` keeps cyan for "act here" ("It is not decoration"), and
+  the current page in the menu is already cyan; cyan headings would compete
+  with it.
 
 ### Team leads answer their team's messages in the portal
 
