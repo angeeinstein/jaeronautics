@@ -80,6 +80,33 @@ IONOS is to go. Brevo (300 emails a day, free) is the stand-in.
   the SMTP passwords); incoming replies with their message, deleted with it,
   in the sender's data export.
 
+## A backup account (decided 2026-10-18)
+
+"If Microsoft authentication doesn't work or is down, or if the certificate
+has expired and nobody has renewed it, this backup account could still work.
+This would especially be helpful for things like password resets." The plan
+is Microsoft 365 for everything, IONOS gone, Brevo (300 emails a day) kept
+as the backup.
+
+- **One** setting on Settings › Email, *Senders*: **Backup** -- not a second
+  choice beside each kind of email. When the account an email goes out from
+  cannot send it, the backup sends the same email. Empty: no backup, as now.
+- Every kind of email uses it -- password resets, confirmations,
+  notifications, welcome emails, replies to contact messages -- **except**
+  announcements and team mailings: they wait and are tried again, as now,
+  so a long outage does not spend the backup's daily allowance and leave
+  password resets without. The test email does not use it either: it tests
+  the account chosen.
+- Not when the email itself is the problem: an address the server refuses
+  goes nowhere else.
+- From the backup's own address, with **Reply-To** the address it should
+  have come from: a reply to an answer from Admin › Messages still reaches
+  the replies' mailbox, and is recognised there (the Message-ID is the
+  same).
+- **System health** says it as a problem -- "noreply-microsoft cannot send
+  (since ...): ...; the backup sends its emails" -- so it shows in the
+  admin area until that account sends again.
+
 ## Open
 
 - Whether admins should get an email when a reply arrives (now: it shows in
