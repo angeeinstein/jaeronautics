@@ -80,6 +80,7 @@ def test_the_runner_says_nobody_is_there_to_answer(tmp_path):
         subprocess.run(
             ["bash", str(RUNNER)], timeout=60, start_new_session=True,
             env={**os.environ, "UPDATE_STATE_DIR": str(state_dir), "UPDATE_COMMAND": str(command),
-                 "INSTALL_DIR": str(state_dir), "UPDATE_TIMEOUT": "120"},
+                 "UPDATE_RUNNER_DIR": str(tmp_path / "update-runner"), "INSTALL_DIR": str(state_dir),
+                 "UPDATE_TIMEOUT": "120"},
         )
-        assert expected in (state_dir / "last-run.log").read_text()
+        assert expected in (tmp_path / "update-runner" / "last-run.log").read_text()

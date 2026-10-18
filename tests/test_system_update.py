@@ -23,6 +23,8 @@ def state_dir(tmp_path, monkeypatch):
     directory = tmp_path / "updates"
     directory.mkdir()
     monkeypatch.setattr(system_update, "UPDATE_STATE_DIR", directory)
+    # No runner has written its own folder yet: its files are read from the old place.
+    monkeypatch.setattr(system_update, "UPDATE_RUNNER_DIR", tmp_path / "update-runner")
     return directory
 
 
@@ -280,7 +282,12 @@ class TestRunnerScript:
     def test_runner_claims_the_request_before_acting(self):
         # Without an atomic claim, a slow update could be started twice by
         # consecutive timer ticks.
-        assert "mv -n" in self.RUNNER.read_text()
+        assert "mv -T -n" in self.RUNNER.read_text()
+
+    def test_the_installer_gives_the_runner_a_folder_only_root_may_change(self):
+        installer = (Path(__file__).resolve().parent.parent / "install.sh").read_text()
+        assert 'install -d -o root -g "${APP_GROUP}" -m 0750 "${UPDATE_RUNNER_DIR}"' in installer
+        assert "Environment=UPDATE_RUNNER_DIR=${UPDATE_RUNNER_DIR}" in installer
 
 
 class TestRollback:
@@ -494,7 +501,8 @@ class TestAnUpdateThatNeverFinishes:
         import subprocess
 
         env = {**os.environ, "UPDATE_STATE_DIR": str(state_dir), "UPDATE_COMMAND": str(command),
-               "INSTALL_DIR": str(state_dir), "UPDATE_TIMEOUT": "120"}
+               "UPDATE_RUNNER_DIR": str(self._runner_dir(state_dir)), "INSTALL_DIR": str(state_dir),
+               "UPDATE_TIMEOUT": "120"}
         process = subprocess.Popen(["bash", str(self.RUNNER)], env=env, start_new_session=True)
         if wait:
             process.wait(timeout=60)
@@ -506,8 +514,12 @@ class TestAnUpdateThatNeverFinishes:
         command.chmod(0o755)
         return command
 
+    @staticmethod
+    def _runner_dir(state_dir):
+        return state_dir.parent / "update-runner"
+
     def _status(self, state_dir):
-        return json.loads((state_dir / "status.json").read_text())
+        return json.loads((self._runner_dir(state_dir) / "status.json").read_text())
 
     def test_systemd_gives_the_runner_time_to_record_a_timeout(self):
         timeout = int(re.search(r'UPDATE_TIMEOUT="\$\{UPDATE_TIMEOUT:-(\d+)\}"', self.RUNNER.read_text()).group(1))
@@ -523,7 +535,8 @@ class TestAnUpdateThatNeverFinishes:
 
         status = self._status(state_dir)
         assert status["state"] == "completed" and status["boot_id"] and status["action"] == "update"
-        assert not (state_dir / "request.processing.json").exists()
+        assert not (self._runner_dir(state_dir) / "request.processing.json").exists()
+        assert not (state_dir / "request.json").exists()
 
     def test_a_rollback_says_it_was_one(self, tmp_path):
         state_dir = tmp_path / "updates"
@@ -550,7 +563,7 @@ class TestAnUpdateThatNeverFinishes:
         process = self._run_runner(state_dir, self._command(tmp_path, 'echo "Get:1 http://archive"; sleep 60'),
                                    wait=False)
         for _ in range(100):
-            if (state_dir / "status.json").exists() and self._status(state_dir)["state"] == "running":
+            if (self._runner_dir(state_dir) / "status.json").exists() and self._status(state_dir)["state"] == "running":
                 break
             time.sleep(0.1)
         time.sleep(0.5)
@@ -560,19 +573,87 @@ class TestAnUpdateThatNeverFinishes:
         status = self._status(state_dir)
         assert status["state"] == "failed"
         assert "stopped before it finished" in status["log_tail"]
-        assert not (state_dir / "request.processing.json").exists()
+        assert not (self._runner_dir(state_dir) / "request.processing.json").exists()
 
     def test_a_run_that_died_without_a_word_is_cleaned_up_by_the_next(self, tmp_path):
         """SIGKILL or power loss: no trap runs, so the next tick recovers."""
         state_dir = tmp_path / "updates"
         state_dir.mkdir()
-        (state_dir / "status.json").write_text(json.dumps({"state": "running", "started_at": "2026-09-27T12:00:00+02:00"}))
-        (state_dir / "request.processing.json").write_text("{}")
+        runner_dir = self._runner_dir(state_dir)
+        runner_dir.mkdir(mode=0o750)
+        (runner_dir / "status.json").write_text(json.dumps({"state": "running", "started_at": "2026-09-27T12:00:00+02:00"}))
+        (runner_dir / "request.processing.json").write_text("{}")
 
         self._run_runner(state_dir, self._command(tmp_path, "exit 0"))
 
         assert self._status(state_dir)["state"] == "failed"
-        assert not (state_dir / "request.processing.json").exists()
+        assert not (runner_dir / "request.processing.json").exists()
+
+    def test_the_runner_writes_nothing_where_the_app_can(self, tmp_path):
+        """Root writing in the app's folder would follow a link the app put there."""
+        state_dir = tmp_path / "updates"
+        state_dir.mkdir()
+        (state_dir / "request.json").write_text('{"requested_at": "x", "action": "update"}')
+        self._run_runner(state_dir, self._command(tmp_path, 'echo "[STEP] one"'))
+
+        assert list(state_dir.iterdir()) == []
+        assert {path.name for path in self._runner_dir(state_dir).iterdir()} == {
+            "runner.lock", "status.json", "last-run.log"}
+
+    def test_a_request_that_is_a_link_is_thrown_away_unread(self, tmp_path):
+        state_dir = tmp_path / "updates"
+        state_dir.mkdir()
+        secret = tmp_path / "secret"
+        secret.write_text('"requested_at": "the secret"')
+        (state_dir / "request.json").symlink_to(secret)
+        command = self._command(tmp_path, 'echo ran > "$0.ran"')
+
+        self._run_runner(state_dir, command)
+
+        assert not (tmp_path / "fake-update.ran").exists()
+        assert not (self._runner_dir(state_dir) / "status.json").exists()
+        assert not (self._runner_dir(state_dir) / "request.processing.json").exists()
+        assert secret.read_text() == '"requested_at": "the secret"'
+
+    def test_a_runner_folder_others_may_change_is_refused(self, tmp_path):
+        state_dir = tmp_path / "updates"
+        state_dir.mkdir()
+        runner_dir = self._runner_dir(state_dir)
+        runner_dir.mkdir()
+        runner_dir.chmod(0o777)
+        (state_dir / "request.json").write_text('{"requested_at": "x", "action": "update"}')
+
+        process = self._run_runner(state_dir, self._command(tmp_path, "exit 0"))
+
+        assert process.returncode == 1
+        assert (state_dir / "request.json").exists() and not (runner_dir / "status.json").exists()
+
+    def test_a_runner_folder_that_is_a_link_is_refused(self, tmp_path):
+        state_dir = tmp_path / "updates"
+        state_dir.mkdir()
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir(mode=0o750)
+        self._runner_dir(state_dir).symlink_to(elsewhere)
+        (state_dir / "request.json").write_text('{"requested_at": "x", "action": "update"}')
+
+        process = self._run_runner(state_dir, self._command(tmp_path, "exit 0"))
+
+        assert process.returncode == 1 and list(elsewhere.iterdir()) == []
+
+    def test_the_page_reads_the_runners_folder_once_it_has_written_there(self, app, state_dir, monkeypatch, tmp_path):
+        """Until then, the old place: the update that brings the new runner is run by the old one."""
+        runner_dir = tmp_path / "update-runner"
+        monkeypatch.setattr(system_update, "UPDATE_RUNNER_DIR", runner_dir)
+        (state_dir / "status.json").write_text(json.dumps({"state": "completed", "finished_at": "old"}))
+        (state_dir / "last-run.log").write_text("[STEP] old\n")
+        assert system_update.read_status()["finished_at"] == "old"
+
+        runner_dir.mkdir()
+        (runner_dir / "status.json").write_text(json.dumps({"state": "completed", "finished_at": "new"}))
+        (runner_dir / "last-run.log").write_text("[STEP] new\n")
+
+        assert system_update.read_status()["finished_at"] == "new"
+        assert system_update.read_live_log_tail() == "[STEP] new"
 
     def test_the_page_does_not_believe_a_run_from_before_a_reboot(self, app, state_dir, monkeypatch):
         (state_dir / "status.json").write_text(json.dumps({

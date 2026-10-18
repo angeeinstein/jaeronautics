@@ -27,6 +27,8 @@ def state_dir(tmp_path, monkeypatch):
     directory = tmp_path / "updates"
     directory.mkdir()
     monkeypatch.setattr(system_update, "UPDATE_STATE_DIR", directory)
+    # No runner has written its own folder yet: its files are read from the old place.
+    monkeypatch.setattr(system_update, "UPDATE_RUNNER_DIR", tmp_path / "update-runner")
     return directory
 
 

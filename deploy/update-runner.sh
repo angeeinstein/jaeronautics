@@ -15,12 +15,19 @@
 
 set -Eeuo pipefail
 
+# Two folders, so that root never writes where the web process can. The web
+# process owns STATE_DIR and puts its request there; everything this script
+# writes -- lock, claimed request, status, log -- is in RUNNER_DIR, which only
+# root may change (the web process's group may read it). In a folder the web
+# process could change, it could put a symbolic link where one of these files
+# goes, and root would write through it into any file on the system.
 STATE_DIR="${UPDATE_STATE_DIR:-/var/lib/jaeronautics/updates}"
+RUNNER_DIR="${UPDATE_RUNNER_DIR:-/var/lib/jaeronautics/update-runner}"
 REQUEST_FILE="${STATE_DIR}/request.json"
-CLAIM_FILE="${STATE_DIR}/request.processing.json"
-STATUS_FILE="${STATE_DIR}/status.json"
-LOG_FILE="${STATE_DIR}/last-run.log"
-LOCK_FILE="${STATE_DIR}/runner.lock"
+CLAIM_FILE="${RUNNER_DIR}/request.processing.json"
+STATUS_FILE="${RUNNER_DIR}/status.json"
+LOG_FILE="${RUNNER_DIR}/last-run.log"
+LOCK_FILE="${RUNNER_DIR}/runner.lock"
 UPDATE_COMMAND="${UPDATE_COMMAND:-/usr/local/bin/update}"
 ROLLBACK_FILE="${ROLLBACK_FILE:-/etc/jaeronautics/rollback.conf}"
 INSTALL_DIR="${INSTALL_DIR:-/var/www/jaeronautics}"
@@ -150,8 +157,35 @@ recover_from_a_dead_run() {
     rm -f "${CLAIM_FILE}"
 }
 
+# The runner's own folder: made if missing, and refused unless it is a real
+# folder of this user's that nobody else may write to.
+runner_dir_is_safe() {
+    if [[ ! -e "${RUNNER_DIR}" ]]; then
+        mkdir -p -m 0750 "${RUNNER_DIR}" || return 1
+        [[ -z "${LOG_GROUP}" ]] || chgrp "${LOG_GROUP}" "${RUNNER_DIR}" 2>/dev/null || true
+    fi
+    [[ -d "${RUNNER_DIR}" && ! -L "${RUNNER_DIR}" ]] || return 1
+    [[ "$(stat -c %u "${RUNNER_DIR}")" == "$(id -u)" ]] || return 1
+    # No write bit for the group or others.
+    (( ( 8#$(stat -c %a "${RUNNER_DIR}") & 8#022 ) == 0 ))
+}
+
+# The request, moved into the runner's folder: a plain file of its own, or
+# thrown away. A link -- symbolic, or a second name of another file -- would
+# have this script read whatever it points at.
+claimed_request_is_plain() {
+    [[ -f "${CLAIM_FILE}" && ! -L "${CLAIM_FILE}" ]] || return 1
+    [[ "$(stat -c %h "${CLAIM_FILE}")" == "1" ]] || return 1
+    (( $(stat -c %s "${CLAIM_FILE}") <= 4096 ))
+}
+
 main() {
     [[ -d "${STATE_DIR}" ]] || exit 0
+    if ! runner_dir_is_safe; then
+        printf 'Refusing to run: %s must be a folder of this user that nobody else may write to.\n' \
+            "${RUNNER_DIR}" >&2
+        exit 1
+    fi
 
     # One run at a time, and a way to tell a live run from a dead one: the
     # lock goes with the process, however it ends.
@@ -163,8 +197,14 @@ main() {
     [[ -f "${REQUEST_FILE}" ]] || exit 0
 
     # Claim atomically, so a slow update cannot be started twice if the timer
-    # fires again while it is still going.
-    if ! mv -n "${REQUEST_FILE}" "${CLAIM_FILE}" 2>/dev/null || [[ ! -f "${CLAIM_FILE}" ]]; then
+    # fires again while it is still going. -T: onto that name, never into a
+    # folder of that name.
+    if ! mv -T -n "${REQUEST_FILE}" "${CLAIM_FILE}" 2>/dev/null || [[ ! -e "${CLAIM_FILE}" && ! -L "${CLAIM_FILE}" ]]; then
+        exit 0
+    fi
+    if ! claimed_request_is_plain; then
+        rm -rf -- "${CLAIM_FILE}"
+        printf 'Ignored a request that was not a plain file.\n' >&2
         exit 0
     fi
 

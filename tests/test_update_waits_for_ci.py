@@ -36,6 +36,7 @@ def github(app, monkeypatch, tmp_path):
 
     app.config["UPDATE_CI_CHECK"] = True
     monkeypatch.setattr(system_update, "UPDATE_STATE_DIR", tmp_path / "updates")
+    monkeypatch.setattr(system_update, "UPDATE_RUNNER_DIR", tmp_path / "update-runner")
     (tmp_path / "updates").mkdir()
     monkeypatch.setattr(system_update, "github_slug", lambda: "o/r")
     monkeypatch.setattr(system_update, "_github_json", answer)
