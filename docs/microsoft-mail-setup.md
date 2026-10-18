@@ -78,11 +78,19 @@ First find the **Object ID of the enterprise application** -- not the one of
 the app registration: Entra › *Identity* › *Applications* › *Enterprise
 applications* › `Portal mail` › *Overview* › **Object ID**.
 
-Open PowerShell and run, one line at a time:
+Open PowerShell and run, one line at a time -- with your values in place of
+`<...>`, without the angle brackets (PowerShell reads `<` as an operator):
 
 ```powershell
 Install-Module -Name ExchangeOnlineManagement -Scope CurrentUser
 Connect-ExchangeOnline -UserPrincipalName <your admin address>
+
+# Once per organisation; nothing happens if it was done already. If it did
+# something, the next commands may be refused at first ("... is currently not
+# allowed in your organization" / "you don't have access to create ... the
+# management role assignment"): Disconnect-ExchangeOnline, wait 15 minutes to
+# an hour, connect again and go on from here.
+Enable-OrganizationCustomization
 
 # The app, known to Exchange.
 New-ServicePrincipal -AppId <Application (client) ID> -ObjectId <Object ID of the enterprise application> -DisplayName "Portal mail"
@@ -99,6 +107,12 @@ New-ManagementScope -Name "Portal mail replies" -RecipientRestrictionFilter "Cus
 New-ManagementRoleAssignment -App <Application (client) ID> -Role "Application Mail.Send" -CustomResourceScope "Portal mail"
 New-ManagementRoleAssignment -App <Application (client) ID> -Role "Application Mail.Read" -CustomResourceScope "Portal mail replies"
 ```
+
+If `New-ManagementRoleAssignment` says you have no access to create the role
+assignment although `Enable-OrganizationCustomization` ran: a fresh session
+(above), and an account that is *Global Administrator* -- the role
+assignments are handed out by the *Organization Management* group, which
+holds the Global Administrators.
 
 Check it (both lines should list the roles as *InScope: True*):
 
