@@ -73,6 +73,26 @@ live portal).
   the current page in the menu is already cyan; cyan headings would compete
   with it.
 
+### Admin dashboard: money owed to teams out of *Needs your attention*
+
+- **Added:** 2026-10-18
+- **What:** the card *Needs your attention* on the admin dashboard lists
+  "Teams to transfer money to" (the open amount, and teams without bank
+  details) beside reviews, forum and system problems. Take it out of the
+  card; nothing else on the dashboard replaces it.
+- **Where:** `frontend/src/pages/admin/AdminDashboard.tsx` (`tasksOf`, the
+  `transfers` task; `allClearDetail`, "nothing to transfer to the teams"),
+  `aeronautics_members/api/admin_dashboard.py` (`transfers`,
+  `team_money.open_transfers()`) -- the field goes from the API, then
+  `api-schema` and `npm run api:types`; their tests.
+- **Why:** "those are not really urgent in any sense. So I would transfer the
+  money maybe twice a year or once a month or so. And this would mean that
+  basically all the time this message will show up here in this card. And
+  this doesn't make any sense for such a card and for its intended purpose."
+- **Decided:** the open amounts stay where the money is looked after (Admin
+  › Money, the teams' balances and payouts); the card keeps only what wants
+  doing soon.
+
 ### Team leads answer their team's messages in the portal
 
 - **Added:** 2026-10-18
