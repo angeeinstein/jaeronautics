@@ -84,12 +84,25 @@ class TestANewPassword:
 
         assert not _still_in(client)
 
-    def test_a_made_up_session_id_is_nobody(self, app, client):
+    def test_a_made_up_generation_is_nobody(self, app, client):
         member = _anna()
         with client.session_transaction() as session:
-            session["_user_id"] = f"{member.user_id}.x"
+            session["_user_id"] = str(member.user_id)
+            session["_session_generation"] = "x"
 
         assert not _still_in(client)
+
+    def test_an_older_version_still_reads_the_session(self, app, client):
+        """Should the update be rolled back: the old code reads the plain id."""
+        member = _anna()
+        here = signed_in(client, member.user)
+
+        send(here, "PUT", "/api/v1/account/password",
+             {"current_password": "initial-password", "new_password": "a-new-password"})
+
+        with here.session_transaction() as session:
+            assert int(session["_user_id"]) == member.user_id
+            assert session["_session_generation"] == 1
 
 
 class TestChangingAnAddress:

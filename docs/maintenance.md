@@ -1857,15 +1857,21 @@ reaches the person. Two ways back:
 
 ### Sessions end when the password or the login changes
 
-Each session names the account and its `session_generation`
-(`User.get_id`); `load_user` turns away a session whose generation is not the
-account's. The generation goes up when a password replaces another (changed,
-reset by link, set by the `create-admin` command) and when the private
-address changes (by the member or an admin) -- so whoever had a session
-before is out at their next request. The browser that made the change is
-signed in again and goes on (`api/account.py`). Sessions from before
-generations existed name the plain id, which is generation 0: they work
-until the first change.
+Each session holds the account's id and, beside it, the account's
+`session_generation` at signing in (`_session_generation`); `load_user` turns
+away a session whose generation is not the account's. The generation goes up
+when a password replaces another (changed, reset by link, set by the
+`create-admin` command) and when the private address changes (by the member
+or an admin) -- so whoever had a session before is out at their next request.
+The browser that made the change is signed in again and goes on
+(`api/account.py`). Sessions from before generations existed hold none, which
+is generation 0: they work until the first change.
+
+The id stays the plain number on purpose: should the update that brought
+generations be rolled back, the older code still reads every session. It does
+not check the generation, though, so for as long as that older code runs,
+sessions ended before the rollback work again. Every later rollback point
+knows generations.
 
 Changing either email address in the profile asks for the current password
 (both sign in once confirmed; wrong guesses count against

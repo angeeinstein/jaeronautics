@@ -13,6 +13,7 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 
 import pytest
 
+from api_helpers import hold
 from conftest import db, make_member
 from aeronautics_members.db_models import Setting
 from aeronautics_members.forum_service import DiscourseConnectProvider, ForumProviderError
@@ -117,16 +118,16 @@ def member_on_forum(app, forum):
 
 
 
-def _session_id(user_id):
-    """What a session names: the account and its session generation."""
+def _hold(session, user_id):
+    """The account and its session generation, as signing in leaves them."""
     from aeronautics_members.db_models import User, db as _db
 
-    return _db.session.get(User, int(user_id)).get_id()
+    hold(session, _db.session.get(User, int(user_id)))
 
 
 def _login(client, user_id):
     with client.session_transaction() as session:
-        session["_user_id"] = _session_id(user_id)
+        _hold(session, user_id)
 
 
 def _change_email(client, member, new_email):

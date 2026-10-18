@@ -11,6 +11,7 @@ with it either: if it is unreachable, the limits fall back to memory.
 """
 import pytest
 
+from api_helpers import hold
 from conftest import app_module, db, make_member
 
 
@@ -297,7 +298,7 @@ def test_guessing_the_password_to_change_an_address_is_stopped(limited_app, monk
     member = make_member(email="guessed@example.com", member_category="alumni")
     client = limited_app.test_client()
     with client.session_transaction() as session:
-        session["_user_id"] = member.user.get_id()
+        hold(session, member.user)
     contact = {"street": "Main", "house_number": "1", "postal_code": "8010", "city": "Graz", "country": "Austria",
                "phone_private": "+43123", "email_private": "guessed@example.com", "email_work": ""}
 
