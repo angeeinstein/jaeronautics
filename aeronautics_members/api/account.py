@@ -448,8 +448,8 @@ class ContactIn(Model):
     current_password: str | None = Field(None, max_length=128)
 
 
-def _wrong_password_counts(_response):
-    return g.get("wrong_password", False)
+def _guess_counts(_response):
+    return g.get("guessed", False)
 
 
 def _keep_this_browser_signed_in(user, generation_before):
@@ -460,7 +460,7 @@ def _keep_this_browser_signed_in(user, generation_before):
 
 
 @endpoint("PUT", "/account/contact", response=AccountSavedOut, body=ContactIn, tag=TAG)
-@limiter.limit(RATELIMIT_PASSWORD_CHANGE, deduct_when=_wrong_password_counts)
+@limiter.limit(RATELIMIT_PASSWORD_CHANGE, deduct_when=_guess_counts)
 def account_contact(body):
     """Address, phones and both email addresses: saved at once. A new address waits to be confirmed;
     changing an address asks for the current password."""
@@ -474,7 +474,8 @@ def account_contact(body):
     try:
         messages = account_service.save_contact_details(user, member, values, body.current_password)
     except ValidationError as exc:
-        g.wrong_password = exc.code == "wrong_password"
+        # A wrong current password: a guess, which the limit above counts.
+        g.guessed = exc.code == "wrong_password"
         raise
     _keep_this_browser_signed_in(user, generation)
     return _saved(*messages)
