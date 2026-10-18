@@ -50,15 +50,18 @@ test.describe('attendance', () => {
     // Typed key by key, as the time fields move on by themselves -- and each
     // field seen to hold its value before the next: the picker reads the other
     // field as last drawn, so minutes typed before the hours are drawn leave
-    // the time empty (as on a slow machine).
-    const hours = form.getByLabel('Check-out hours');
-    const minutes = form.getByLabel('Check-out minutes');
-    await hours.clear();
-    await hours.pressSequentially('23', { delay: 50 });
-    await expect(hours).toHaveValue('23');
-    await minutes.clear();
-    await minutes.pressSequentially('40', { delay: 50 });
-    await expect(minutes).toHaveValue('40');
+    // the time empty (as on a slow machine). A field that did not take the
+    // keys -- the dialog still opening on a phone -- is typed into again.
+    const type = async (label: string, value: string) => {
+      const field = form.getByLabel(label);
+      await expect(async () => {
+        await field.clear();
+        await field.pressSequentially(value, { delay: 50 });
+        await expect(field).toHaveValue(value, { timeout: 1000 });
+      }).toPass({ timeout: 10_000 });
+    };
+    await type('Check-out hours', '23');
+    await type('Check-out minutes', '40');
     await expect(form.getByRole('button', { name: 'Save' })).toBeEnabled();
     await form.getByRole('button', { name: 'Save' }).click();
     await expect(page.getByText('Stay changed.')).toBeVisible();
