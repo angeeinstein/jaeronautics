@@ -25,8 +25,7 @@ email field when a university address looks mistyped), and, with the
 security fixes of 2026-10-17, no browser autofill in the Microsoft 365 fields
 and the export password; then email through Microsoft 365 with a backup
 account (`docs/microsoft-mail-plan.md`, merged 2026-10-18 and in use on the
-live portal). The price-list proposal below waits for the maintainer's
-answer.
+live portal).
 
 ## Open
 
@@ -142,8 +141,9 @@ answer.
 - **Why folded, not hidden:** *Together* still adds up -- what they made does
   not vanish from the totals -- and the detail stays one click away. A
   deleted item never sold stays out of the list, as now.
-- **Open question:** the proposal above, offered 2026-10-15 (the maintainer
-  named hiding, removing, a collapsed section or another list as options).
+- **Decided (2026-10-18):** the folded row as proposed on 2026-10-15 ("I
+  like your ideas"). Hiding, removing or another list -- the other options
+  the maintainer had named -- were not taken.
 
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
