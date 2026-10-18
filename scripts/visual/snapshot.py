@@ -40,6 +40,7 @@ import tempfile
 import threading
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
@@ -164,7 +165,7 @@ def go_offline(app_module):
     from aeronautics_members.services import microsoft_mail
 
     def microsoft_offline(method, url, *, data=None, headers=None):
-        if "login.microsoftonline.com" in url:
+        if urlsplit(url).hostname == "login.microsoftonline.com":
             return 200, {}, b'{"access_token": "offline", "expires_in": 3600}'
         return 202, {}, b"{}"
 

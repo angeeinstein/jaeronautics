@@ -13,7 +13,7 @@ in a hurry -- a restore rather than a reconstruction from memory.
 
 **With ``--with-secrets`` the file is a password list.** It holds the Stripe
 secret key, the Stripe webhook secret, the Discourse API key, the Connect
-secret and every SMTP password. It is written ``0600`` and it is not encrypted;
+secret, every SMTP password and the Microsoft 365 certificate's private key. It is written ``0600`` and it is not encrypted;
 anywhere it is copied inherits that, which is the same warning the database
 dump carries and for the same reason.
 
@@ -33,6 +33,7 @@ from ..services.institutional_email import SETTING_KEY as INSTITUTIONAL_EMAIL_SE
 from ..services.mail_senders import KEYS as SENDER_SETTING_KEYS
 from ..services.mailings import SETTING_KEYS as MAILINGS_SETTING_KEYS
 from ..services.teams import SETTING_KEYS as TEAMS_SETTING_KEYS
+from . import microsoft_mail
 
 FORMAT = 1
 
@@ -114,11 +115,17 @@ def export_settings(*, with_secrets=False):
             held_back.append(f"mail account {account.account_key}")
         accounts.append(row)
 
+    # What the Microsoft 365 accounts sign in through.
+    microsoft = microsoft_mail.export_connection(with_secrets=with_secrets)
+    if microsoft is not None and not with_secrets and microsoft_mail.connection().certificate:
+        held_back.append("Microsoft 365 certificate")
+
     return {
         "format": FORMAT,
         "with_secrets": bool(with_secrets),
         "settings": sections,
         "mail_accounts": accounts,
+        "microsoft_connection": microsoft,
         "held_back": sorted(set(held_back)),
     }
 
@@ -148,7 +155,7 @@ def import_settings(payload, *, dry_run=False):
 
     known = _known_keys()
     report = {"set": [], "already": [], "skipped": [], "accounts": [],
-              "problems": []}
+              "microsoft": None, "problems": []}
 
     stored = {
         setting.key: setting for setting in
@@ -223,5 +230,11 @@ def import_settings(payload, *, dry_run=False):
         account.starttls = bool(row.get("starttls"))
         if password:
             account.password = password
+
+    if payload.get("microsoft_connection"):
+        restored, problem = microsoft_mail.import_connection(payload["microsoft_connection"], dry_run=dry_run)
+        report["microsoft"] = restored
+        if problem:
+            report["problems"].append(problem)
 
     return report

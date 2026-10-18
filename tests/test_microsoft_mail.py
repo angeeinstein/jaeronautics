@@ -20,7 +20,14 @@ from api_helpers import send, signed_in
 from conftest import db
 from aeronautics_members.db_models import AuditLog, ContactReply, MailAccount, MicrosoftConnection
 from aeronautics_members.mail_utils import send_mail
-from aeronautics_members.services import mail_replies, mail_senders, messages, microsoft_mail, settings_sections
+from aeronautics_members.services import (
+    mail_accounts,
+    mail_replies,
+    mail_senders,
+    messages,
+    microsoft_mail,
+    settings_sections,
+)
 from test_api_admin_mail import API, _boss
 from test_messages import FORM, admins  # noqa: F401
 from test_teams_foundation import _association_member
@@ -68,11 +75,11 @@ class FakeMicrosoft:
         return 200 if method != "POST" else 202, {}, b""
 
     def graph_calls(self, method=None):
-        return [call for call in self.calls if "graph.microsoft.com" in call["url"]
+        return [call for call in self.calls if urlsplit(call["url"]).hostname == "graph.microsoft.com"
                 and (method is None or call["method"] == method)]
 
     def sign_ins(self):
-        return [call for call in self.calls if "login.microsoftonline.com" in call["url"]]
+        return [call for call in self.calls if urlsplit(call["url"]).hostname == "login.microsoftonline.com"]
 
 
 @pytest.fixture
@@ -445,6 +452,22 @@ class TestWatchingTheMailbox:
         mail_replies.keep_watching(datetime(2026, 10, 21))
         assert [call["path"] for call in microsoft.graph_calls("DELETE")] == ["/v1.0/subscriptions/sub-1"]
         assert mailboxes.inbox_subscription_id is None
+
+    def test_another_mailbox_is_watched_at_once(self, app, mailboxes, microsoft):
+        microsoft.answer("POST", "/subscriptions", 201, {"id": "sub-1", "expirationDateTime": "2026-10-22T00:00:00Z"})
+        mail_replies.keep_watching(datetime(2026, 10, 16))
+        mailboxes.inbox_checked_at = datetime(2026, 10, 16)
+
+        mail_accounts.save(None, mailboxes.id, key="support", from_email="help@example.org",
+                           kind=MailAccount.MICROSOFT)
+
+        assert [call["path"] for call in microsoft.graph_calls("DELETE")] == ["/v1.0/subscriptions/sub-1"]
+        assert mailboxes.inbox_subscription_id is None and mailboxes.inbox_checked_at is None
+        microsoft.answer("POST", "/subscriptions", 201, {"id": "sub-2", "expirationDateTime": "2026-10-22T00:00:00Z"})
+        mail_replies.keep_watching(datetime(2026, 10, 16))
+        made = [call for call in microsoft.graph_calls("POST") if call["path"] == "/v1.0/subscriptions"][-1]
+        assert json.loads(made["data"])["resource"] == "users/help@example.org/mailFolders('inbox')/messages"
+        assert mailboxes.inbox_subscription_id == "sub-2"
 
     def test_graph_checking_the_address_gets_its_token_back(self, client):
         response = client.post("/webhooks/microsoft-mail?validationToken=abc%20123")

@@ -437,6 +437,52 @@ def utc_from_graph(value):
         return None
 
 
+# --- In the settings file (services/portal_settings.py) ------------------------------------
+
+
+def export_connection(*, with_secrets):
+    """The app registration for ``dump-portal-settings``: its IDs, and with
+    the secrets the certificate in use and its key. Without them the new
+    machine makes a certificate of its own, to be uploaded to the app."""
+    found = connection()
+    if found is None or not (found.tenant_id or found.client_id):
+        return None
+    row = {"tenant_id": found.tenant_id, "client_id": found.client_id}
+    if with_secrets and found.certificate:
+        row["certificate"], row["private_key"] = found.certificate, found.private_key
+    return row
+
+
+def import_connection(row, *, dry_run=False):
+    """Put it back: ``(what was put back, problem or None)``. A certificate
+    that waited beside the one in use does not travel; nor is it touched."""
+    tenant_id, client_id = (row.get("tenant_id") or "").strip(), (row.get("client_id") or "").strip().lower()
+    if not _TENANT.fullmatch(tenant_id) or not _GUID.fullmatch(client_id):
+        return None, "the Microsoft 365 connection has no valid tenant or app ID; enter it by hand"
+    certificate_pem, key_pem = row.get("certificate"), row.get("private_key")
+    certificate = None
+    if certificate_pem and key_pem:
+        try:
+            certificate = x509.load_pem_x509_certificate(certificate_pem.encode())
+            key = serialization.load_pem_private_key(key_pem.encode(), password=None)
+        except ValueError:
+            return None, "the Microsoft 365 certificate in the file cannot be read; make a new one"
+        if key.public_key().public_numbers() != certificate.public_key().public_numbers():
+            return None, "the Microsoft 365 certificate and its key do not belong together; make a new one"
+    if dry_run:
+        return ("app and certificate" if certificate else "app"), None
+    found = _connection_for_change()
+    found.tenant_id, found.client_id = tenant_id, client_id
+    if certificate is not None:
+        found.private_key, found.certificate = key_pem, certificate_pem
+        found.thumbprint = _thumbprint(certificate)
+        found.certificate_expires_at = certificate.not_valid_after_utc.replace(tzinfo=None)
+    _forget_token()
+    db.session.flush()
+    log_audit_event("settings", "microsoft_mail_restored", after=_snapshot(found))
+    return ("app and certificate" if certificate else "app"), None
+
+
 # --- The setup guide, in the portal --------------------------------------------------------
 
 GUIDE = REPO_ROOT / "docs" / "microsoft-mail-setup.md"

@@ -18,7 +18,8 @@ import pytest
 
 from conftest import db
 
-from aeronautics_members.db_models import MailAccount, Setting
+from aeronautics_members.db_models import MailAccount, MicrosoftConnection, Setting
+from aeronautics_members.services import microsoft_mail
 from aeronautics_members.services.portal_settings import (
     REDACTED,
     export_settings,
@@ -205,6 +206,57 @@ class TestPuttingThemBack:
     ):
         with pytest.raises(ValueError, match="format"):
             import_settings({"format": 99, "settings": {}})
+
+
+APP_ID = "11111111-2222-3333-4444-555555555555"
+
+
+@pytest.fixture
+def microsoft(app):
+    microsoft_mail.save_app(None, tenant_id="contoso.onmicrosoft.com", client_id=APP_ID)
+    microsoft_mail.make_certificate(None)
+    db.session.commit()
+    return microsoft_mail.connection()
+
+
+class TestTheMicrosoftConnection:
+    def _fresh(self, payload, **kwargs):
+        for row in db.session.execute(db.select(MicrosoftConnection)).scalars().all():
+            db.session.delete(row)
+        db.session.commit()
+        report = import_settings(payload, **kwargs)
+        db.session.commit()
+        return report
+
+    def test_with_the_secrets_it_comes_back_signing_in(self, microsoft):
+        thumbprint = microsoft.thumbprint
+
+        report = self._fresh(export_settings(with_secrets=True))
+
+        assert report["microsoft"] == "app and certificate"
+        assert microsoft_mail.ready()
+        restored = microsoft_mail.connection()
+        assert restored.client_id == APP_ID and restored.thumbprint == thumbprint
+        assert restored.certificate_expires_at
+
+    def test_without_them_the_app_only_and_the_file_says_so(self, microsoft):
+        payload = export_settings()
+
+        assert set(payload["microsoft_connection"]) == {"tenant_id", "client_id"}
+        assert "Microsoft 365 certificate" in payload["held_back"]
+        report = self._fresh(payload)
+        assert report["microsoft"] == "app"
+        assert microsoft_mail.connection().client_id == APP_ID and not microsoft_mail.ready()
+
+    def test_a_key_not_the_certificates_is_refused(self, microsoft):
+        payload = export_settings(with_secrets=True)
+        microsoft_mail.make_certificate(None)  # a second key pair, waiting beside the first
+        payload["microsoft_connection"]["private_key"] = microsoft.new_private_key
+
+        report = import_settings(payload, dry_run=True)
+
+        assert report["microsoft"] is None
+        assert any("do not belong together" in problem for problem in report["problems"])
 
 
 class TestTheCommands:

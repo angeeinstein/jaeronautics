@@ -84,6 +84,11 @@ def save(actor, account_id, *, key, host=None, port=None, username=None, passwor
     if microsoft:
         account.host = account.port = account.username = account.password = None
         account.starttls = False
+        if account.from_email and account.from_email != from_email:
+            # Another mailbox: Graph's subscription was to the old one's inbox,
+            # and how far it was looked through says nothing about the new.
+            _stop_watching(account)
+            account.inbox_checked_at = None
     else:
         account.host, account.port, account.username = host, int(port), username
         if password:
@@ -104,8 +109,8 @@ def save(actor, account_id, *, key, host=None, port=None, username=None, passwor
 
 
 def _stop_watching(account):
-    """No longer a Microsoft account, or removed: Graph's subscription to its
-    inbox ends (it would run out by itself within days)."""
+    """No longer a Microsoft account, another mailbox, or removed: Graph's
+    subscription to its inbox ends (it would run out by itself within days)."""
     if account.inbox_subscription_id:
         from .mail_replies import unsubscribe
 

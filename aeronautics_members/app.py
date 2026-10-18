@@ -2899,6 +2899,13 @@ def create_app(config_overrides=None):
         )
         for key in report["set"]:
             click.echo(f"  {key}")
+        if report["microsoft"] == "app":
+            click.echo(click.style(
+                "\nThe Microsoft 365 app came without its certificate: make one "
+                "in Settings › Email and upload it to the app registration.", fg="yellow",
+            ))
+        elif report["microsoft"]:
+            click.echo("Microsoft 365: the app and its certificate")
         if report["skipped"]:
             click.echo(click.style(
                 f"\n{len(report['skipped'])} were exported without their value "

@@ -151,6 +151,18 @@ class TestChangingAnAddress:
         assert not _still_in(elsewhere)
         assert _still_in(here)
 
+    def test_a_new_university_address_ends_the_other_sessions_too(self, app, client):
+        """A confirmed one signs in, so whoever signed in with the old one is out."""
+        member = _anna()
+        elsewhere = signed_in(app.test_client(), member.user)
+        here = signed_in(client, member.user)
+
+        response = _contact(here, email_work="anna@work.example", current_password="initial-password")
+
+        assert response.status_code == 200
+        assert not _still_in(elsewhere)
+        assert _still_in(here)
+
     def test_a_confirmed_old_address_is_told(self, app, client):
         member = _anna(confirmed=True)
 

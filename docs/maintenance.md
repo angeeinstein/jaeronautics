@@ -1139,19 +1139,22 @@ Somewhere the **application user** can write. These commands run as
 put it in `/var/tmp` and move it afterwards as yourself.
 
 It carries the general, notification, forum and Stripe settings, the
-institutional email domains, and the mail accounts. It never removes anything:
+institutional email domains, the mail accounts and the Microsoft 365
+connection. It never removes anything:
 a setting the file does not mention is left alone, because the file is a record
 of one machine rather than a description of every machine.
 
 **`--with-secrets` makes the file a password list.** The Stripe secret key, the
-Stripe webhook secret, the Discourse API key, the Connect secret and every SMTP
-password, in the clear. It is written `0600` and it is not encrypted, and
+Stripe webhook secret, the Discourse API key, the Connect secret, every SMTP
+password and the Microsoft 365 certificate's private key, in the clear. It is written `0600` and it is not encrypted, and
 anywhere you copy it inherits that: `gpg -c` it before it leaves the machine,
 and delete it once the new install has taken it.
 
 Without the flag those values are exported as `<not exported>`, which the
 restore skips rather than writing — an empty box says what it is, and
-`<not exported>` reads like a key somebody configured.
+`<not exported>` reads like a key somebody configured. The Microsoft 365
+connection then comes without its certificate: the new machine makes one
+(Settings › Email) and it is uploaded to the app registration, as at the start.
 
 ### What it deliberately does not carry
 

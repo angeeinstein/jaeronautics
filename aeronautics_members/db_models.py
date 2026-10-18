@@ -1529,8 +1529,8 @@ class MicrosoftConnection(db.Model):
     """The portal's app registration in Microsoft Entra ID, through which its
     Microsoft 365 mail accounts are reached (services/microsoft_mail.py). One
     row. The portal signs in with a certificate it made itself: the private
-    key never leaves the server; the certificate is uploaded to the app
-    registration. A new one (``new_*``) waits beside the one in use until it
+    key stays on the server (but for a settings file exported with its
+    secrets); the certificate is uploaded to the app registration. A new one (``new_*``) waits beside the one in use until it
     signs in, so renewing never stops the email.
     """
 
