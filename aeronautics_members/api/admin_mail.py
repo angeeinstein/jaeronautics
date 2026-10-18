@@ -246,6 +246,17 @@ def admin_mail_microsoft_check():
     return MicrosoftCheckOut(ok=ok, message=message, microsoft=_microsoft_out())
 
 
+class GuideOut(Model):
+    #: docs/microsoft-mail-setup.md as HTML, the IDs and the domain known filled in.
+    html: str
+
+
+@endpoint("GET", "/admin/settings/mail/microsoft/guide", response=GuideOut, permissions=CREDENTIALS, tag=TAG)
+def admin_mail_microsoft_guide():
+    """The setup guide, with what the portal knows put in for its placeholders."""
+    return GuideOut(html=microsoft.setup_guide())
+
+
 class ImportQuery(Model):
     #: Replace an account whose key is already there; otherwise it is kept and skipped.
     overwrite: bool = False

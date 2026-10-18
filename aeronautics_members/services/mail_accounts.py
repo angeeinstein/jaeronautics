@@ -221,5 +221,5 @@ def send_test_email(sender, recipient, template):
         raise _invalid("recipient", "That does not look like an email address.")
     subject, values = sample_email_for(template)
     sent, error = send_mail(from_account=sender, to_email=recipient.strip(), subject=f"Test: {subject}",
-                            template_name=template, return_error=True, **values)
+                            template_name=template, return_error=True, backup=False, **values)
     return bool(sent), None if sent else (error or "The server did not take it.")

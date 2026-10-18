@@ -667,3 +667,33 @@ class TestAMailboxAddress:
 
         with pytest.raises(ValidationError):
             mail_accounts.save(None, None, key="odd", from_email=address, kind=MailAccount.MICROSOFT)
+
+
+class TestTheSetupGuide:
+    def test_with_what_the_portal_knows_filled_in(self, client, microsoft):
+        _connected()
+        _mailbox()
+        _boss(client)
+
+        html = client.get(f"{API}/microsoft/guide").get_json()["html"]
+
+        assert f"New-ServicePrincipal -AppId {APP_ID}" in html
+        assert "support@example.org" in html and "&lt;your domain&gt;" not in html
+        assert "&lt;Application (client) ID&gt;" not in html
+        # What it cannot know stays to be filled in.
+        assert "&lt;Object ID of the enterprise application&gt;" in html
+        assert "<pre><code" in html and "<table>" in html
+
+    def test_before_anything_is_set_up_it_has_the_placeholders(self, client, microsoft):
+        _boss(client)
+
+        html = client.get(f"{API}/microsoft/guide").get_json()["html"]
+
+        assert "&lt;Application (client) ID&gt;" in html and "&lt;your domain&gt;" in html
+
+    def test_only_for_those_who_see_the_credentials(self, client, microsoft):
+        from test_admin_reviews import _staff
+
+        signed_in(client, _staff("plain@example.org", "admin"))
+
+        assert client.get(f"{API}/microsoft/guide").status_code == 403

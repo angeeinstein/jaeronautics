@@ -237,6 +237,23 @@ describe('Microsoft 365 accounts', () => {
     ready: true,
   };
 
+  it('the setup guide opens over the page, each command with a copy button', async () => {
+    show(<MailAccounts />, {
+      [API]: { body: listed([], connected) },
+      [`${API}/microsoft/guide`]: {
+        body: {
+          html: '<h2>5. Which mailboxes</h2><pre><code>Enable-OrganizationCustomization\n</code></pre>',
+        },
+      },
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Setup guide' }));
+
+    const guide = await screen.findByRole('dialog', { name: 'Setting up Microsoft 365' });
+    expect(await within(guide).findByRole('heading', { name: '5. Which mailboxes' })).toBeInTheDocument();
+    expect(within(guide).getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+  });
+
   it('beside the SMTP ones, as their mailbox', async () => {
     show(<MailAccounts />, { [API]: { body: listed([office, support], connected) } });
 

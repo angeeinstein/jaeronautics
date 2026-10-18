@@ -413,6 +413,9 @@ def _send(mailing, user, to_email, *, subject_prefix=""):
         headers = {"List-Unsubscribe": f"<{one_click}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
     return send_mail(
         from_account=sender_account(),
+        # Waits and is tried again instead: a long outage must not spend the
+        # backup's daily allowance and leave password resets without.
+        backup=False,
         to_email=to_email,
         subject=f"{subject_prefix}{mailing.subject}",
         template_name="mailing.html",

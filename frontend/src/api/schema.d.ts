@@ -2189,6 +2189,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/settings/mail/microsoft/guide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The setup guide, with what the portal knows put in for its placeholders. */
+        get: operations["admin_mail_microsoft_guide"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/settings/test-email": {
         parameters: {
             query?: never;
@@ -6556,6 +6573,11 @@ export interface components {
              */
             role?: "lead" | "treasurer";
         };
+        /** GuideOut */
+        GuideOut: {
+            /** Html */
+            html: string;
+        };
         /** HealthOut */
         HealthOut: {
             database_schema: components["schemas"]["SchemaOut"];
@@ -8649,6 +8671,11 @@ export interface components {
         /** SendersIn */
         SendersIn: {
             /**
+             * Backup
+             * @default
+             */
+            backup?: string;
+            /**
              * Default
              * @default
              */
@@ -8683,6 +8710,8 @@ export interface components {
         SendersOut: {
             /** Accounts */
             accounts: string[];
+            /** Backup */
+            backup: string;
             /** Default */
             default: string;
             /** Default In Use */
@@ -18002,6 +18031,44 @@ export interface operations {
             };
             /** @description Not possible in the current state. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_mail_microsoft_guide: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuideOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

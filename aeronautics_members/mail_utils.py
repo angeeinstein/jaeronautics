@@ -193,7 +193,68 @@ def html_to_text(html):
     return parser.text()
 
 
-def send_mail(from_account, to_email, subject, template_name=None, body=None, attachments=None, bcc_emails=None, return_error=False, cc_emails=None, files=None, reply_to=None, headers=None, from_name=None, **template_vars):
+def _deliver(config, sender, message, recipients, bcc_list):
+    """Hand the finished email to the account's server, or to Microsoft."""
+    context = ssl.create_default_context()
+    if config.get("kind") == "microsoft":
+        # A Microsoft 365 mailbox, through Graph: the same email, whole.
+        # Exchange takes the blind copies from their header, and drops it.
+        from .services.microsoft_mail import send_mime
+
+        if bcc_list:
+            message["Bcc"] = ", ".join(dict.fromkeys(bcc_list))
+        try:
+            send_mime(sender, message.as_bytes())
+        finally:
+            # Should a backup send it instead, over SMTP, it would show.
+            del message["Bcc"]
+    elif config.get("starttls", False):
+        with smtplib.SMTP(config["host"], config["port"], timeout=SMTP_SEND_TIMEOUT_SECONDS) as server:
+            server.starttls(context=context)
+            server.login(config["user"], config["pass"])
+            server.sendmail(sender, recipients, message.as_string())
+    else:
+        with smtplib.SMTP_SSL(
+            config["host"], config["port"], context=context, timeout=SMTP_SEND_TIMEOUT_SECONDS,
+        ) as server:
+            server.login(config["user"], config["pass"])
+            server.sendmail(sender, recipients, message.as_string())
+
+
+def _the_email_is_the_problem(exc):
+    """Refused for what it is -- an address nobody takes -- not for the account
+    it went out from: another account would fail the same."""
+    from .services.microsoft_mail import MicrosoftError
+
+    if isinstance(exc, smtplib.SMTPRecipientsRefused):
+        return True
+    return isinstance(exc, MicrosoftError) and exc.status == 400
+
+
+def _send_through_backup(from_account, sender, message, recipients, bcc_list, shown_name, failure, mail_accounts):
+    """``from_account`` could not send: the backup account sends the same
+    email, from its own address, answers still going to ``sender``. The
+    backup's key, or None when there is none to try."""
+    from .services import mail_senders
+    from .services.clock import get_now_utc
+
+    backup = mail_senders.backup_account()
+    config = mail_accounts.get(backup) if backup and backup != from_account else None
+    if not config or _the_email_is_the_problem(failure):
+        return None
+    backup_sender = (config.get("from") or config["user"]).strip()
+    del message["From"]
+    message["From"] = formataddr((shown_name, backup_sender)) if shown_name else backup_sender
+    if "Reply-To" not in message:
+        message["Reply-To"] = sender
+    _deliver(config, backup_sender, message, recipients, bcc_list)
+    mail_senders.note_failing(from_account, backup, str(failure), get_now_utc())
+    if has_app_context():
+        current_app.logger.warning("%s could not send (%s); the backup %s sent it.", from_account, failure, backup)
+    return backup
+
+
+def send_mail(from_account, to_email, subject, template_name=None, body=None, attachments=None, bcc_emails=None, return_error=False, cc_emails=None, files=None, reply_to=None, headers=None, from_name=None, backup=True, **template_vars):
     """
     Sends an email from one of the portal's mail accounts: an SMTP server, or
     a Microsoft 365 mailbox through Graph (services/microsoft_mail.py).
@@ -206,6 +267,11 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
     message, the lead who wrote to a team); ``headers`` are further headers
     (List-Unsubscribe); ``from_name`` replaces the account's sender name
     ("Rocket Team via Joanneum Aeronautics").
+
+    When the account cannot send it, the backup account does (Settings ›
+    Email, Senders; docs/microsoft-mail-plan.md) -- unless ``backup`` is
+    False: announcements and team mailings wait instead, and a test email
+    tests the account it names.
 
     When ``return_error`` is True, the function returns ``(success, error_message)``.
     Otherwise it preserves the legacy ``True``/``False`` return value.
@@ -308,26 +374,23 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
                 part.add_header("Content-Disposition", "attachment", filename=document["filename"])
                 message.attach(part)
 
-        context = ssl.create_default_context()
-        if config.get("kind") == "microsoft":
-            # A Microsoft 365 mailbox, through Graph: the same email, whole.
-            # Exchange takes the blind copies from their header, and drops it.
-            from .services.microsoft_mail import send_mime
-
-            if bcc_list:
-                message["Bcc"] = ", ".join(dict.fromkeys(bcc_list))
-            send_mime(sender, message.as_bytes())
-        elif config.get("starttls", False):
-            with smtplib.SMTP(config["host"], config["port"], timeout=SMTP_SEND_TIMEOUT_SECONDS) as server:
-                server.starttls(context=context)
-                server.login(config["user"], config["pass"])
-                server.sendmail(sender, recipients, message.as_string())
+        try:
+            _deliver(config, sender, message, recipients, bcc_list)
+        except Exception as failure:
+            if not backup:
+                raise
+            try:
+                sent_by = _send_through_backup(from_account, sender, message, recipients, bcc_list, shown_name,
+                                               failure, mail_accounts)
+            except Exception as second:
+                raise RuntimeError(f"{failure} -- and the backup could not send it either: {second}") from second
+            if sent_by is None:
+                raise
         else:
-            with smtplib.SMTP_SSL(
-                config["host"], config["port"], context=context, timeout=SMTP_SEND_TIMEOUT_SECONDS,
-            ) as server:
-                server.login(config["user"], config["pass"])
-                server.sendmail(sender, recipients, message.as_string())
+            if has_app_context():
+                from .services.mail_senders import note_sending
+
+                note_sending(from_account)
 
         if has_app_context():
             current_app.logger.info("Email sent successfully to %s from %s", ", ".join(recipients), sender)

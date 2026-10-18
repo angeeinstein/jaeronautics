@@ -1,0 +1,82 @@
+/* The Microsoft 365 setup guide (docs/microsoft-mail-setup.md): its HTML
+   comes from the server's Markdown, so its elements are styled here. */
+.guide {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.guide :global(h1) {
+  display: none;
+}
+
+.guide :global(h2) {
+  font-size: 1.1rem;
+  margin-top: 1.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--ja-border);
+}
+
+.guide :global(hr) {
+  border: 0;
+  border-top: 1px solid var(--ja-border);
+}
+
+.guide :global(code) {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.85em;
+  background: var(--ja-surface-alt);
+  padding: 0.05rem 0.3rem;
+}
+
+.guide :global(pre) {
+  position: relative;
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem 1rem;
+  padding-right: 4.5rem;
+  background: var(--ja-surface-input);
+  border: 1px solid var(--ja-border);
+  overflow-x: auto;
+}
+
+.guide :global(pre code) {
+  background: none;
+  padding: 0;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.guide :global(table) {
+  width: 100%;
+  margin-bottom: 1rem;
+  border-collapse: collapse;
+}
+
+.guide :global(th),
+.guide :global(td) {
+  border: 1px solid var(--ja-border);
+  padding: 0.35rem 0.5rem;
+  vertical-align: top;
+  text-align: left;
+}
+
+.guide :global(a) {
+  color: var(--ja-accent);
+}
+
+/* Put on each command block by the page: copies the block. */
+.copy {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.15rem 0.5rem;
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--ja-text);
+  background: var(--ja-surface-alt);
+  border: 1px solid var(--ja-border-strong);
+  cursor: pointer;
+}
+
+.copy:hover {
+  border-color: var(--ja-accent);
+}

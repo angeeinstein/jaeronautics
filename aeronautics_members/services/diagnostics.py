@@ -185,6 +185,19 @@ def _microsoft_mail(problems, warnings, sign_in):
         warnings.append(replies[1])
 
 
+def _mail_backup(problems):
+    """Accounts that cannot send, whose emails the backup sends (services/mail_senders.py)."""
+    from ..config import MEMBERSHIP_TIMEZONE
+    from .mail_senders import failing
+    from .system_update import parse_time
+
+    for key, state in failing():
+        since = parse_time(state.get("since"))
+        when = f" since {since.astimezone(MEMBERSHIP_TIMEZONE):%d.%m.%Y %H:%M}" if since else ""
+        problems.append(f"{key} cannot send{when}: {state.get('reason') or 'no reason given'} -- "
+                        f"the backup ({state.get('backup')}) sends its emails.")
+
+
 def collect_system_health(check_pages=True):
     """Everything the health report shows, as plain serializable data.
 
@@ -250,6 +263,7 @@ def collect_system_health(check_pages=True):
     if queues["emails_pending"] > 20:
         warnings.append(f"{queues['emails_pending']} emails are queued for delivery.")
     _microsoft_mail(problems, warnings, sign_in=_checks_pages(check_pages))
+    _mail_backup(problems)
     pages = check_security_policy() if _checks_pages(check_pages) else None
     if pages and pages["warning"]:
         warnings.append(pages["warning"])

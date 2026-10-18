@@ -8601,6 +8601,20 @@
         "title": "GrantRoleIn",
         "type": "object"
       },
+      "GuideOut": {
+        "additionalProperties": false,
+        "properties": {
+          "html": {
+            "title": "Html",
+            "type": "string"
+          }
+        },
+        "required": [
+          "html"
+        ],
+        "title": "GuideOut",
+        "type": "object"
+      },
       "HealthOut": {
         "additionalProperties": false,
         "properties": {
@@ -15018,6 +15032,12 @@
       "SendersIn": {
         "additionalProperties": false,
         "properties": {
+          "backup": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Backup",
+            "type": "string"
+          },
           "default": {
             "default": "",
             "maxLength": 100,
@@ -15067,6 +15087,10 @@
             "title": "Accounts",
             "type": "array"
           },
+          "backup": {
+            "title": "Backup",
+            "type": "string"
+          },
           "default": {
             "title": "Default",
             "type": "string"
@@ -15102,6 +15126,7 @@
         },
         "required": [
           "default",
+          "backup",
           "welcome",
           "notifications",
           "mailings",
@@ -29176,6 +29201,50 @@
           }
         },
         "summary": "Sign in to Microsoft once. A new certificate that waits is tried first, and is used from then on if it works.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/mail/microsoft/guide": {
+      "get": {
+        "operationId": "admin_mail_microsoft_guide",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuideOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "The setup guide, with what the portal knows put in for its placeholders.",
         "tags": [
           "Admin"
         ],

@@ -31,6 +31,9 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.x509.oid import NameOID
 
+from markdown_it import MarkdownIt
+
+from ..config import REPO_ROOT
 from ..db_models import MailAccount, MicrosoftConnection, db
 from . import NotFoundError, ValidationError
 from .audit import log_audit_event
@@ -432,3 +435,28 @@ def utc_from_graph(value):
         return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc).replace(tzinfo=None)
     except ValueError:
         return None
+
+
+# --- The setup guide, in the portal --------------------------------------------------------
+
+GUIDE = REPO_ROOT / "docs" / "microsoft-mail-setup.md"
+_guide_markdown = MarkdownIt("commonmark", {"html": False, "linkify": False, "typographer": False}).enable("table")
+
+
+def setup_guide():
+    """docs/microsoft-mail-setup.md as HTML, with what the portal knows put in
+    for its placeholders -- the tenant, the app, the mailboxes' domain -- so
+    its commands can be copied as they are."""
+    text = GUIDE.read_text(encoding="utf-8")
+    found = connection()
+    known = {}
+    if found and found.client_id:
+        known["<Application (client) ID>"] = found.client_id
+    if found and found.tenant_id:
+        known["<Directory (tenant) ID>"] = found.tenant_id
+    domains = {account.from_email.rpartition("@")[2] for account in microsoft_accounts() if account.from_email}
+    if len(domains) == 1:
+        known["<your domain>"] = domains.pop()
+    for placeholder, value in known.items():
+        text = text.replace(placeholder, value)
+    return _guide_markdown.render(text)

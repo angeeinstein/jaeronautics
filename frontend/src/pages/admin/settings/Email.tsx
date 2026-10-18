@@ -6,6 +6,7 @@
  * - **Senders**: which mail account sends what -- a default, and for welcome
  *   emails, notifications, announcements and team mailings, and replies to
  *   contact messages an account of their own, each "empty: the default";
+ *   a backup that sends what an account could not (not the mailings);
  *   whether each reply also goes, as a blind copy, to its account's address;
  * - **What goes out**: the welcome email, which notifications go out and how
  *   each channel stands, the mailings' pace;
@@ -82,6 +83,7 @@ const KINDS: {
 function SendersForm({ data }: { data: SendersOut }) {
   const [value, setValue] = useState<Required<SendersIn>>({
     default: data.default,
+    backup: data.backup,
     welcome: data.welcome,
     notifications: data.notifications,
     mailings: data.mailings,
@@ -100,22 +102,36 @@ function SendersForm({ data }: { data: SendersOut }) {
     <Stack gap="lg">
       <Panel icon={IconAddressBook} title="Which account sends what">
         <Stack gap="md">
-          <Select
-            label="Default"
-            description="Everything below left empty, and the account emails: password reset, confirming an address."
-            inputWrapperOrder={BELOW}
-            placeholder={
-              data.default_in_use ? `The first account (${data.default_in_use})` : 'No account yet'
-            }
-            data={data.accounts}
-            clearable
-            value={value.default || null}
-            error={errors.default}
-            onChange={(account) => {
-              change('default', account ?? '');
-            }}
-            maw={420}
-          />
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <Select
+              label="Default"
+              description="Everything below left empty, and the account emails: password reset, confirming an address."
+              inputWrapperOrder={BELOW}
+              placeholder={
+                data.default_in_use ? `The first account (${data.default_in_use})` : 'No account yet'
+              }
+              data={data.accounts}
+              clearable
+              value={value.default || null}
+              error={errors.default}
+              onChange={(account) => {
+                change('default', account ?? '');
+              }}
+            />
+            <Select
+              label="Backup"
+              description="Sends what another account could not. Announcements and team mailings wait instead."
+              inputWrapperOrder={BELOW}
+              placeholder="None"
+              data={data.accounts}
+              clearable
+              value={value.backup || null}
+              error={errors.backup}
+              onChange={(account) => {
+                change('backup', account ?? '');
+              }}
+            />
+          </SimpleGrid>
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
             {KINDS.map((kind) => (
               <Select

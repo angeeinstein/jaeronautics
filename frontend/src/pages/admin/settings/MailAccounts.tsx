@@ -34,6 +34,7 @@ import { Panel } from '../../../components/Panel';
 import { fileNameOf, saveFile } from '../../../lib/files';
 import { formatDayOf } from '../../../lib/format';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
+import { MicrosoftGuide } from './MicrosoftGuide';
 import { SettingsLoaded, useNotMyLogin } from './shared';
 
 type Account = Schemas['MailAccountOut'];
@@ -448,10 +449,13 @@ function MicrosoftConnection({ microsoft }: { microsoft: Microsoft }) {
   return (
     <Panel icon={IconBrandWindows} title="Microsoft 365">
       <Stack gap="lg">
-        <Text size="sm" c="dimmed">
-          Microsoft 365 accounts sign in as the portal&apos;s app in Entra ID, with a certificate made here:
-          its key never leaves the server. Setting it up: docs/microsoft-mail-setup.md.
-        </Text>
+        <Group justify="space-between" align="flex-start" gap="md" wrap="nowrap">
+          <Text size="sm" c="dimmed">
+            Microsoft 365 accounts sign in as the portal&apos;s app in Entra ID, with a certificate made here:
+            its key never leaves the server.
+          </Text>
+          <MicrosoftGuide />
+        </Group>
         <Group align="flex-end" gap="md">
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" flex="1 1 24rem">
             {field('tenant_id', 'Directory (tenant) ID', 'example.onmicrosoft.com')}
