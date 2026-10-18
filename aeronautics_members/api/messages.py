@@ -66,9 +66,14 @@ class ContactReplyOut(Model):
     body: str
     author: str | None
     created_at: UtcDateTime
-    #: None while its email has not gone out; ``error`` says why.
+    #: None while its email has not gone out; ``error`` says why. For a reply
+    #: that came in: when it arrived.
     sent_at: UtcDateTime | None
     error: str | None
+    #: The sender's own reply, by email (docs/microsoft-mail-plan.md).
+    incoming: bool
+    #: It came with files; they are in the mailbox.
+    has_attachments: bool
 
 
 class ContactMessageOut(Model):
@@ -88,7 +93,8 @@ class ContactMessageOut(Model):
     delivered: bool
     done_at: UtcDateTime | None
     done_by: str | None
-    #: Answers written in the portal (the contact form's only), oldest first.
+    #: Answers written in the portal (the contact form's only), and the
+    #: sender's replies to them by email, oldest first.
     replies: list[ContactReplyOut]
     #: Whether it can be answered from the portal: the contact form's can.
     can_reply: bool
@@ -138,7 +144,8 @@ def message_out(message):
         done_at=message.done_at,
         done_by=_name(message.done_by),
         replies=[ContactReplyOut(id=answer.id, body=answer.body, author=_name(answer.author),
-                                 created_at=answer.created_at, sent_at=answer.sent_at, error=answer.error)
+                                 created_at=answer.created_at, sent_at=answer.sent_at, error=answer.error,
+                                 incoming=bool(answer.incoming), has_attachments=bool(answer.has_attachments))
                  for answer in message.replies],
         can_reply=message.team_id is None,
     )

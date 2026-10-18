@@ -171,6 +171,8 @@ describe('Admin › Messages', () => {
           created_at: '2026-10-09T09:00:00Z',
           sent_at: '2026-10-09T09:00:01Z',
           error: null,
+          incoming: false,
+          has_attachments: false,
         },
       ],
     };
@@ -214,6 +216,8 @@ describe('Admin › Messages', () => {
                   created_at: '2026-10-09T09:00:00Z',
                   sent_at: null,
                   error: 'SMTP said no',
+                  incoming: false,
+                  has_attachments: false,
                 },
               ],
             },
@@ -229,6 +233,50 @@ describe('Admin › Messages', () => {
       'href',
       'mailto:vera@example.net?subject=Re%3A%20For%20the%20team',
     );
+  });
+
+  it("the sender's reply by email is in the thread, theirs", async () => {
+    mockFetch({
+      ...base,
+      'GET /api/v1/admin/messages': {
+        body: {
+          ...listed,
+          items: [
+            {
+              ...message,
+              replies: [
+                {
+                  id: 1,
+                  body: 'It was paid.',
+                  author: 'Ada Admin',
+                  created_at: '2026-10-09T09:00:00Z',
+                  sent_at: '2026-10-09T09:00:01Z',
+                  error: null,
+                  incoming: false,
+                  has_attachments: false,
+                },
+                {
+                  id: 2,
+                  body: 'Thanks! The receipt is attached.',
+                  author: null,
+                  created_at: '2026-10-09T10:00:00Z',
+                  sent_at: '2026-10-09T10:00:00Z',
+                  error: null,
+                  incoming: true,
+                  has_attachments: true,
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    renderPage(<Messages />);
+
+    const reply = await screen.findByLabelText(/^Reply of /);
+    expect(reply).toHaveTextContent(/Vera Visitor replied/);
+    expect(reply).toHaveTextContent('Files in the mailbox');
+    expect(reply).toHaveTextContent('Thanks! The receipt is attached.');
   });
 
   it('linked to the account, marked done', async () => {

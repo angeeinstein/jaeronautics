@@ -120,6 +120,7 @@ def snapshot_mail_account_for_audit(mail_account):
         {
             "id": mail_account.id,
             "account_key": mail_account.account_key,
+            "kind": mail_account.kind,
             "host": mail_account.host,
             "port": mail_account.port,
             "username": mail_account.username,

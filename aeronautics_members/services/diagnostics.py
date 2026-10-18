@@ -157,6 +157,47 @@ def _checks_pages(asked):
     return asked and current_app.config.get("HEALTH_PAGE_CHECK", not current_app.testing)
 
 
+def _microsoft_mail(problems, warnings, sign_in):
+    """Microsoft 365 mail accounts (docs/microsoft-mail-plan.md): set up, the
+    certificate not running out, signing in (when the network may be asked),
+    replies watched."""
+    from .mail_replies import state as replies_state
+    from .microsoft_mail import MicrosoftError, certificate_state, connection, token
+
+    found = certificate_state()
+    if found is None:
+        return
+    ok, message = found
+    if not ok:
+        expires = connection().certificate_expires_at if connection() else None
+        (warnings if expires and expires > get_now_utc().replace(tzinfo=None) else problems).append(
+            f"Microsoft 365 mail: {message}")
+        if expires is None or expires <= get_now_utc().replace(tzinfo=None):
+            return
+    if sign_in:
+        try:
+            token()
+        except MicrosoftError as exc:
+            problems.append(f"Microsoft 365 mail: the portal cannot sign in -- {exc}")
+            return
+    replies = replies_state()
+    if replies and not replies[0]:
+        warnings.append(replies[1])
+
+
+def _mail_backup(problems):
+    """Accounts that cannot send, whose emails the backup sends (services/mail_senders.py)."""
+    from ..config import MEMBERSHIP_TIMEZONE
+    from .mail_senders import failing
+    from .system_update import parse_time
+
+    for key, state in failing():
+        since = parse_time(state.get("since"))
+        when = f" since {since.astimezone(MEMBERSHIP_TIMEZONE):%d.%m.%Y %H:%M}" if since else ""
+        problems.append(f"{key} cannot send{when}: {state.get('reason') or 'no reason given'} -- "
+                        f"the backup ({state.get('backup')}) sends its emails.")
+
+
 def collect_system_health(check_pages=True):
     """Everything the health report shows, as plain serializable data.
 
@@ -221,6 +262,8 @@ def collect_system_health(check_pages=True):
         )
     if queues["emails_pending"] > 20:
         warnings.append(f"{queues['emails_pending']} emails are queued for delivery.")
+    _microsoft_mail(problems, warnings, sign_in=_checks_pages(check_pages))
+    _mail_backup(problems)
     pages = check_security_policy() if _checks_pages(check_pages) else None
     if pages and pages["warning"]:
         warnings.append(pages["warning"])

@@ -124,9 +124,10 @@ Entered with the **gear** at the right of the top bar; opens on the Dashboard.
 - *System* -- **Logs**, **Settings** ▸
   - Settings folds open in place (chevron) to its parts: **General**
     (signing up, the university email domains), **Email** (tabs: *Senders*
-    -- which mail account sends what; *What goes out* -- the welcome email,
-    the notifications and their channels, the mailings' pace; *Accounts*;
-    *Test*), **Credit**, **Membership fee**, **Forum**, **Devices** (one
+    -- which mail account sends what, and the backup for when one cannot;
+    *What goes out* -- the welcome email, the notifications and their
+    channels, the mailings' pace; *Accounts*, with the Microsoft 365 panel
+    and its *Setup guide* in a window; *Test*), **Credit**, **Membership fee**, **Forum**, **Devices** (one
     device's page, pairing one, the firmware with flashing a new board), **System health**,
     **Updates**, **Backup and restore**.
     Clicking *Settings* opens it on General.

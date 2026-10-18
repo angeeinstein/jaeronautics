@@ -14,17 +14,28 @@ left empty, the default.
   ``contact_reply_copy``: each reply also goes, as a blind copy, to that
   account's own address.
 
+- **Backup** (``mail_backup_sender``): sends what the chosen account could
+  not (``mail_utils.send_mail``) -- not announcements and team mailings, and
+  not the test email. Which account failed, since when and why, is kept
+  (``mail_failing:<key>``) until it sends again; System health shows it.
+  docs/microsoft-mail-plan.md, "A backup account".
+
 Until 2026-10 there was no default: the welcome email's sender served as one,
 and each other kind fell back to another. The migration ``a4c7e2f9b1d6``
 made that sender the default. Saved on Settings › Email
 (settings_sections.save_senders).
 """
 
+import json
+
 from ..db_models import Setting, db
 from ..mail_utils import load_mail_accounts_config
 from .settings import get_settings_map
 
 DEFAULT = "mail_default_sender"
+BACKUP = "mail_backup_sender"
+#: Before an account's key: it could not send, and the backup did (JSON).
+FAILING = "mail_failing:"
 #: A kind of email, and the setting that names its own account.
 KINDS = {
     "welcome": "welcome_email_sender",
@@ -33,7 +44,7 @@ KINDS = {
     "replies": "contact_reply_sender",
 }
 REPLY_COPY = "contact_reply_copy"
-KEYS = (DEFAULT, *KINDS.values(), REPLY_COPY)
+KEYS = (DEFAULT, BACKUP, *KINDS.values(), REPLY_COPY)
 
 
 def accounts():
@@ -47,7 +58,7 @@ def accounts():
 def stored():
     """What is chosen: ``{"default": "office", "welcome": "", ..., "reply_copy": False}``."""
     values = get_settings_map(KEYS)
-    chosen = {"default": (values.get(DEFAULT) or "").strip()}
+    chosen = {"default": (values.get(DEFAULT) or "").strip(), "backup": (values.get(BACKUP) or "").strip()}
     chosen.update({kind: (values.get(key) or "").strip() for kind, key in KINDS.items()})
     chosen["reply_copy"] = (values.get(REPLY_COPY) or "") == "1"
     return chosen
@@ -60,6 +71,11 @@ def default_account():
         return chosen
     available = accounts()
     return available[0] if available else ""
+
+
+def backup_account():
+    """The account that sends what another could not; "" with none."""
+    return stored()["backup"]
 
 
 def account_for(kind):
@@ -76,9 +92,45 @@ def address_of(key):
 def forget_account(key):
     """An account removed: whatever it sent now goes out from the default. The kinds it was chosen for."""
     cleared = []
-    for name, setting_key in ((None, DEFAULT), *KINDS.items()):
+    for name, setting_key in ((None, DEFAULT), ("backup", BACKUP), *KINDS.items()):
         setting = db.session.get(Setting, setting_key)
         if setting is not None and setting.value == key:
             db.session.delete(setting)
             cleared.append(name or "default")
     return cleared
+
+
+def note_failing(key, backup, reason, now):
+    """``key`` could not send and ``backup`` did: kept until ``key`` sends again.
+    In the caller's transaction, and never in its way."""
+    try:
+        with db.session.begin_nested():
+            setting = db.session.get(Setting, f"{FAILING}{key}"[:50])
+            since = json.loads(setting.value).get("since") if setting else None
+            value = json.dumps({"since": since or now.isoformat(), "backup": backup, "reason": reason[:120]})
+            db.session.merge(Setting(key=f"{FAILING}{key}"[:50], value=value[:255]))
+    except Exception:  # noqa: BLE001 -- the email went out; the note is a nicety
+        pass
+
+
+def note_sending(key):
+    """``key`` sent: no longer failing."""
+    try:
+        setting = db.session.get(Setting, f"{FAILING}{key}"[:50])
+        if setting is not None:
+            with db.session.begin_nested():
+                db.session.delete(setting)
+    except Exception:  # noqa: BLE001 -- as above
+        pass
+
+
+def failing():
+    """``[(key, {"since", "backup", "reason"})]``: the accounts the backup stands in for."""
+    rows = db.session.execute(db.select(Setting).where(Setting.key.like(f"{FAILING}%"))).scalars()
+    found = []
+    for row in rows:
+        try:
+            found.append((row.key.removeprefix(FAILING), json.loads(row.value)))
+        except ValueError:
+            continue
+    return sorted(found)

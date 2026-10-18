@@ -92,8 +92,8 @@ def save_contact_details(user, member, values, current_password=None):
 
     Either address is a way to sign in, so changing one asks for the current
     password: a session left open or stolen must not be enough to take the
-    account over. A new private address also ends every other session, and
-    the old address is told."""
+    account over. A new address -- either -- also ends every other session,
+    and the old private address is told."""
     has_forum_account = _has_forum_account(member)
     new_email = (values.get("email_private") or "").strip().lower()
     private_changes = bool(new_email) and not _same_address(new_email, member.email_private)
@@ -135,6 +135,9 @@ def save_contact_details(user, member, values, current_password=None):
     contact_fields = tuple(f for f in DIRECT_MEMBER_PROFILE_FIELDS if f != "email_private")
     apply_member_profile(member, {f: values.get(f) for f in contact_fields}, fields=contact_fields)
     work_email_changed = bool(member.email_work) and member.email_work.strip().lower() != previous_email_work
+    if (member.email_work or "").strip().lower() != previous_email_work:
+        # Changed or removed: whoever signed in with the old one is out.
+        user.end_sessions()
     # An institute address that is the account's, already confirmed, needs no link of its own.
     confirm_institute_with_account(member)
 

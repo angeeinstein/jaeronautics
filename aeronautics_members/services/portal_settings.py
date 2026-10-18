@@ -13,7 +13,7 @@ in a hurry -- a restore rather than a reconstruction from memory.
 
 **With ``--with-secrets`` the file is a password list.** It holds the Stripe
 secret key, the Stripe webhook secret, the Discourse API key, the Connect
-secret and every SMTP password. It is written ``0600`` and it is not encrypted;
+secret, every SMTP password and the Microsoft 365 certificate's private key. It is written ``0600`` and it is not encrypted;
 anywhere it is copied inherits that, which is the same warning the database
 dump carries and for the same reason.
 
@@ -33,6 +33,7 @@ from ..services.institutional_email import SETTING_KEY as INSTITUTIONAL_EMAIL_SE
 from ..services.mail_senders import KEYS as SENDER_SETTING_KEYS
 from ..services.mailings import SETTING_KEYS as MAILINGS_SETTING_KEYS
 from ..services.teams import SETTING_KEYS as TEAMS_SETTING_KEYS
+from . import microsoft_mail
 
 FORMAT = 1
 
@@ -98,22 +99,33 @@ def export_settings(*, with_secrets=False):
     ).scalars():
         row = {
             "account_key": account.account_key,
+            "kind": account.kind,
             "host": account.host,
             "port": account.port,
             "username": account.username,
             "starttls": bool(account.starttls),
+            "from_email": account.from_email,
+            "from_name": account.from_name,
         }
-        if with_secrets:
+        if account.is_microsoft:
+            pass  # nothing secret: it signs in with the portal's app
+        elif with_secrets:
             row["password"] = account.password
         else:
             held_back.append(f"mail account {account.account_key}")
         accounts.append(row)
+
+    # What the Microsoft 365 accounts sign in through.
+    microsoft = microsoft_mail.export_connection(with_secrets=with_secrets)
+    if microsoft is not None and not with_secrets and microsoft_mail.connection().certificate:
+        held_back.append("Microsoft 365 certificate")
 
     return {
         "format": FORMAT,
         "with_secrets": bool(with_secrets),
         "settings": sections,
         "mail_accounts": accounts,
+        "microsoft_connection": microsoft,
         "held_back": sorted(set(held_back)),
     }
 
@@ -143,7 +155,7 @@ def import_settings(payload, *, dry_run=False):
 
     known = _known_keys()
     report = {"set": [], "already": [], "skipped": [], "accounts": [],
-              "problems": []}
+              "microsoft": None, "problems": []}
 
     stored = {
         setting.key: setting for setting in
@@ -180,10 +192,14 @@ def import_settings(payload, *, dry_run=False):
         if not key:
             continue
         password = row.get("password")
+        microsoft = row.get("kind") == MailAccount.MICROSOFT
         account = db.session.execute(
             db.select(MailAccount).where(MailAccount.account_key == key)
         ).scalar_one_or_none()
-        if account is None and not password:
+        if microsoft and not row.get("from_email"):
+            report["problems"].append(f"mail account {key} has no mailbox address; add it by hand")
+            continue
+        if account is None and not password and not microsoft:
             # A mail account cannot exist without one, and inventing a blank
             # would produce an account that fails at the first send rather than
             # one that is visibly missing.
@@ -198,11 +214,27 @@ def import_settings(payload, *, dry_run=False):
         if account is None:
             account = MailAccount(account_key=key)
             db.session.add(account)
+        if row.get("from_email") is not None:
+            account.from_email = row.get("from_email")
+        if row.get("from_name") is not None:
+            account.from_name = row.get("from_name")
+        if microsoft:
+            account.kind = MailAccount.MICROSOFT
+            account.host = account.port = account.username = account.password = None
+            account.starttls = False
+            continue
+        account.kind = MailAccount.SMTP
         account.host = row.get("host") or ""
         account.port = int(row.get("port") or 587)
         account.username = row.get("username") or ""
         account.starttls = bool(row.get("starttls"))
         if password:
             account.password = password
+
+    if payload.get("microsoft_connection"):
+        restored, problem = microsoft_mail.import_connection(payload["microsoft_connection"], dry_run=dry_run)
+        report["microsoft"] = restored
+        if problem:
+            report["problems"].append(problem)
 
     return report

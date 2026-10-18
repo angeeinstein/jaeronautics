@@ -40,22 +40,30 @@ interface MessageListProps {
 
 type Reply = ContactMessage['replies'][number];
 
-/** The answers written here, under the message: who, when, and whether it went out. */
-function Replies({ replies }: { replies: Reply[] }) {
+/**
+ * The answers written here, under the message: who, when, and whether it went
+ * out -- and the sender's replies to them by email, set apart by their line.
+ */
+function Replies({ replies, sender }: { replies: Reply[]; sender: string }) {
   return (
     <Stack gap="sm">
       {replies.map((answer) => (
         <Box
           key={answer.id}
           pl="md"
-          style={{ borderLeft: '2px solid var(--mantine-color-brand-6)' }}
-          aria-label={`Answer of ${formatDateTime(answer.created_at)}`}
+          style={{
+            borderLeft: `2px solid ${answer.incoming ? 'var(--ja-border)' : 'var(--mantine-color-brand-6)'}`,
+          }}
+          aria-label={`${answer.incoming ? 'Reply' : 'Answer'} of ${formatDateTime(answer.created_at)}`}
         >
           <Group gap="xs" wrap="wrap">
             <Text size="xs" c="dimmed">
-              {`Answered ${formatDateTime(answer.created_at)}${answer.author ? ` by ${answer.author}` : ''}`}
+              {answer.incoming
+                ? `${sender} replied ${formatDateTime(answer.created_at)}`
+                : `Answered ${formatDateTime(answer.created_at)}${answer.author ? ` by ${answer.author}` : ''}`}
             </Text>
             {answer.sent_at ? null : <Pill tone="pending">Not sent yet</Pill>}
+            {answer.has_attachments ? <Pill tone="neutral">Files in the mailbox</Pill> : null}
           </Group>
           <Text size="sm" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
             {answer.body}
@@ -189,7 +197,7 @@ function MessageCard({
         <Text size="sm" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
           {message.body}
         </Text>
-        {message.replies.length ? <Replies replies={message.replies} /> : null}
+        {message.replies.length ? <Replies replies={message.replies} sender={message.sender_name} /> : null}
         {writing && reply ? (
           <ReplyForm
             message={message}

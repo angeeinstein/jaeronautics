@@ -39,6 +39,8 @@ class SettingsChangedOut(Model):
 class SendersIn(Model):
     #: Everything not chosen otherwise, and the account emails; empty: the first account.
     default: str = Field("", max_length=100)
+    #: Sends what another account could not (not announcements and team mailings); empty: none.
+    backup: str = Field("", max_length=100)
     #: Each empty: the default.
     welcome: str = Field("", max_length=100)
     notifications: str = Field("", max_length=100)
@@ -50,6 +52,7 @@ class SendersIn(Model):
 
 class SendersOut(Model):
     default: str
+    backup: str
     welcome: str
     notifications: str
     mailings: str
@@ -65,7 +68,7 @@ class SendersOut(Model):
 def _senders_out():
     chosen = mail_senders.stored()
     return SendersOut(
-        default=chosen["default"], welcome=chosen["welcome"], notifications=chosen["notifications"],
+        default=chosen["default"], backup=chosen["backup"], welcome=chosen["welcome"], notifications=chosen["notifications"],
         mailings=chosen["mailings"], replies=chosen["replies"], reply_copy=chosen["reply_copy"],
         accounts=mail_senders.accounts(), default_in_use=mail_senders.default_account(),
         reply_address=mail_senders.address_of(mail_senders.account_for("replies")),
@@ -82,10 +85,14 @@ def admin_email_senders():
           tag=TAG)
 def admin_email_senders_save(body):
     """Choose the default account, and an account of its own for each kind of email."""
-    changed = sections.save_senders(current_user, default=body.default, welcome=body.welcome,
+    changed = sections.save_senders(current_user, default=body.default, backup=body.backup, welcome=body.welcome,
                                     notifications=body.notifications, mailings=body.mailings, replies=body.replies,
                                     reply_copy=body.reply_copy)
     db.session.commit()
+    # Replies come back from the mailbox chosen for them, if it is a Microsoft one.
+    from .admin_mail import watch_soon
+
+    watch_soon()
     return SettingsChangedOut(changed=changed)
 
 

@@ -168,6 +168,8 @@ def test_an_older_backup_is_migrated_forward_like_an_update(portal, tmp_path):
     script = backup_service._script_directory()
     head = script.get_current_head()
     older = script.get_revision(head).down_revision
+    if isinstance(older, tuple):  # where two lines of migrations meet: one of them
+        older = older[0]
 
     backup_service._drop_everything()
     backup_service._migrate(older)

@@ -45,8 +45,9 @@ export function Messages() {
         }
       />
       <Text size="sm" c="dimmed" mt="lg">
-        Every admin receives these by email. Their answers to a reply arrive in the replies&apos; mailbox
-        (Settings › Email). Messages done are deleted after a year, with their answers.
+        Every admin receives these by email. Answers to a reply come back here when the replies&apos; account
+        is a Microsoft 365 mailbox; otherwise they arrive in its mailbox (Settings › Email). Messages done are
+        deleted after a year, with their answers.
       </Text>
     </>
   );

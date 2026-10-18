@@ -76,22 +76,23 @@ def save_general(actor, *, invoice_payments, institutional_email_domains, staff_
     })
 
 
-def save_senders(actor, *, default, welcome, notifications, mailings, replies, reply_copy):
-    """Settings › Email, *Senders*: the default mail account, and one for each kind of
-    email (services/mail_senders.py). Each must exist; empty is the default."""
+def save_senders(actor, *, default, welcome, notifications, mailings, replies, reply_copy, backup=""):
+    """Settings › Email, *Senders*: the default mail account, one for each kind of
+    email, and the backup (services/mail_senders.py). Each must exist; empty is
+    the default -- for the backup, none."""
     from . import ValidationError
-    from .mail_senders import DEFAULT, KINDS, REPLY_COPY, accounts
+    from .mail_senders import BACKUP, DEFAULT, KINDS, REPLY_COPY, accounts
 
     available = set(accounts())
-    chosen = {"default": default, "welcome": welcome, "notifications": notifications, "mailings": mailings,
-              "replies": replies}
+    chosen = {"default": default, "backup": backup, "welcome": welcome, "notifications": notifications,
+              "mailings": mailings, "replies": replies}
     for field, value in chosen.items():
         value = (value or "").strip()
         if value and value not in available:
             message = "No such mail account (the Accounts tab)."
             raise ValidationError(message, code="settings_invalid", details={"fields": {field: message}})
         chosen[field] = value
-    values = {DEFAULT: chosen["default"] or None}
+    values = {DEFAULT: chosen["default"] or None, BACKUP: chosen["backup"] or None}
     values.update({key: chosen[kind] or None for kind, key in KINDS.items()})
     values[REPLY_COPY] = "1" if reply_copy else None
     return _write(actor, "email_senders", values)

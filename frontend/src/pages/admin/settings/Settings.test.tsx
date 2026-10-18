@@ -122,6 +122,7 @@ const sending: Schemas['SendingOut'] = {
 
 const senders: Schemas['SendersOut'] = {
   default: '',
+  backup: '',
   welcome: '',
   notifications: '',
   mailings: '',
@@ -155,11 +156,15 @@ describe('email', () => {
     );
     await userEvent.click(within(panel).getByRole('combobox', { name: 'Replies to contact messages' }));
     await userEvent.click(await screen.findByRole('option', { name: 'support' }));
+    expect(within(panel).getByRole('combobox', { name: 'Backup' })).toHaveAttribute('placeholder', 'None');
+    await userEvent.click(within(panel).getByRole('combobox', { name: 'Backup' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'office' }));
     await userEvent.click(within(panel).getByRole('checkbox', { name: /A copy of each reply/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(await sentBody(calls, 'PUT', `${API}/email/senders`)).toEqual({
       default: '',
+      backup: 'office',
       welcome: '',
       notifications: '',
       mailings: '',

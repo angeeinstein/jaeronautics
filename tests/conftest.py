@@ -59,9 +59,9 @@ def _expected_head():
     for path in (REPO_ROOT / "migrations" / "versions").glob("*.py"):
         text = path.read_text()
         revisions.add(re.search(r"^revision = ['\"](\w+)['\"]", text, re.M).group(1))
-        down = re.search(r"^down_revision = ['\"]?(\w+)['\"]?", text, re.M).group(1)
-        if down != "None":
-            parents.add(down)
+        # One parent, or a tuple of them where two lines of migrations meet.
+        down = re.search(r"^down_revision = (.+)$", text, re.M).group(1)
+        parents.update(re.findall(r"['\"](\w+)['\"]", down))
     return (revisions - parents).pop()
 
 

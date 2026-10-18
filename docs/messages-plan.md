@@ -122,15 +122,17 @@ like you proposed."
 - **From which account:** Settings › Email, *Senders*, *Replies to contact
   messages* -- a mail account of its own (a *support* address the
   maintainer adds on the *Accounts* tab), or, left empty, the default.
-- **The person's answer:** the server receives no mail. A reply goes out
-  with no other Reply-To, so an answer to it lands in that account's mailbox,
-  read in a mail program ("I could just configure this mailbox in Outlook").
+- **The person's answer:** a reply goes out with no other Reply-To, so an
+  answer to it lands in that account's mailbox, read in a mail program ("I
+  could just configure this mailbox in Outlook"). When that account is a
+  Microsoft 365 mailbox, the answer also comes back into the thread here and
+  the message is open again (agreed 2026-10-16:
+  `docs/microsoft-mail-plan.md`, "Replies").
 - **A copy:** a setting beside the account -- each reply also goes, as a
   blind copy, to the account's own address, so the whole conversation is in
   that mailbox ("you could just make this a setting in the settings page
   where I set the support email sender").
-- **Later, if wanted:** the portal reading that mailbox (IMAP) and showing
-  answers in the conversation; a separate Reply-To address.
+- **Later, if wanted:** a separate Reply-To address.
 - **Kept and deleted with the message**; in the sender's data export with
   their message. The privacy policy draft (2026-10-08) says so.
 - Code: `services/messages.py` (`reply`), `db_models.ContactReply`,

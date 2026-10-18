@@ -21,10 +21,39 @@ checked by its chip), attendance with the same cards
 (`docs/attendance-plan.md`), answering contact messages from the portal
 (`docs/messages-plan.md`), and the batch of 2026-10-16 (Settings › Email
 with its tabs, Admin › Attendance always in the menu, a hint under every
-email field when a university address looks mistyped). The price-list
-proposal below waits for the maintainer's answer.
+email field when a university address looks mistyped), and, with the
+security fixes of 2026-10-17, no browser autofill in the Microsoft 365 fields
+and the export password. The price-list proposal below waits for the
+maintainer's answer.
 
 ## Open
+
+### Microsoft 365: narrow the app's mail permissions to the two mailboxes
+
+- **Added:** 2026-10-18
+- **What:** for testing, the app registration `Portal mail` was given the
+  Microsoft Graph *application* permissions `Mail.Send` and `Mail.Read`
+  with admin consent -- they reach **every mailbox** in the tenant. They are
+  to be replaced by the mailbox-scoped Exchange roles of
+  `docs/microsoft-mail-setup.md`, step 5.
+- **Why:** the certificate's key is in the portal's database and backups;
+  with these permissions, whoever had it could read and send from every
+  mailbox of the association. The maintainer chose the narrow way
+  ("the better, more locked down version"); the wide one is only so the
+  connection can be tested while Exchange is not ready.
+- **State:** step 5 is done except `New-ManagementRoleAssignment` (both
+  lines), which Exchange refused for the Global Administrator right after
+  `Enable-OrganizationCustomization` -- most likely until the tenant is
+  "hydrated" (`Get-OrganizationConfig | Format-List IsDehydrated` says
+  `False`; up to 24 hours).
+- **How, in this order:** run the two `New-ManagementRoleAssignment` lines;
+  `Test-ServicePrincipalAuthorization` shows the roles *InScope: True*
+  (support: Send and Read; noreply: Send only); **then** remove `Mail.Send`
+  and `Mail.Read` under API permissions and revoke the consent under
+  *Enterprise applications* › `Portal mail` › *Permissions*; then *Test*
+  on both accounts in Settings › Email. The two kinds add up: the roles do
+  not narrow what is granted in Entra.
+- **Before** the live portal uses the Microsoft accounts.
 
 ### Price lists: deleted items folded into one row
 
@@ -122,6 +151,76 @@ Talked about, not agreed as work. Not built unless the maintainer brings them up
     database errors stop printing their values. Personal data stays: useful
     to identify an error, and those with `system.update` are trusted with it.
   - Opening it not recorded in Admin › Logs (noise for one or two people).
+- **Faster CI** -- 2026-10-16. A run takes about 7½ min; the slowest job by
+  far is the Python tests (`test` in `.github/workflows/ci.yml`: pytest
+  about 6½ min on GitHub's 4-core runner, already with `-n auto`). Front
+  end about 3 min; e2e 2½-3 min per part (3 parts, one Playwright worker
+  each: the tests share one seeded database on port 8777); MariaDB jobs
+  under 1 min. The maintainer wants to think about which way to go. Two
+  ways talked through:
+  - **Split the Python tests into 3-4 parts on GitHub's runners**, like
+    e2e: each test in exactly one part (by a stable split, or by measured
+    durations so the parts are even), a check that the parts' counts add up
+    to the whole, `passed` waiting for all parts. Expected: a run of about
+    3 min. Low risk: the tests already pass spread over processes; each
+    part repeats about 25 s of setup (free minutes: the repository is
+    public). About an hour's work, CI only.
+  - **A self-hosted runner on the maintainer's PC** (i9-14900K, 32 threads,
+    64 GB, NVMe; on whenever they work). pytest perhaps 1½-2 min there; e2e
+    hardly faster (serial). Whole run perhaps 2-2½ min with several isolated
+    runner instances -- little more than the split gives. Needs: Linux (WSL2
+    with Docker: the MariaDB job is a service container), Pango/HarfBuzz,
+    Python, Node, Chromium; the runner as its own user, without access to
+    personal files. Fallback when the PC is off: a first job on GitHub's
+    runner asks the API (a token with *Administration: read* as a secret)
+    whether the runner is online and idle and picks `runs-on` from that.
+    Safety (public repository): never a fork's pull request on the PC --
+    only pushes and pull requests from this repository's branches -- plus
+    "Require approval for all external contributors" in Settings › Actions;
+    pull requests cannot be switched off on a public repository
+    (interaction limits last at most 6 months). The GPU does not help.
+  - Suggested order: the split first; measure `time python -m pytest -q -n
+    24` on the PC before deciding on a runner.
+- **Connected services beside the forum (Telegram and others)** --
+  2026-10-17. Asked only how it would look: "I am not planning on
+  implementing anything of those services just yet." What was sketched:
+  - Today the forum is the only outside service that follows a membership
+    (queued sync at the change, started at once, retried; every night all
+    members again -- `services/outbox.py`, `forum_service.sync_member`,
+    "desired state" then the difference). Teams end with the association
+    (`team_payments.follow_association_end`); the rest is checked live.
+  - Plug-ins like the device types: each service declares its settings,
+    what a member should have there, how to make it so, how an account is
+    linked. One "membership changed" trigger queues a job per enabled
+    service; one nightly check for all; one table of linked accounts
+    (service, external ID, state, last error) shown on My Account, the
+    admin's account page and System health. The forum the first plug-in.
+  - Telegram: the member links their account once through the bot; the
+    group approves join requests, the bot approves only active members;
+    at the end the bot removes them (ban, then unban). Fits Discord, Slack,
+    Microsoft 365 groups through Graph, a GitHub organisation, Nextcloud.
+  - Open: which service first; teams too (a group per team); removal on the
+    last day or a grace period.
+- **CI passes a push that changes only `docs/` in under a minute** --
+  2026-10-17. Every push runs the whole of CI, a to-do item too ("this
+  obviously doesn't make any sense when it's just a to-do list item"). Put
+  off: "Let's do this some point later." Talked through:
+  - Not `[skip ci]` or `paths-ignore`: the commit is then left without a
+    CI result -- a pull request whose last commit it is cannot be merged
+    (the required check waits forever), and `install.sh` waits 3 minutes
+    for a run that never comes, then installs "without its result"; the
+    Updates page shows no run.
+  - Instead, in job `tested` of `.github/workflows/ci.yml`: when the commit
+    before passed (its tree's `ci-passed-<tree>` mark is there) and every
+    file changed since is under `docs/`, count it as passed -- skip the
+    tests, leave the mark for the new tree. About 30-40 seconds; the check
+    green, the installer and the Updates page see "passed".
+  - Only `docs/` (not `legal/`: rendered and made into PDFs, tested).
+    `docs/device-protocol.md` is offered as a download on the Firmware page
+    but no test reads it.
+  - The pull-request run (on GitHub's merge commit) needs the same rule,
+    compared with the pull request's previous head.
+  - Not holding to-do commits back: the list is pushed the moment it changes.
 - **Each version in its own folder, built beside the running one** --
   2026-10-11. As `angeeinstein/study-helper` does: a folder per version with
   its own Python environment, switched to only once healthy, the previous one
