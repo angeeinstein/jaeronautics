@@ -141,6 +141,71 @@ like you proposed."
   `frontend/src/components/MessageList.tsx`,
   `frontend/src/pages/admin/settings/Email.tsx`.
 
+## Whole conversations, and team leads answering in the portal (decided 2026-10-18, not built)
+
+Tried on the test server with a few answers back and forth: "the reply that
+is sent out by our portal … shows the original message that the person sent
+in the contact form … even after some writing back and forth … and this
+could be a bit confusing."
+
+**The email that goes out quotes the whole conversation.**
+
+- Newest first, each step under its own line ("On 18.10.2026 at 16:24,
+  Anna Example wrote:"), as a mail program nests a thread. Built from what the
+  portal keeps, not from what the person's mail program sent, so it stays
+  clean.
+- Capped at the last steps (about 10) in a long thread -- **but the contact
+  form's message is always in it**, at the bottom, even when older steps
+  are left out: "this message was the original question or problem. So
+  everything in this conversation is around this original contact form
+  message."
+- Today: `messages._send_reply` passes `quoted_text=message.body` (always the
+  first message); `templates/emails/contact_reply.html` shows one quote.
+
+**An answer that comes back is shown without what it quotes.**
+
+- Their mail program quotes our email below their answer; the portal showed
+  all of it (our logo text, "Support <…> schrieb am …", the copyright
+  line). Graph's `uniqueBody` (asked for already, `mail_replies._text_of`)
+  leaves the quote out for Outlook, not for Gmail.
+- Cut at the first quote line: "On … wrote:", "Am … schrieb …:",
+  "… schrieb am …:", "-----Original Message-----", Outlook's
+  "From:/Sent:" block, lines starting with `>`.
+- The whole text is kept; *Show quoted text* under the answer opens the
+  rest, so a wrong cut loses nothing.
+
+**Team leads answer a message to their team in the portal.**
+
+- Today a team's message is emailed to each lead's login address (usually
+  private) with the sender as Reply-To; *Answer by email* opens their own
+  mail program -- the sender then sees the lead's private address and the
+  portal never sees the answer.
+- **The team's mail account:** chosen by the admins in the team's settings
+  (Admin › Teams, the team) from the mail accounts of Settings › Email --
+  leads cannot add accounts, which hold credentials. For this association,
+  each team's Microsoft 365 shared mailbox. Optional: other associations'
+  teams may have none.
+- **Reply** on the team's Messages page, as in Admin › Messages: written
+  there, sent from the team's account, the message then done, the same
+  quoting as above. **Only the team's leads in force** answer (admins see
+  the page as now). *Answer by email* goes: "this is not needed anymore
+  then."
+- **Answers come back** into the team's thread when the team's account is a
+  Microsoft 365 mailbox: the portal watches that inbox too (today one inbox,
+  the Replies account's: `mail_replies.keep_watching`; then that one and
+  every team's). The leads get an email that an answer came, with a link;
+  the message is open again.
+- The team mailbox's *Sent Items* keeps every answer, so whoever opens the
+  shared mailbox in Outlook sees the conversation too.
+- **Open:** a team **without** a mail account of its own. Answer from the
+  association's *Replies* account with the team's name as sender name
+  ("Team Drone Tech · Joanneum Aeronautics")? On 2026-10-16 the maintainer
+  did not want team leads answering from the support address (above,
+  "Only the contact form's"). Or no *Reply* until the admins choose one --
+  then with *Answer by email* gone, such a team could not answer at all.
+- With several team mailboxes the app's mail permissions grow: see the
+  to-do item on narrowing them (a mail-enabled security group, later).
+
 ## Order of building
 
 1. **Contact form, Admin › Messages, message the team leads.** These replace

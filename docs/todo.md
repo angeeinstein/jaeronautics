@@ -23,12 +23,55 @@ checked by its chip), attendance with the same cards
 with its tabs, Admin › Attendance always in the menu, a hint under every
 email field when a university address looks mistyped), and, with the
 security fixes of 2026-10-17, no browser autofill in the Microsoft 365 fields
-and the export password. The price-list proposal below waits for the
-maintainer's answer.
+and the export password; then email through Microsoft 365 with a backup
+account (`docs/microsoft-mail-plan.md`, merged 2026-10-18 and in use on the
+live portal). The price-list proposal below waits for the maintainer's
+answer.
 
 ## Open
 
-### Microsoft 365: narrow the app's mail permissions to the two mailboxes
+### Messages: the whole conversation in the email, an answer without its quote
+
+- **Added:** 2026-10-18
+- **What:** (1) the email of an answer written in Admin › Messages quotes the
+  whole conversation, newest first, capped at about the last 10 steps, the
+  contact form's message always at the bottom; (2) an answer that comes back
+  by email is shown without the part that quotes our email, with *Show
+  quoted text* to open the rest.
+- **Where:** `services/messages.py` (`_send_reply`: today
+  `quoted_text=message.body`), `templates/emails/contact_reply.html`,
+  `services/mail_replies.py` (`_text_of`), `db_models.ContactReply` (the
+  whole text kept), `frontend/src/components/MessageList.tsx`.
+- **Why:** "even after some writing back and forth, the reply … is still the
+  original message, and this could be a bit confusing"; the answer shown in
+  the portal carried our whole email again (logo text, "Support <…> schrieb
+  am …", the copyright line).
+- **Decided:** whole conversation rather than only the last message; the
+  first message kept "because this message was the original question or
+  problem"; trimming "makes sense". The details, and where the quote is
+  cut: `docs/messages-plan.md`, "Whole conversations, and team leads
+  answering in the portal".
+- The same code serves the team replies below; built first, or with them.
+
+### Team leads answer their team's messages in the portal
+
+- **Added:** 2026-10-18
+- **What:** a feature, its own branch. Admins choose a mail account for a
+  team (its shared mailbox); the team's leads in force answer a message on
+  the team's Messages page; it goes out from that account; answers come back
+  into the thread when it is a Microsoft 365 mailbox, and the leads are told
+  by email. *Answer by email* is removed.
+- **Where:** `docs/messages-plan.md`, "Whole conversations, and team leads
+  answering in the portal" -- what was decided, in full.
+- **Why:** today the lead answers from their private mailbox, so the sender
+  sees that address and the portal never sees the answer.
+- **When:** "I don't want to work on this now" (2026-10-18) -- built when the
+  maintainer asks for it, not with a batch.
+- **Open question:** a team without a mail account of its own -- the
+  association's *Replies* account with the team's name, or no *Reply* until
+  one is chosen (see the plan).
+
+### Microsoft 365: narrow the app's mail permissions (later)
 
 - **Added:** 2026-10-18
 - **What:** for testing, the app registration `Portal mail` was given the
@@ -53,7 +96,16 @@ maintainer's answer.
   *Enterprise applications* › `Portal mail` › *Permissions*; then *Test*
   on both accounts in Settings › Email. The two kinds add up: the roles do
   not narrow what is granted in Entra.
-- **Before** the live portal uses the Microsoft accounts.
+- **Put off (2026-10-18):** "that's a point for later on." The live
+  portal sends through the Microsoft accounts since 2026-10-18 with the wide
+  permissions.
+- **Changed (2026-10-18):** with team mailboxes coming (the item above), not
+  two mailboxes named one by one: a **mail-enabled security group**
+  ("Portal mailboxes") holds every mailbox the portal may use, and the
+  management scope is that group -- a new team mailbox is then added to the
+  group in the admin center, no PowerShell. `docs/microsoft-mail-setup.md`,
+  step 5, to be rewritten for it when this is done. Sending only for
+  `noreply` stays possible with a second group, if still wanted.
 
 ### Price lists: deleted items folded into one row
 
