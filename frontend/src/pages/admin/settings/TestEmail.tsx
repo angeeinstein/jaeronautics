@@ -36,7 +36,7 @@ function Form({ data, email }: { data: Schemas['TestEmailOut']; email: string })
       if (result.ok) notifyDone(`Sent to ${value.recipient}.`);
       else
         notifyFailed(
-          new ApiError(200, 'send_failed', 'The email could not be sent. The server log says why.'),
+          new ApiError(200, 'send_failed', `Not sent: ${result.error ?? 'the server did not take it.'}`),
         );
     },
     onError: (error) => {

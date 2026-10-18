@@ -207,6 +207,9 @@ def _check_current(found):
         _fetch_token(found, found.private_key, found.certificate)
     except MicrosoftError as exc:
         return False, str(exc)
+    # Checked on purpose, often right after a permission was granted: the
+    # next call gets a token that carries it.
+    _forget_token()
     return True, "Signed in to Microsoft."
 
 
@@ -313,12 +316,15 @@ def _json(answer):
 def graph(method, path, *, body=None, data=None, content_type=None, headers=None):
     """A Graph call with the app's token: ``(status, JSON answer)``. Raises
     ``MicrosoftError`` for anything but 2xx."""
-    extra = {"Authorization": f"Bearer {token()}", **(headers or {})}
     if body is not None:
         data, content_type = json.dumps(body).encode(), "application/json"
-    if content_type:
-        extra["Content-Type"] = content_type
-    status, answer_headers, answer = http(method, f"{GRAPH}{path}", data=data, headers=extra)
+    status, answer_headers, answer = _call(method, path, data, content_type, headers)
+    if status in (401, 403):
+        # A token is kept up to an hour and carries the permissions granted
+        # when it was issued: one from before a permission was granted is
+        # refused until it runs out. Once more, with a new one.
+        _forget_token()
+        status, answer_headers, answer = _call(method, path, data, content_type, headers)
     parsed = _json(answer)
     if 200 <= status < 300:
         return status, parsed
@@ -328,6 +334,13 @@ def graph(method, path, *, body=None, data=None, content_type=None, headers=None
         wait = answer_headers.get("Retry-After") or answer_headers.get("retry-after")
         said = f"Microsoft is busy ({status}); tried again later." + (f" It asked to wait {wait} s." if wait else "")
     raise MicrosoftError(said, status=status, code=code)
+
+
+def _call(method, path, data, content_type, headers):
+    extra = {"Authorization": f"Bearer {token()}", **(headers or {})}
+    if content_type:
+        extra["Content-Type"] = content_type
+    return http(method, f"{GRAPH}{path}", data=data, headers=extra)
 
 
 def mailbox_path(mailbox):

@@ -308,6 +308,8 @@ class TestEmailIn(Model):
 
 class SentOut(Model):
     ok: bool
+    #: Why not, as the mail server or Microsoft said it.
+    error: str | None = None
 
 
 @endpoint("POST", "/admin/settings/test-email", response=SentOut, body=TestEmailIn,
@@ -315,4 +317,5 @@ class SentOut(Model):
 @limiter.limit(RATELIMIT_ADMIN_EMAIL)
 def admin_test_email_send(body):
     """Send one email from a template, filled in as a member's would be. Whether the server took it."""
-    return SentOut(ok=mail.send_test_email(body.sender, body.recipient, body.template))
+    sent, error = mail.send_test_email(body.sender, body.recipient, body.template)
+    return SentOut(ok=sent, error=error)

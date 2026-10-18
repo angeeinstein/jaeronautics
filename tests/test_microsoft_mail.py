@@ -38,6 +38,8 @@ class FakeMicrosoft:
         self.answers = {}
         self.refuse_sign_in = None
         self.inbox = {}
+        #: A token Graph turns away, as one issued before a permission was granted.
+        self.stale_token = None
 
     def answer(self, method, path, status=200, body=None):
         self.answers[(method, path)] = (status, body or {})
@@ -50,7 +52,10 @@ class FakeMicrosoft:
             if self.refuse_sign_in:
                 return 401, {}, json.dumps({"error": "invalid_client",
                                             "error_description": f"{self.refuse_sign_in}: no."}).encode()
-            return 200, {}, json.dumps({"access_token": "token-1", "expires_in": 3600}).encode()
+            token = f"token-{len(self.sign_ins())}"
+            return 200, {}, json.dumps({"access_token": token, "expires_in": 3600}).encode()
+        if self.stale_token and (headers or {}).get("Authorization") == f"Bearer {self.stale_token}":
+            return 403, {}, json.dumps({"error": {"code": "ErrorAccessDenied", "message": "Access is denied."}}).encode()
         path = unquote(parts.path).removeprefix("/v1.0")
         for (method_, start), (status, body) in self.answers.items():
             if method == method_ and path.startswith(start):
@@ -213,6 +218,42 @@ class TestSending:
                                 body="<p>Hi</p>", return_error=True)
 
         assert not sent and "may not" not in error and "does not let the app send from support@example.org" in error
+
+    def test_a_test_email_that_is_refused_says_why(self, client, microsoft):
+        _connected()
+        _mailbox()
+        microsoft.answer("POST", "/users/support@example.org/sendMail", 403,
+                         {"error": {"code": "ErrorAccessDenied", "message": "Access is denied."}})
+        _boss(client)
+
+        answer = send(client, "POST", "/api/v1/admin/settings/test-email",
+                      {"sender": "support", "recipient": "anna@example.com", "template": "test_email.html"}).get_json()
+
+        assert answer["ok"] is False and "does not let the app send from support@example.org" in answer["error"]
+
+    def test_a_token_from_before_the_permission_was_granted_is_replaced(self, app, microsoft):
+        """Microsoft's token carries the permissions of when it was issued, and is kept an hour."""
+        _connected()
+        _mailbox()
+        microsoft_mail.token()
+        microsoft.stale_token = "token-1"
+
+        sent, error = send_mail(from_account="support", to_email="anna@example.com", subject="Hello",
+                                body="<p>Hi</p>", return_error=True)
+
+        assert sent and error is None
+        assert [call["headers"]["Authorization"] for call in microsoft.graph_calls("POST")] == [
+            "Bearer token-1", "Bearer token-2"]
+
+    def test_checking_the_sign_in_starts_with_a_new_token(self, app, microsoft):
+        _connected()
+        microsoft_mail.token()
+        signed_in = len(microsoft.sign_ins())
+
+        microsoft_mail.check()
+        microsoft_mail.token()
+
+        assert len(microsoft.sign_ins()) == signed_in + 2
 
     def test_not_set_up_yet_is_an_error_not_a_crash(self, app, microsoft):
         _mailbox()

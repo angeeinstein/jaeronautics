@@ -15251,6 +15251,18 @@
       "SentOut": {
         "additionalProperties": false,
         "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error"
+          },
           "ok": {
             "title": "Ok",
             "type": "boolean"

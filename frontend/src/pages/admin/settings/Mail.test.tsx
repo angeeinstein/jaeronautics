@@ -187,6 +187,24 @@ describe('the test email', () => {
     });
   });
 
+  it('not sent says why', async () => {
+    show(<TestEmail />, {
+      '/api/v1/admin/settings/test-email': {
+        body: { senders: ['office'], templates: ['welcome_email.html'] },
+      },
+      'POST /api/v1/admin/settings/test-email': {
+        body: { ok: false, error: 'Microsoft does not let the app send from office@example.org.' },
+      },
+    });
+
+    await screen.findByRole('textbox', { name: 'To' });
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(
+      await screen.findByText('Not sent: Microsoft does not let the app send from office@example.org.'),
+    ).toBeInTheDocument();
+  });
+
   it('nothing to send from says where to add one', async () => {
     show(<TestEmail />, {
       '/api/v1/admin/settings/test-email': { body: { senders: [], templates: ['welcome_email.html'] } },

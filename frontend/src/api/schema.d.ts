@@ -8750,6 +8750,11 @@ export interface components {
         };
         /** SentOut */
         SentOut: {
+            /**
+             * Error
+             * @default null
+             */
+            error?: string | null;
             /** Ok */
             ok: boolean;
         };

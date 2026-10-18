@@ -206,7 +206,8 @@ def export(actor, password):
 
 
 def send_test_email(sender, recipient, template):
-    """One email from ``template`` as a member would get it, filled in with sample values."""
+    """One email from ``template`` as a member would get it, filled in with
+    sample values: ``(sent, why not)`` -- the reason is for the admin testing."""
     from flask import current_app
 
     from ..mail_utils import load_mail_accounts_config, send_mail
@@ -219,5 +220,6 @@ def send_test_email(sender, recipient, template):
     if not _EMAIL.fullmatch((recipient or "").strip()):
         raise _invalid("recipient", "That does not look like an email address.")
     subject, values = sample_email_for(template)
-    return bool(send_mail(from_account=sender, to_email=recipient.strip(), subject=f"Test: {subject}",
-                          template_name=template, **values))
+    sent, error = send_mail(from_account=sender, to_email=recipient.strip(), subject=f"Test: {subject}",
+                            template_name=template, return_error=True, **values)
+    return bool(sent), None if sent else (error or "The server did not take it.")
