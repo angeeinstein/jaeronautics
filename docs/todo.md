@@ -53,6 +53,28 @@ answer.
   answering in the portal".
 - The same code serves the team replies below; built first, or with them.
 
+### Side menu: the groups set apart more clearly
+
+- **Added:** 2026-10-18
+- **What:** the groups of a side menu (People, Money, Messages, Teams,
+  System in the admin area) read as one long list; the headings are small
+  and muted (`.groupLabel` in `frontend/src/frame/Frame.module.css`). "Make
+  this sidebar menu a bit more intuitive and easy to use … separate those
+  categories a bit more."
+- **Where:** `frame/Sidebar.tsx` and `Frame.module.css` -- one component for
+  the admin area, Settings and a team's area, so all three change. My
+  Account's menu has no groups and stays ("not necessary because it has no
+  categories").
+- **Two ways, open question which:**
+  - The maintainer's: the headings in cyan.
+  - Suggested instead: a 1px hairline above each group but the first, more
+    room above a heading (about 1.25rem instead of 0.875rem), and the
+    heading in the secondary text colour rather than the muted one, still
+    small capitals. Because `docs/design.md` keeps cyan for "act here"
+    ("It is not decoration") and the current page in the menu is already
+    cyan -- cyan headings would compete with it.
+- The maintainer was "open for" another idea; asked 2026-10-18.
+
 ### Team leads answer their team's messages in the portal
 
 - **Added:** 2026-10-18
