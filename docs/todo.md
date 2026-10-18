@@ -28,6 +28,33 @@ maintainer's answer.
 
 ## Open
 
+### Microsoft 365: narrow the app's mail permissions to the two mailboxes
+
+- **Added:** 2026-10-18
+- **What:** for testing, the app registration `Portal mail` was given the
+  Microsoft Graph *application* permissions `Mail.Send` and `Mail.Read`
+  with admin consent -- they reach **every mailbox** in the tenant. They are
+  to be replaced by the mailbox-scoped Exchange roles of
+  `docs/microsoft-mail-setup.md`, step 5.
+- **Why:** the certificate's key is in the portal's database and backups;
+  with these permissions, whoever had it could read and send from every
+  mailbox of the association. The maintainer chose the narrow way
+  ("the better, more locked down version"); the wide one is only so the
+  connection can be tested while Exchange is not ready.
+- **State:** step 5 is done except `New-ManagementRoleAssignment` (both
+  lines), which Exchange refused for the Global Administrator right after
+  `Enable-OrganizationCustomization` -- most likely until the tenant is
+  "hydrated" (`Get-OrganizationConfig | Format-List IsDehydrated` says
+  `False`; up to 24 hours).
+- **How, in this order:** run the two `New-ManagementRoleAssignment` lines;
+  `Test-ServicePrincipalAuthorization` shows the roles *InScope: True*
+  (support: Send and Read; noreply: Send only); **then** remove `Mail.Send`
+  and `Mail.Read` under API permissions and revoke the consent under
+  *Enterprise applications* › `Portal mail` › *Permissions*; then *Test*
+  on both accounts in Settings › Email. The two kinds add up: the roles do
+  not narrow what is granted in Entra.
+- **Before** the live portal uses the Microsoft accounts.
+
 ### Price lists: deleted items folded into one row
 
 - **Added:** 2026-10-15
