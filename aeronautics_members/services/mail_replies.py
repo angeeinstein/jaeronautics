@@ -267,8 +267,7 @@ def state():
         return None
     if not watched.inbox_subscription_id:
         return False, (f"Replies to {watched.from_email} are looked for every 15 minutes only: Microsoft does "
-                       "not notify the portal (it needs an https address, and the app may need to read the "
-                       "mailbox -- the setup guide, step 5).")
+                       "not notify the portal.")
     return True, f"Replies to {watched.from_email} come into Admin › Messages at once."
 
 

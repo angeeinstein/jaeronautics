@@ -257,8 +257,7 @@ class TestSending:
             True, "Signed in to Microsoft. Granted in Entra for every mailbox: Mail.Read, Mail.Send.")
 
         microsoft.roles = []
-        ok, message = microsoft_mail.check()
-        assert ok and "No mail permission granted in Entra" in message
+        assert microsoft_mail.check() == (True, "Signed in to Microsoft.")
 
     def test_checking_the_sign_in_starts_with_a_new_token(self, app, microsoft):
         _connected()

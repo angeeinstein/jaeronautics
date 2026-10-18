@@ -213,8 +213,7 @@ def _check_current(found):
     mail = [role for role in granted(value) if role.startswith("Mail.")]
     if mail:
         return True, f"Signed in to Microsoft. Granted in Entra for every mailbox: {', '.join(mail)}."
-    return True, ("Signed in to Microsoft. No mail permission granted in Entra: the mailbox roles in "
-                  "Exchange decide (the setup guide, step 5).")
+    return True, "Signed in to Microsoft."
 
 
 def granted(access_token):
@@ -267,8 +266,7 @@ _SIGN_IN_ERRORS = {
     "AADSTS700016": "There is no app with this application (client) ID in that tenant.",
     "AADSTS90002": "There is no tenant with this ID.",
     "AADSTS900023": "That is not a valid tenant ID.",
-    "AADSTS7000229": "The app has no service principal in the tenant yet: open it once under "
-                     "Enterprise applications, or follow the setup guide.",
+    "AADSTS7000229": "The app has no service principal in the tenant yet.",
 }
 
 
@@ -373,9 +371,7 @@ def send_mime(mailbox, mime):
               content_type="text/plain")
     except MicrosoftError as exc:
         if exc.status == 403:
-            raise MicrosoftError(f"Microsoft does not let the app send from {mailbox}: add the mailbox to the "
-                                 "app's mailboxes in Exchange Online (the setup guide, step 5). A change there "
-                                 f"can take up to two hours. (Microsoft: {exc})", status=403,
+            raise MicrosoftError(f"Microsoft does not let the app send from {mailbox}.", status=403,
                                  code=exc.code) from exc
         if exc.status == 404:
             raise MicrosoftError(f"There is no mailbox {mailbox} in the tenant.", status=404,
