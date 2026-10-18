@@ -40,6 +40,8 @@ class FakeMicrosoft:
         self.inbox = {}
         #: A token Graph turns away, as one issued before a permission was granted.
         self.stale_token = None
+        #: The Graph permissions granted in Entra: the token then names them, as Microsoft's does.
+        self.roles = None
 
     def answer(self, method, path, status=200, body=None):
         self.answers[(method, path)] = (status, body or {})
@@ -53,6 +55,9 @@ class FakeMicrosoft:
                 return 401, {}, json.dumps({"error": "invalid_client",
                                             "error_description": f"{self.refuse_sign_in}: no."}).encode()
             token = f"token-{len(self.sign_ins())}"
+            if self.roles is not None:
+                claims = base64.urlsafe_b64encode(json.dumps({"roles": self.roles}).encode()).decode().rstrip("=")
+                token = f"header.{claims}.{token}"
             return 200, {}, json.dumps({"access_token": token, "expires_in": 3600}).encode()
         if self.stale_token and (headers or {}).get("Authorization") == f"Bearer {self.stale_token}":
             return 403, {}, json.dumps({"error": {"code": "ErrorAccessDenied", "message": "Access is denied."}}).encode()
@@ -244,6 +249,16 @@ class TestSending:
         assert sent and error is None
         assert [call["headers"]["Authorization"] for call in microsoft.graph_calls("POST")] == [
             "Bearer token-1", "Bearer token-2"]
+
+    def test_checking_the_sign_in_says_what_entra_granted(self, app, microsoft):
+        _connected()
+        microsoft.roles = ["Mail.Send", "Mail.Read", "User.Read.All"]
+        assert microsoft_mail.check() == (
+            True, "Signed in to Microsoft. Granted in Entra for every mailbox: Mail.Read, Mail.Send.")
+
+        microsoft.roles = []
+        ok, message = microsoft_mail.check()
+        assert ok and "No mail permission granted in Entra" in message
 
     def test_checking_the_sign_in_starts_with_a_new_token(self, app, microsoft):
         _connected()

@@ -204,13 +204,29 @@ def check(actor=None):
 
 def _check_current(found):
     try:
-        _fetch_token(found, found.private_key, found.certificate)
+        value, _lasts = _fetch_token(found, found.private_key, found.certificate)
     except MicrosoftError as exc:
         return False, str(exc)
     # Checked on purpose, often right after a permission was granted: the
     # next call gets a token that carries it.
     _forget_token()
-    return True, "Signed in to Microsoft."
+    mail = [role for role in granted(value) if role.startswith("Mail.")]
+    if mail:
+        return True, f"Signed in to Microsoft. Granted in Entra for every mailbox: {', '.join(mail)}."
+    return True, ("Signed in to Microsoft. No mail permission granted in Entra: the mailbox roles in "
+                  "Exchange decide (the setup guide, step 5).")
+
+
+def granted(access_token):
+    """The Graph permissions the app was granted in Entra, as its token names
+    them ("roles"). Read for the page, not checked: Microsoft checks it."""
+    try:
+        payload = access_token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    except (IndexError, ValueError):
+        return []
+    roles = claims.get("roles") if isinstance(claims, dict) else None
+    return sorted(role for role in roles or [] if isinstance(role, str))
 
 
 # --- Signing in -------------------------------------------------------------------------------
@@ -359,7 +375,8 @@ def send_mime(mailbox, mime):
         if exc.status == 403:
             raise MicrosoftError(f"Microsoft does not let the app send from {mailbox}: add the mailbox to the "
                                  "app's mailboxes in Exchange Online (the setup guide, step 5). A change there "
-                                 "can take up to two hours.", status=403, code=exc.code) from exc
+                                 f"can take up to two hours. (Microsoft: {exc})", status=403,
+                                 code=exc.code) from exc
         if exc.status == 404:
             raise MicrosoftError(f"There is no mailbox {mailbox} in the tenant.", status=404,
                                  code=exc.code) from exc
