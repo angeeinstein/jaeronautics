@@ -60,16 +60,15 @@ answer.
   team (its shared mailbox); the team's leads in force answer a message on
   the team's Messages page; it goes out from that account; answers come back
   into the thread when it is a Microsoft 365 mailbox, and the leads are told
-  by email. *Answer by email* is removed.
+  by email. A team without an account keeps *Answer by email* (a `mailto:`
+  link), which goes once it has one; so does the Reply-To of the email to
+  the leads.
 - **Where:** `docs/messages-plan.md`, "Whole conversations, and team leads
   answering in the portal" -- what was decided, in full.
 - **Why:** today the lead answers from their private mailbox, so the sender
   sees that address and the portal never sees the answer.
 - **When:** "I don't want to work on this now" (2026-10-18) -- built when the
   maintainer asks for it, not with a batch.
-- **Open question:** a team without a mail account of its own -- the
-  association's *Replies* account with the team's name, or no *Reply* until
-  one is chosen (see the plan).
 
 ### Microsoft 365: narrow the app's mail permissions (later)
 

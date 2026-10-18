@@ -183,13 +183,23 @@ could be a bit confusing."
 - **The team's mail account:** chosen by the admins in the team's settings
   (Admin › Teams, the team) from the mail accounts of Settings › Email --
   leads cannot add accounts, which hold credentials. For this association,
-  each team's Microsoft 365 shared mailbox. Optional: other associations'
-  teams may have none.
+  each team's Microsoft 365 shared mailbox ("A team will always have its own
+  mailbox"); optional all the same, for other associations.
 - **Reply** on the team's Messages page, as in Admin › Messages: written
   there, sent from the team's account, the message then done, the same
   quoting as above. **Only the team's leads in force** answer (admins see
-  the page as now). *Answer by email* goes: "this is not needed anymore
-  then."
+  the page as now).
+- **Without a team account, as today (decided 2026-10-18):** *Answer by
+  email* stays for such a team -- only a `mailto:` link
+  (`MessageList.tsx`, `replyHref`) -- and goes as soon as the team has an
+  account: "as long as no sender email account is configured for this team,
+  this button exists and as soon as a sender account is present … this
+  button goes away." The component already shows either *Reply* or *Answer
+  by email* (`answersHere`).
+- **The email to the leads** about a new message carries the sender as
+  Reply-To today (`messages.deliver`), so a lead can answer from their mail
+  program. For a team with an account: no Reply-To, only *Open in the
+  portal* -- else a lead answers from their private address after all.
 - **Answers come back** into the team's thread when the team's account is a
   Microsoft 365 mailbox: the portal watches that inbox too (today one inbox,
   the Replies account's: `mail_replies.keep_watching`; then that one and
@@ -197,12 +207,6 @@ could be a bit confusing."
   the message is open again.
 - The team mailbox's *Sent Items* keeps every answer, so whoever opens the
   shared mailbox in Outlook sees the conversation too.
-- **Open:** a team **without** a mail account of its own. Answer from the
-  association's *Replies* account with the team's name as sender name
-  ("Team Drone Tech · Joanneum Aeronautics")? On 2026-10-16 the maintainer
-  did not want team leads answering from the support address (above,
-  "Only the contact form's"). Or no *Reply* until the admins choose one --
-  then with *Answer by email* gone, such a team could not answer at all.
 - With several team mailboxes the app's mail permissions grow: see the
   to-do item on narrowing them (a mail-enabled security group, later).
 
