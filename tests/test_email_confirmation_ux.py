@@ -12,6 +12,7 @@ email was the end of the road.
 from datetime import date, datetime
 
 
+from api_helpers import hold
 from conftest import db, make_member
 from aeronautics_members.db_models import ImportedForumProfile, User
 from aeronautics_members.services.forum_import import import_forum_people
@@ -36,7 +37,7 @@ def _member(work_verified=False, private_verified=True):
 
 def _signed_in(client, member):
     with client.session_transaction() as session:
-        session["_user_id"] = str(member.user_id)
+        hold(session, member.user)
     return client
 
 

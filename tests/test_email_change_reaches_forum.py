@@ -13,6 +13,7 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 
 import pytest
 
+from api_helpers import hold
 from conftest import db, make_member
 from aeronautics_members.db_models import Setting
 from aeronautics_members.forum_service import DiscourseConnectProvider, ForumProviderError
@@ -116,9 +117,17 @@ def member_on_forum(app, forum):
     return member
 
 
+
+def _hold(session, user_id):
+    """The account and its session generation, as signing in leaves them."""
+    from aeronautics_members.db_models import User, db as _db
+
+    hold(session, _db.session.get(User, int(user_id)))
+
+
 def _login(client, user_id):
     with client.session_transaction() as session:
-        session["_user_id"] = str(user_id)
+        _hold(session, user_id)
 
 
 def _change_email(client, member, new_email):
@@ -134,6 +143,7 @@ def _change_email(client, member, new_email):
         "email_private": new_email,
         "phone_work": "",
         "email_work": member.email_work or "",
+        "current_password": "initial-password",
     })
 
 

@@ -327,7 +327,8 @@ class TestThePassword:
         response = send(signed_in(client, member.user), "PUT", "/api/v1/account/password",
                         {"current_password": "initial-password", "new_password": "a-new-password"})
 
-        assert response.get_json() == {"tone": "success", "text": "Your password has been changed."}
+        assert response.get_json() == {"tone": "success",
+                                       "text": "Your password has been changed. Everywhere else you are signed out."}
         assert db.session.get(User, member.user_id).check_password("a-new-password")
 
     def test_not_without_it(self, app, client):

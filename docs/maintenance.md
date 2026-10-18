@@ -120,11 +120,22 @@ The request carries no branch, remote or revision, so reaching that endpoint
 cannot choose what gets deployed — which is the whole reason this is not a
 sudoers rule.
 
+Two folders, so root never writes where the web process can:
+`/var/lib/jaeronautics/updates` is the portal's (the request, and
+`step-plan.json`); `/var/lib/jaeronautics/update-runner` is root's, readable
+by the portal's group (the runner's lock, the claimed request, `status.json`,
+`last-run.log`). In a folder the portal could change, it could put a symbolic
+link where the log goes, and root would write through it into any file. The
+runner moves the request into its own folder and reads it only if it is a
+plain file (no link), and refuses to run if its folder is a link, or someone
+else's, or writable by others. Until the new runner has run once, the page
+reads the old runner's status and log where it kept them.
+
 While an update runs, the page lists its steps as the installer reaches them
-(its `[STEP]` lines in `/var/lib/jaeronautics/updates/last-run.log`) -- done,
-under way, failed -- with any warning or error under its step, and the steps
-still to come as the last successful update went (kept by the portal in
-`step-plan.json` beside the log). Below, folded away, is everything the
+(its `[STEP]` lines in `/var/lib/jaeronautics/update-runner/last-run.log`) --
+done, under way, failed -- with any warning or error under its step, and the
+steps still to come as the last successful update went (kept by the portal in
+`step-plan.json` in its own folder). Below, folded away, is everything the
 installer printed, as in a terminal; after the update the same list and output
 stay under *Last update*. A step's name is the same on every update, so a
 revision or a count it mentions goes on a line of its own.
@@ -1843,6 +1854,30 @@ reaches the person. Two ways back:
   know who is asking. The new address has to be confirmed like any other, the
   old one is emailed if it was ever confirmed, Stripe's customer and the forum
   get the new address, and the change is in the audit log with both.
+
+### Sessions end when the password or the login changes
+
+Each session holds the account's id and, beside it, the account's
+`session_generation` at signing in (`_session_generation`); `load_user` turns
+away a session whose generation is not the account's. The generation goes up
+when a password replaces another (changed, reset by link, set by the
+`create-admin` command) and when the private address changes (by the member
+or an admin) -- so whoever had a session before is out at their next request.
+The browser that made the change is signed in again and goes on
+(`api/account.py`). Sessions from before generations existed hold none, which
+is generation 0: they work until the first change.
+
+The id stays the plain number on purpose: should the update that brought
+generations be rolled back, the older code still reads every session. It does
+not check the generation, though, so for as long as that older code runs,
+sessions ended before the rollback work again. Every later rollback point
+knows generations.
+
+Changing either email address in the profile asks for the current password
+(both sign in once confirmed; wrong guesses count against
+`RATELIMIT_PASSWORD_CHANGE`), and a new private address emails the old one,
+if it was ever confirmed. So a borrowed or stolen session is not enough to
+take an account over with "Forgot password".
 
 ## Planned: Archival Forum Accounts (not built)
 

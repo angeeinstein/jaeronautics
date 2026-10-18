@@ -3,10 +3,11 @@
  * whether it is confirmed, and its link sent again -- the phones and the
  * address. Read first; *Edit* turns the same card into the form, saved at
  * once without review, and back. A new private address is the login and waits
- * to be confirmed; so does a new university address. The rules are the
- * server's (forms.py): a student's university address, for one, stays one.
+ * to be confirmed; so does a new university address. Either address signs in,
+ * so changing one asks for the current password. The rules are the server's
+ * (forms.py): a student's university address, for one, stays one.
  */
-import { Button, Group, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
+import { Button, Group, PasswordInput, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { IconAddressBook } from '@tabler/icons-react';
@@ -23,6 +24,8 @@ import { EmailHint } from '../../components/EmailHint';
 type Contact = Schemas['ContactOut'];
 type ContactIn = Schemas['ContactIn'];
 type Address = Schemas['EmailAddressOut'];
+
+const normal = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
 
 /** Whether the field still holds the saved address -- what its state is about. */
 function same(value: string, saved: Address | null): saved is Address {
@@ -83,7 +86,11 @@ export function ContactCard({
   const [editing, setEditing] = useState(false);
   const showsCompany = asksCompany || Boolean(contact.company_name);
   const [value, setValue] = useState(() => initial(contact));
+  const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const addressChanges =
+    normal(value.email_private) !== normal(contact.email_private) ||
+    normal(value.email_work) !== normal(contact.email_work);
   const take = useTakeSaved();
   const save = useMutation({
     mutationFn: () =>
@@ -94,11 +101,13 @@ export function ContactCard({
             phone_work: emptyToNull(value.phone_work),
             email_work: emptyToNull(value.email_work),
             company_name: emptyToNull(value.company_name),
+            current_password: addressChanges ? password : null,
           },
         }),
       ),
     onSuccess: (saved) => {
       setErrors({});
+      setPassword('');
       setEditing(false);
       take(saved);
     },
@@ -230,11 +239,28 @@ export function ContactCard({
               }}
             />
           </SimpleGrid>
+          {addressChanges ? (
+            <PasswordInput
+              label="Current password"
+              description="Needed to change an email address."
+              autoComplete="current-password"
+              required
+              maw={420}
+              maxLength={128}
+              value={password}
+              error={errors.current_password ?? null}
+              onChange={(event) => {
+                setPassword(event.currentTarget.value);
+                if (errors.current_password) setErrors({ ...errors, current_password: '' });
+              }}
+            />
+          ) : null}
           <Group justify="flex-end">
             <Button
               variant="default"
               onClick={() => {
                 setErrors({});
+                setPassword('');
                 setEditing(false);
               }}
             >

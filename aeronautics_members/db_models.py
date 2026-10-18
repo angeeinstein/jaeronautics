@@ -55,6 +55,10 @@ class User(UserMixin, db.Model):
     # Rotated whenever the address changes or a verification link is used, so a
     # verification token issued for an older address cannot be replayed.
     email_verification_nonce = db.Column(db.String(255), nullable=True)
+    # Kept in every session beside the account's id (app.load_user): raised
+    # when the password or the login address changes, which ends every session
+    # issued before. The browser that made the change is signed in again.
+    session_generation = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     # Switched off by an administrator. Separate from the membership on
     # purpose: the two answer different questions and genuinely disagree. A
     # member can be paid up for the year and barred from signing in, and a
@@ -115,7 +119,15 @@ class User(UserMixin, db.Model):
         foreign_keys="ForumAvatarSubmission.reviewed_by_user_id",
     )
 
+    def end_sessions(self):
+        """Every session of this account ends at its next request."""
+        self.session_generation = (self.session_generation or 0) + 1
+
     def set_password(self, password):
+        # A new password ends the sessions the old one opened; an account's
+        # first has none to end.
+        if self.password_hash:
+            self.end_sessions()
         self.password_hash = generate_password_hash(password)
         self.password_reset_nonce = None
 

@@ -10,6 +10,7 @@ from datetime import date, datetime
 
 import pytest
 
+from api_helpers import hold
 from conftest import app_module, db, make_member
 from aeronautics_members.blueprints import public, account, auth, forum, admin
 from aeronautics_members.services import account as account_service
@@ -124,11 +125,19 @@ MEMBERSHIP = {"salutation": "Mr", "first_name": "A", "last_name": "B", "year_gro
               "member_category": "student", **PROFILE}
 
 
+
+def _hold(session, user_id):
+    """The account and its session generation, as signing in leaves them."""
+    from aeronautics_members.db_models import User, db as _db
+
+    hold(session, _db.session.get(User, int(user_id)))
+
+
 def _login(client, uid):
     from flask import g
 
     with client.session_transaction() as sess:
-        sess["_user_id"] = str(uid)
+        _hold(sess, uid)
     # The app fixture keeps one application context open, and Flask-Login keeps
     # the user it found on it: after /logout everybody stayed signed out.
     g.pop("_login_user", None)
@@ -238,6 +247,6 @@ def test_setting_roles_grants_and_revokes(client, seeded):
 
 def test_profile_save_persists(client, seeded):
     _login(client, seeded["member_uid"])
-    resp = client.put("/api/v1/account/contact", json={**PROFILE, "city": "Vienna"})
+    resp = client.put("/api/v1/account/contact", json={**PROFILE, "city": "Vienna", "current_password": "password123"})
     assert resp.status_code == 200
     assert db.session.get(Member, seeded["member_id"]).city == "Vienna"

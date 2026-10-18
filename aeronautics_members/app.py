@@ -36,7 +36,7 @@ from flask_babel import Babel, _, format_currency, format_date, get_locale
 from flask_limiter import Limiter
 from flask_migrate import Migrate
 from flask_limiter.errors import RateLimitExceeded
-from flask_login import LoginManager, current_user, login_required, login_user, logout_user
+from flask_login import LoginManager, current_user, login_required, login_user, logout_user, user_logged_in
 from flask_wtf.csrf import CSRFError, CSRFProtect
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy import and_, case, func, inspect, or_, text as sql_text
@@ -413,7 +413,7 @@ def get_rate_limit_identity():
     downloading their data. The network address for everybody else.
     """
     if current_user and current_user.is_authenticated:
-        return f"user:{current_user.get_id()}"
+        return f"user:{current_user.id}"
     return rate_limit_network()
 
 
@@ -440,7 +440,7 @@ def rate_limit_person():
     """The account for somebody signed in, else the network address plus the
     address typed into the form: one person's budget, not a lecture hall's."""
     if current_user and current_user.is_authenticated:
-        return f"user:{current_user.get_id()}"
+        return f"user:{current_user.id}"
     return rate_limit_network_and_address()
 
 
@@ -462,9 +462,30 @@ limiter = Limiter(
 )
 
 
+# The session keeps the account's plain id, as every version of the portal
+# reads it, and the account's session generation beside it: an older version,
+# should an update be rolled back, still reads the session instead of failing
+# on it -- only without the generation's check.
+SESSION_GENERATION = "_session_generation"
+
+
+@user_logged_in.connect
+def _note_session_generation(_app, user, **_extra):
+    session[SESSION_GENERATION] = user.session_generation or 0
+
+
 @login_manager.user_loader
 def load_user(user_id):
-    user = db.session.get(User, int(user_id))
+    try:
+        user = db.session.get(User, int(user_id))
+        # A session from before generations existed is generation 0.
+        generation = int(session.get(SESSION_GENERATION, 0))
+    except (TypeError, ValueError):
+        return None
+    # Issued before the password or the login address last changed: whoever
+    # holds it, the member changed them to shut them out.
+    if user is not None and generation != user.session_generation:
+        return None
     # An erased account must not keep browsing on a session issued before the
     # erasure. Clearing the password hash stops new logins but says nothing
     # about sessions that already exist, and an expelled member being signed in
@@ -737,12 +758,15 @@ def _stand_down_while_paused(job_name):
 
 
 def is_safe_next_url(target):
-    if not target:
-        return False
+    """A path on this site, and nothing a browser could read as another site.
 
-    ref_url = urlsplit(request.host_url)
-    test_url = urlsplit(urljoin(request.host_url, target))
-    return test_url.scheme in {"http", "https"} and ref_url.netloc == test_url.netloc
+    Browsers are looser than Python's URL parser: they take a backslash for a
+    slash ("/\\evil.example" is "//evil.example") and drop tabs and line
+    breaks ("/<tab>/evil.example" too). So a single leading slash, and no
+    backslash or control character anywhere."""
+    if not isinstance(target, str) or not target.startswith("/") or target.startswith("//"):
+        return False
+    return not any(char == "\\" or ord(char) < 0x20 or ord(char) == 0x7F for char in target)
 
 
 

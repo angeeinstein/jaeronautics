@@ -242,7 +242,8 @@ member* instead of the tiles.
 
 **Profile** -- **Contact details** read first (both email addresses, each with
 whether it is confirmed and its link sent again, the phones, the address);
-*Edit* turns the card into the form, saved at once, *Cancel* back. **Name and
+*Edit* turns the card into the form, saved at once, *Cancel* back; editing
+either email address adds *Current password* to it. **Name and
 membership type** likewise read first; *Request a change* opens the request an
 admin decides, and while one waits it is shown instead.
 

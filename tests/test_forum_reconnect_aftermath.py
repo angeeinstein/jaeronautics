@@ -7,7 +7,7 @@ what the claim left broken for the person it had just helped.
 """
 from datetime import datetime, timezone
 
-from api_helpers import said, send
+from api_helpers import hold, said, send
 from conftest import db, make_member
 
 from aeronautics_members.db_models import (
@@ -32,9 +32,17 @@ def _now():
     return datetime.now(timezone.utc)
 
 
+
+def _hold(session, user_id):
+    """The account and its session generation, as signing in leaves them."""
+    from aeronautics_members.db_models import User, db as _db
+
+    hold(session, _db.session.get(User, int(user_id)))
+
+
 def _sign_in(client, user_id):
     with client.session_transaction() as session:
-        session["_user_id"] = str(user_id)
+        _hold(session, user_id)
 
 
 def _archive(uid, username, address):
@@ -60,6 +68,7 @@ def _save_contact(client, private, work):
     response = client.put("/api/v1/account/contact", json={
         "street": "Main", "house_number": "1", "postal_code": "8010", "city": "Graz",
         "country": "Austria", "phone_private": "+43123", "email_private": private, "email_work": work,
+        "current_password": "initial-password",
     })
     assert response.status_code == 200, response.get_json()
 
