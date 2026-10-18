@@ -46,7 +46,11 @@ In the **Microsoft Entra admin center** (entra.microsoft.com):
 4. Do **not** add any permission under *API permissions*. Mail permissions
    granted there would reach every mailbox in the organisation; step 5 grants
    them for the listed mailboxes only. (The `User.Read` that is there by
-   default does nothing here; it may stay or go.)
+   default does nothing here; it may stay or go.) Added already? Remove
+   them (*...* › *Remove permission*); and if admin consent was granted for
+   them, also revoke it under *Enterprise applications* › `Portal mail` ›
+   *Permissions*. Both kinds add up: the Exchange roles of step 5 do not
+   narrow a permission granted here.
 
 ## 3. The certificate, made by the portal
 
