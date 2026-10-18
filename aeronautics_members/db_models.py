@@ -55,9 +55,9 @@ class User(UserMixin, db.Model):
     # Rotated whenever the address changes or a verification link is used, so a
     # verification token issued for an older address cannot be replayed.
     email_verification_nonce = db.Column(db.String(255), nullable=True)
-    # Part of every session's id (get_id): raised when the password or the
-    # login address changes, which ends every session issued before
-    # (app.load_user). The browser that made the change is signed in again.
+    # Kept in every session beside the account's id (app.load_user): raised
+    # when the password or the login address changes, which ends every session
+    # issued before. The browser that made the change is signed in again.
     session_generation = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     # Switched off by an administrator. Separate from the membership on
     # purpose: the two answer different questions and genuinely disagree. A
@@ -118,12 +118,6 @@ class User(UserMixin, db.Model):
         back_populates="reviewed_by",
         foreign_keys="ForumAvatarSubmission.reviewed_by_user_id",
     )
-
-    def get_id(self):
-        # Generation 0 is left out: sessions from before generations existed
-        # name the plain id, and stay valid until the first change.
-        generation = self.session_generation or 0
-        return f"{self.id}.{generation}" if generation else str(self.id)
 
     def end_sessions(self):
         """Every session of this account ends at its next request."""

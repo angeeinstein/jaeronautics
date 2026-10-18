@@ -10,6 +10,7 @@ from datetime import date, datetime
 
 import pytest
 
+from api_helpers import hold
 from conftest import app_module, db, make_member
 from aeronautics_members.blueprints import public, account, auth, forum, admin
 from aeronautics_members.services import account as account_service
@@ -125,18 +126,18 @@ MEMBERSHIP = {"salutation": "Mr", "first_name": "A", "last_name": "B", "year_gro
 
 
 
-def _session_id(user_id):
-    """What a session names: the account and its session generation."""
+def _hold(session, user_id):
+    """The account and its session generation, as signing in leaves them."""
     from aeronautics_members.db_models import User, db as _db
 
-    return _db.session.get(User, int(user_id)).get_id()
+    hold(session, _db.session.get(User, int(user_id)))
 
 
 def _login(client, uid):
     from flask import g
 
     with client.session_transaction() as sess:
-        sess["_user_id"] = _session_id(uid)
+        _hold(sess, uid)
     # The app fixture keeps one application context open, and Flask-Login keeps
     # the user it found on it: after /logout everybody stayed signed out.
     g.pop("_login_user", None)

@@ -7,7 +7,7 @@ what the claim left broken for the person it had just helped.
 """
 from datetime import datetime, timezone
 
-from api_helpers import said, send
+from api_helpers import hold, said, send
 from conftest import db, make_member
 
 from aeronautics_members.db_models import (
@@ -33,16 +33,16 @@ def _now():
 
 
 
-def _session_id(user_id):
-    """What a session names: the account and its session generation."""
+def _hold(session, user_id):
+    """The account and its session generation, as signing in leaves them."""
     from aeronautics_members.db_models import User, db as _db
 
-    return _db.session.get(User, int(user_id)).get_id()
+    hold(session, _db.session.get(User, int(user_id)))
 
 
 def _sign_in(client, user_id):
     with client.session_transaction() as session:
-        session["_user_id"] = _session_id(user_id)
+        _hold(session, user_id)
 
 
 def _archive(uid, username, address):

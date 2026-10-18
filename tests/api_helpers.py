@@ -7,9 +7,15 @@ always so the tests read like the front end's calls.
 """
 
 
+def hold(session, user):
+    """What a signed-in session holds: the account and its session generation."""
+    session["_user_id"] = str(user.id)
+    session["_session_generation"] = user.session_generation or 0
+
+
 def signed_in(client, user):
     with client.session_transaction() as session:
-        session["_user_id"] = user.get_id()
+        hold(session, user)
     return client
 
 

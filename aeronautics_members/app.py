@@ -36,7 +36,7 @@ from flask_babel import Babel, _, format_currency, format_date, get_locale
 from flask_limiter import Limiter
 from flask_migrate import Migrate
 from flask_limiter.errors import RateLimitExceeded
-from flask_login import LoginManager, current_user, login_required, login_user, logout_user
+from flask_login import LoginManager, current_user, login_required, login_user, logout_user, user_logged_in
 from flask_wtf.csrf import CSRFError, CSRFProtect
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy import and_, case, func, inspect, or_, text as sql_text
@@ -462,14 +462,25 @@ limiter = Limiter(
 )
 
 
+# The session keeps the account's plain id, as every version of the portal
+# reads it, and the account's session generation beside it: an older version,
+# should an update be rolled back, still reads the session instead of failing
+# on it -- only without the generation's check.
+SESSION_GENERATION = "_session_generation"
+
+
+@user_logged_in.connect
+def _note_session_generation(_app, user, **_extra):
+    session[SESSION_GENERATION] = user.session_generation or 0
+
+
 @login_manager.user_loader
-def load_user(session_id):
-    # "<account>" or "<account>.<generation>" (User.get_id).
-    user_id, _, generation = str(session_id).partition(".")
+def load_user(user_id):
     try:
         user = db.session.get(User, int(user_id))
-        generation = int(generation or 0)
-    except ValueError:
+        # A session from before generations existed is generation 0.
+        generation = int(session.get(SESSION_GENERATION, 0))
+    except (TypeError, ValueError):
         return None
     # Issued before the password or the login address last changed: whoever
     # holds it, the member changed them to shut them out.

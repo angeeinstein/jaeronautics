@@ -14,6 +14,7 @@ from datetime import date, datetime, timezone
 
 import pytest
 
+from api_helpers import hold
 from conftest import app_module, db, make_member
 from aeronautics_members.db_models import Setting, User
 from aeronautics_members.services.forum import get_forum_service
@@ -53,16 +54,16 @@ def _admin(client, email="offlineadmin@example.com"):
 
 
 
-def _session_id(user_id):
-    """What a session names: the account and its session generation."""
+def _hold(session, user_id):
+    """The account and its session generation, as signing in leaves them."""
     from aeronautics_members.db_models import User, db as _db
 
-    return _db.session.get(User, int(user_id)).get_id()
+    hold(session, _db.session.get(User, int(user_id)))
 
 
 def _login(client, user_id):
     with client.session_transaction() as session:
-        session["_user_id"] = _session_id(user_id)
+        _hold(session, user_id)
 
 
 class TestTheMemberJourney:
