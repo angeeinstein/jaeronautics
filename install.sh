@@ -81,6 +81,8 @@ ROLLBACK_FILE="${STATE_DIR}/rollback.conf"
 SKIP_DB_BACKUP="${SKIP_DB_BACKUP:-0}"
 LAST_DB_BACKUP_FILE=""
 UPDATE_STATE_DIR="/var/lib/jaeronautics/updates"
+# The update runner's own files (lock, status, log): root's, read by the app.
+UPDATE_RUNNER_DIR="/var/lib/jaeronautics/update-runner"
 UPDATE_COMMAND_PATH="/usr/local/bin/update"
 PACKAGE_CACHE_UPDATED=0
 INSTALLATION_EXISTS=0
@@ -2131,6 +2133,7 @@ PUBLIC_BASE_URL=$(dotenv_quote "${public_base_url}")
 RATELIMIT_STORAGE_URI=$(dotenv_quote "${RATELIMIT_STORAGE_URI}")
 MAIL_ACCOUNTS_JSON=$(dotenv_quote "${MAIL_ACCOUNTS_JSON}")
 UPDATE_STATE_DIR=$(dotenv_quote "${UPDATE_STATE_DIR}")
+UPDATE_RUNNER_DIR=$(dotenv_quote "${UPDATE_RUNNER_DIR}")
 EOF
 
     chown root:"${APP_GROUP}" "${ENV_FILE}"
@@ -2980,6 +2983,14 @@ render_update_runner() {
     # state -- so the unprivileged side can ask for an update but cannot choose
     # what an update is.
     install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${UPDATE_STATE_DIR}"
+    # What the runner itself writes goes here, where only root may write: in
+    # the app's folder, the app could put a symbolic link where the runner's
+    # log goes, and root would write through it into any file. The app's
+    # group reads it, for the progress on the Updates page.
+    if [[ -L "${UPDATE_RUNNER_DIR}" || ( -e "${UPDATE_RUNNER_DIR}" && ! -d "${UPDATE_RUNNER_DIR}" ) ]]; then
+        rm -f -- "${UPDATE_RUNNER_DIR}"
+    fi
+    install -d -o root -g "${APP_GROUP}" -m 0750 "${UPDATE_RUNNER_DIR}"
     install -d -m 0755 "$(dirname "${UPDATE_RUNNER_SCRIPT}")"
 
     # Write via a temporary file and rename: bash reads a script incrementally,
@@ -3005,6 +3016,7 @@ Type=oneshot
 # Runs as root by design: installing an update needs systemd, nginx and
 # packages. It acts only on a request file written by the web application.
 Environment=UPDATE_STATE_DIR=${UPDATE_STATE_DIR}
+Environment=UPDATE_RUNNER_DIR=${UPDATE_RUNNER_DIR}
 Environment=UPDATE_COMMAND=${UPDATE_COMMAND_PATH}
 Environment=INSTALL_DIR=${INSTALL_DIR}
 Environment=LOG_GROUP=${APP_GROUP}
@@ -3912,7 +3924,7 @@ uninstall_everything() {
         rm -f "${UPDATE_RUNNER_SERVICE_FILE}"
     fi
     rm -f "${UPDATE_RUNNER_SCRIPT}"
-    rm -rf "${UPDATE_STATE_DIR}"
+    rm -rf "${UPDATE_STATE_DIR}" "${UPDATE_RUNNER_DIR}"
     if [[ -f "${SERVICE_FILE}" ]]; then
         systemctl disable --now "${SERVICE_NAME}" || true
         rm -f "${SERVICE_FILE}"

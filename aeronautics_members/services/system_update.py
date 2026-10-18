@@ -43,6 +43,12 @@ UPDATE_STATE_DIR = Path(
     os.getenv("UPDATE_STATE_DIR", "/var/lib/jaeronautics/updates")
 )
 
+# What the runner writes -- status, log -- in a folder only root may change;
+# this process may read it (deploy/update-runner.sh says why).
+UPDATE_RUNNER_DIR = Path(
+    os.getenv("UPDATE_RUNNER_DIR", "/var/lib/jaeronautics/update-runner")
+)
+
 REQUEST_FILENAME = "request.json"
 STATUS_FILENAME = "status.json"
 LOG_FILENAME = "last-run.log"
@@ -263,6 +269,14 @@ def typical_ci_minutes(branch=None):
     return value
 
 
+def _runner_file(name):
+    """One of the runner's files. Runners before this one kept them in
+    UPDATE_STATE_DIR, and the update that brings this one is still run by
+    the old: its result is there until the new runner has run once."""
+    folder = UPDATE_RUNNER_DIR if (UPDATE_RUNNER_DIR / STATUS_FILENAME).exists() else UPDATE_STATE_DIR
+    return folder / name
+
+
 def runner_is_installed():
     """Whether the privileged side is present to act on a request.
 
@@ -281,7 +295,7 @@ def read_status():
     the page showing a frozen update and refusing to start another, and no
     reboot or shell update ever changed that file.
     """
-    status_path = UPDATE_STATE_DIR / STATUS_FILENAME
+    status_path = _runner_file(STATUS_FILENAME)
     try:
         status = json.loads(status_path.read_text())
     except FileNotFoundError:
@@ -361,7 +375,7 @@ def read_live_log_tail(lines=LIVE_LOG_TAIL_LINES):
     The runner writes this file as it goes, so an administrator can watch
     progress instead of waiting for a summary once everything is finished.
     """
-    log_path = UPDATE_STATE_DIR / LOG_FILENAME
+    log_path = _runner_file(LOG_FILENAME)
     try:
         with log_path.open("r", errors="replace") as handle:
             tail = handle.readlines()[-lines:]
@@ -428,7 +442,7 @@ def read_full_log():
     ``cut`` says only the end was read (past LOG_READ_LIMIT). None for the
     text when there is no log, or it cannot be read.
     """
-    log_path = UPDATE_STATE_DIR / LOG_FILENAME
+    log_path = _runner_file(LOG_FILENAME)
     try:
         with log_path.open("rb") as handle:
             size = handle.seek(0, os.SEEK_END)

@@ -120,11 +120,22 @@ The request carries no branch, remote or revision, so reaching that endpoint
 cannot choose what gets deployed — which is the whole reason this is not a
 sudoers rule.
 
+Two folders, so root never writes where the web process can:
+`/var/lib/jaeronautics/updates` is the portal's (the request, and
+`step-plan.json`); `/var/lib/jaeronautics/update-runner` is root's, readable
+by the portal's group (the runner's lock, the claimed request, `status.json`,
+`last-run.log`). In a folder the portal could change, it could put a symbolic
+link where the log goes, and root would write through it into any file. The
+runner moves the request into its own folder and reads it only if it is a
+plain file (no link), and refuses to run if its folder is a link, or someone
+else's, or writable by others. Until the new runner has run once, the page
+reads the old runner's status and log where it kept them.
+
 While an update runs, the page lists its steps as the installer reaches them
-(its `[STEP]` lines in `/var/lib/jaeronautics/updates/last-run.log`) -- done,
-under way, failed -- with any warning or error under its step, and the steps
-still to come as the last successful update went (kept by the portal in
-`step-plan.json` beside the log). Below, folded away, is everything the
+(its `[STEP]` lines in `/var/lib/jaeronautics/update-runner/last-run.log`) --
+done, under way, failed -- with any warning or error under its step, and the
+steps still to come as the last successful update went (kept by the portal in
+`step-plan.json` in its own folder). Below, folded away, is everything the
 installer printed, as in a terminal; after the update the same list and output
 stay under *Last update*. A step's name is the same on every update, so a
 revision or a count it mentions goes on a line of its own.
