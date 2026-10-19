@@ -344,6 +344,26 @@ What the maintainer did not want, and why -- a record, not a ban. Any of it
 may be suggested again, saying what has changed since. Only what the
 maintainer explicitly says must never change is marked so.
 
+- **Small points of the security review of 2026-10-17, left as they are**
+  (2026-10-19). The rest of that review is fixed (`claude/audit-fixes`).
+  - *A second credit top-up while the first is still being reported* can
+    take a balance past the limit. "This limit is mainly meant so that I
+    don't have to deal with a thousand euros sitting as credit in our
+    portal. If a single person has a bit more than 20 euros, I don't care."
+  - *Signing out of the portal by a plain link* (`/forum/logout`, where
+    Discourse sends a browser after signing out of the forum): another site
+    can sign a visitor out. A nuisance only; "if it ever becomes an issue,
+    we can fix this" -- then: sign out at once only when the forum or the
+    portal sends the browser there, else a *Sign out?* button.
+  - *Signing in answers a little faster for an address with no account.*
+    Signing up says so anyway: "I don't think this is really an issue."
+  - *Made-up presence pings* could fill the count of open tabs that Settings
+    › Updates shows: "for the past weeks this has worked quite well." Fix
+    if needed: only signed-in tabs count toward the cap.
+  - *The Stripe library's key set per request* (one global variable): only
+    matters with a second Stripe account -- "I only have a single Stripe
+    account."
+
 - **The credit switch hiding everything that belongs to credit** (2026-10-15).
   Asked: with credit off, Admin › Credit and Admin › Sales still showed (they
   stay while anybody holds a balance, so it can be refunded). Proposed: the
