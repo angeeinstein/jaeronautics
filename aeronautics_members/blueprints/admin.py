@@ -24,7 +24,7 @@ from ._responses import json_download_response
 from ..services import backup as backup_service
 from ..services import reviews
 from ..services.stored_files import stored_file
-from ..forum_service import get_forum_storage_dir
+from .. import forum_service
 from ..services.system_update import (
     describe_update_state,
 )
@@ -89,7 +89,7 @@ def admin_archived_avatar(user_id):
     profile = db.session.execute(
         db.select(ImportedForumProfile).filter_by(user_id=user_id)
     ).scalar_one_or_none()
-    path = stored_file(profile.avatar_path, get_forum_storage_dir()) if profile is not None else None
+    path = stored_file(profile.avatar_path, forum_service.get_forum_storage_dir()) if profile is not None else None
     if path is None:
         abort(404)
     return send_file(path, conditional=True)

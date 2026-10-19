@@ -1860,7 +1860,10 @@ def member_has_active_membership(member):
 
 
 def get_forum_storage_dir():
-    return Path(current_app.root_path).parent / "storage" / "forum_avatar_staging"
+    """Where profile pictures are kept; only files inside it are served
+    (services/stored_files.py)."""
+    configured = current_app.config.get("FORUM_AVATAR_DIR")
+    return Path(configured) if configured else Path(current_app.root_path).parent / "storage" / "forum_avatar_staging"
 
 
 def delete_submission_file(submission, clear_reference=False):

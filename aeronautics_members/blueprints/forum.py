@@ -52,9 +52,9 @@ from ..db_models import (
     ImportedForumProfile,
     db,
 )
+from .. import forum_service
 from ..forum_service import (
     ForumProviderError,
-    get_forum_storage_dir,
 )
 from ..services.stored_files import stored_file
 from ..app import (
@@ -166,7 +166,7 @@ def forum_avatar_public_file(token):
     ).scalar_one_or_none()
     if submission is None:
         abort(404)
-    storage_path = stored_file(submission.storage_path, get_forum_storage_dir())
+    storage_path = stored_file(submission.storage_path, forum_service.get_forum_storage_dir())
     if storage_path is None:
         abort(404)
 
@@ -195,7 +195,7 @@ def forum_imported_avatar_public_file(token):
     ).scalar_one_or_none()
     if profile is None or profile.user.deleted_at is not None:
         abort(404)
-    path = stored_file(profile.avatar_path, get_forum_storage_dir())
+    path = stored_file(profile.avatar_path, forum_service.get_forum_storage_dir())
     if path is None:
         abort(404)
     return send_file(path, conditional=True)
