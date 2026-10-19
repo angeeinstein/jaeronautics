@@ -1,5 +1,6 @@
 /**
- * Admin › Cards (docs/cards-plan.md): every card linked now, newest first --
+ * Admin › Cards (docs/cards-plan.md): every card linked now -- and one removed
+ * while blocked, which stays blocked -- newest first --
  * whose it is, its name, the end of its ID, its state, its last use. A card
  * is managed on its owner's page (the account's Cards tab), linked from each
  * row. Few enough to be filtered on the page.

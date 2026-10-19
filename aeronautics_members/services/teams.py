@@ -466,10 +466,9 @@ def logo_storage_dir():
 
 def logo_file(team):
     """The stored logo as a path, if there is one and it is still there."""
-    if team is None or not team.logo_path:
-        return None
-    path = Path(team.logo_path)
-    return path if path.is_file() else None
+    from .stored_files import stored_file
+
+    return stored_file(team.logo_path, logo_storage_dir()) if team is not None else None
 
 
 def _delete_logo_file(path):
@@ -577,10 +576,9 @@ def picture_storage_dir():
 
 
 def picture_file(team):
-    if team is None or not team.picture_path:
-        return None
-    path = Path(team.picture_path)
-    return path if path.is_file() else None
+    from .stored_files import stored_file
+
+    return stored_file(team.picture_path, picture_storage_dir()) if team is not None else None
 
 
 def _store_jpeg(team, raw_bytes, max_side, what):
@@ -701,10 +699,9 @@ def team_photo_by_token(token):
 
 
 def photo_file(photo):
-    if photo is None or not photo.path:
-        return None
-    path = Path(photo.path)
-    return path if path.is_file() else None
+    from .stored_files import stored_file
+
+    return stored_file(photo.path, picture_storage_dir()) if photo is not None else None
 
 
 def _about_markdown():

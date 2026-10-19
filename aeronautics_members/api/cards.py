@@ -14,7 +14,7 @@ from ..app import limiter, rate_limit_person
 from ..config import RATELIMIT_CARD_LINK, RATELIMIT_CARD_QR
 from ..db_models import User, db
 from ..permissions import Permission
-from ..services import NotFoundError
+from ..services import ConflictError, NotFoundError
 from ..services import card_links, cards, devices
 from ..services.pictures import picture_url
 from ._core import Model, UtcDateTime, endpoint
@@ -37,13 +37,17 @@ class CardOut(Model):
     last_used_at: UtcDateTime | None
     #: The reader it was last used on; none once that reader was removed.
     last_used_on: str | None
+    #: Removed by its owner while blocked: blocked still, until an admin lifts it.
+    removed: bool = False
 
 
 def _card(card):
     return CardOut(
-        id=card.id, name=card.name, tail=cards.tail(card), state=cards.state(card), linked_at=card.linked_at,
+        id=card.id, name=card.name, tail=cards.tail(card),
+        state=cards.BLOCKED if cards.kept_blocked(card) else cards.state(card), linked_at=card.linked_at,
         linked_how=cards.LINKED_HOW.get(card.linked_how, card.linked_how), last_used_at=card.last_used_at,
         last_used_on=devices.label(card.last_used_device) if card.last_used_device is not None else None,
+        removed=card.removed_at is not None,
     )
 
 
@@ -181,7 +185,7 @@ def _admin_card(card):
 @endpoint("GET", "/admin/cards", response=AdminCardsOut, permissions=MANAGE, tag=TAG)
 def admin_cards():
     """Every card linked now, the newest first, with whom it belongs to."""
-    return AdminCardsOut(items=[_admin_card(card) for card in cards.all_cards()])
+    return AdminCardsOut(items=[_admin_card(card) for card in cards.all_cards(with_kept_blocks=True)])
 
 
 class PersonCardsOut(Model):
@@ -197,7 +201,7 @@ def _person(user_id):
 
 
 def _persons_cards(user):
-    return PersonCardsOut(user_id=user.id, items=[_card(card) for card in cards.cards_of(user)])
+    return PersonCardsOut(user_id=user.id, items=[_card(card) for card in cards.cards_of(user, with_kept_blocks=True)])
 
 
 @endpoint("GET", "/admin/accounts/<int:user_id>/cards", response=PersonCardsOut, permissions=MANAGE, tag=TAG)
@@ -214,8 +218,15 @@ class AdminCardChangeIn(CardChangeIn):
 @endpoint("PATCH", "/admin/cards/<int:card_id>", response=AdminCardOut, body=AdminCardChangeIn,
           permissions=MANAGE, tag=TAG)
 def admin_cards_change(card_id, body):
-    """Rename anybody's card, switch it off or on, block it or lift the block."""
-    card = cards.card_of(card_id)
+    """Rename anybody's card, switch it off or on, block it or lift the block.
+    Of a card removed while blocked, only the block can be lifted."""
+    card = cards.card_of(card_id, with_kept_blocks=True)
+    if card.removed_at is not None:
+        if body.blocked is not False or body.name is not None or body.enabled is not None:
+            raise ConflictError("This card was removed: only its block can be lifted.", code="card_removed")
+        cards.unblock(current_user, card)
+        db.session.commit()
+        return _admin_card(card)
     if body.name is not None:
         cards.rename(current_user, card, body.name)
     if body.enabled is not None:

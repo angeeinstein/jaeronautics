@@ -53,7 +53,11 @@ type, not by the card.
   - *blocked* by an admin; only an admin lifts it. Its owner sees that it is
     blocked.
 - **Removing** a card hides it; what was paid with it still says so ("paid
-  with Key fob"). Its ID is free to be linked again.
+  with Key fob"). Its ID is free to be linked again -- unless the card was
+  blocked: the block stays with the card, whoever removed it, and nobody
+  links it again until an admin lifts it (admins still see it, "Removed by
+  its owner, still blocked"; decided 2026-10-19). A card passed around stays
+  stopped, whoever links it next.
 - **Who manages cards:** the owner (name, disable, enable, remove) and admins
   only, with a permission of their own, `cards.manage` (block, unblock,
   remove, link for someone). The treasurer can be given it later if needed.

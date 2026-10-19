@@ -40,7 +40,11 @@ export function CardRow({ card, actions }: { card: Card; actions?: ReactNode }) 
           <Pill tone={CARD_STATE[card.state].tone}>{CARD_STATE[card.state].label}</Pill>
         </Group>
         <Text size="sm" c="dimmed">
-          {card.state === 'blocked' ? `Blocked by an admin. ${lastUse(card)}` : lastUse(card)}
+          {card.removed
+            ? 'Removed by its owner, still blocked: nobody links it again until the block is lifted.'
+            : card.state === 'blocked'
+              ? `Blocked by an admin. ${lastUse(card)}`
+              : lastUse(card)}
         </Text>
       </Stack>
       {actions ? <div className={classes.actions}>{actions}</div> : null}
