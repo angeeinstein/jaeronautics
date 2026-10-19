@@ -106,6 +106,44 @@ class TestAtTheReader:
         assert answer["reason"] == "card_unknown" and "/link/" in answer["link"]["url"]
 
 
+class TestOnePersonAtATime:
+    """Two readers tapped by one person in the same instant both found no open
+    stay and both opened one. SQLite has no row locks: what is tested is that
+    each way of changing someone's stays takes the lock on them."""
+
+    @pytest.fixture
+    def locks(self, monkeypatch):
+        taken = []
+        real = attendance.locked
+
+        def spy(select):
+            taken.append(str(select))
+            return real(select)
+
+        monkeypatch.setattr(attendance, "locked", spy)
+        return taken
+
+    def test_checking_in_and_out_and_every_correction_lock_the_person(self, app, anna, doors, locks):
+        (hangar, _key), _workshop = doors
+
+        _reason, stay = attendance.check_in(hangar, anna, now=_at(14, 10, 0))
+        attendance.check_out(hangar, anna, now=_at(14, 11, 0))
+        attendance.change_stay(None, stay, started_at=_at(14, 9, 0), ended_at=_at(14, 11, 0), now=_at(14, 12, 0))
+        added = attendance.add_stay(None, hangar.team, anna, started_at=_at(14, 13, 0), ended_at=_at(14, 14, 0),
+                                    now=_at(14, 15, 0))
+        attendance.delete_stay(None, added)
+
+        assert len(locks) == 5 and all("users" in statement for statement in locks)
+
+    def test_the_lock_really_is_a_lock_on_the_real_database(self):
+        from sqlalchemy.dialects import mysql
+        from aeronautics_members.db_models import User
+
+        statement = attendance.locked(db.select(User.id).where(User.id == 1))
+
+        assert "FOR UPDATE" in str(statement.compile(dialect=mysql.dialect()))
+
+
 class TestCounting:
     def test_full_minutes_from_the_minute_in_to_the_minute_out(self, app, anna, doors):
         (hangar, _key), _workshop = doors

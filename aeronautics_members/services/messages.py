@@ -66,8 +66,8 @@ def _fail(field, message):
     raise ValidationError(message, details={"fields": {field: message}})
 
 
-def _clean(value, field, limit, *, required=True, what="This"):
-    text = (value or "").strip()
+def _clean(value, field, limit, *, required=True, what="This", one_line=False):
+    text = " ".join((value or "").split()) if one_line else (value or "").strip()
     if required and not text:
         _fail(field, f"{what} is missing.")
     if len(text) > limit:
@@ -142,14 +142,14 @@ def send_contact(*, user, name=None, email=None, topic, subject, body, page=None
     if user is not None:
         name, email = sender_of(user)
     else:
-        name = _clean(name, "name", NAME_MAX, what="A name")
+        name = _clean(name, "name", NAME_MAX, what="A name", one_line=True)
         email = _clean_email(email)
     message = ContactMessage(
         topic=topic,
         sender_user_id=user.id if user is not None else None,
         sender_name=name[:NAME_MAX],
         sender_email=email,
-        subject=_clean(subject, "subject", SUBJECT_MAX, what="A subject"),
+        subject=_clean(subject, "subject", SUBJECT_MAX, what="A subject", one_line=True),
         body=_clean(body, "message", BODY_MAX, what="A message"),
         context=_context_of(user, page),
     )
@@ -172,7 +172,7 @@ def send_to_team(*, user, team, subject, body, trap=None, seconds=None):
         sender_user_id=user.id,
         sender_name=name[:NAME_MAX],
         sender_email=email,
-        subject=_clean(subject, "subject", SUBJECT_MAX, what="A subject"),
+        subject=_clean(subject, "subject", SUBJECT_MAX, what="A subject", one_line=True),
         body=_clean(body, "message", BODY_MAX, what="A message"),
         context=_context_of(user, None),
     )

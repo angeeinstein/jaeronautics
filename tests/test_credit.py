@@ -427,6 +427,17 @@ class TestPages:
         csv_text = client.get("/account/credit/history.csv").get_data(as_text=True)
         assert "Top-up" in csv_text and "10.00" in csv_text
 
+    def test_the_spreadsheet_never_runs_a_name(self, client, monkeypatch, credit_on):
+        anna = _person()
+        _topped_up(client, monkeypatch, anna, 1000)
+        credit.history(anna)[0].description = '=HYPERLINK("https://evil.example","Mate")'
+        db.session.commit()
+
+        [mine] = credit.export_rows(anna)
+        [everyone] = credit.export_rows_all()
+
+        assert mine[2].startswith("'=") and everyone[3].startswith("'=")
+
     def test_somebody_elses_receipt_is_not_found(self, client, monkeypatch, credit_on):
         anna = _person()
         _topped_up(client, monkeypatch, anna, 1000)

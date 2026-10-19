@@ -212,3 +212,27 @@ def test_the_email_to_the_admins_as_sent(app, admins, monkeypatch):
     assert "Vera Visitor &lt;vera@example.net&gt;" in html and "Problem with the portal" in html
     assert "Broken &lt;button&gt;" in html and "Second paragraph." in html
     assert "/admin/messages" in html
+
+
+def test_a_line_break_in_the_subject_does_not_stop_the_email(app, admins, monkeypatch):
+    """A header must be one line: a subject with a line break in it failed on every retry."""
+    from test_emails import FakeSMTP
+
+    from aeronautics_members import mail_utils
+
+    FakeSMTP.sent = []
+    monkeypatch.setattr(mail_utils, "load_mail_accounts_config",
+                        lambda required=False: {"office": {"host": "h", "port": 465, "user": "office@example.org",
+                                                           "pass": "p"}})
+    monkeypatch.setattr(mail_utils.smtplib, "SMTP_SSL", FakeSMTP)
+    monkeypatch.setattr(messages, "_sender_account", lambda: "office")
+
+    message = messages.send_contact(user=None, name="Vera\nVisitor", email="vera@example.net", topic="portal",
+                                    subject="Broken\r\nBcc: someone@example.net", body="Hello", seconds=10)
+
+    assert message.delivered_at is not None
+    assert (message.subject, message.sender_name) == ("Broken Bcc: someone@example.net", "Vera Visitor")
+    assert FakeSMTP.sent[0]["Subject"] == "Broken Bcc: someone@example.net" and FakeSMTP.sent[0]["Bcc"] is None
+    assert mail_utils.send_mail(from_account="office", to_email="vera@example.net", subject="Two\nlines",
+                                body="<p>x</p>") is True
+    assert FakeSMTP.sent[-1]["Subject"] == "Two lines"

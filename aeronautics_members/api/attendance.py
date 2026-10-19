@@ -224,7 +224,7 @@ def _csv(owner, query, name):
     for stay in reversed(attendance.stays(owner, start=start, end=end)):
         state = attendance.state(stay)
         writer.writerow([
-            attendance.person_name(stay.user), f"{attendance.local(stay.started_at):%d.%m.%Y}",
+            teams_service.csv_cell(attendance.person_name(stay.user)), f"{attendance.local(stay.started_at):%d.%m.%Y}",
             f"{attendance.local(stay.started_at):%H:%M}",
             f"{attendance.local(stay.ended_at):%H:%M}" if stay.ended_at else "",
             attendance.minutes(stay) if attendance.minutes(stay) is not None else "",

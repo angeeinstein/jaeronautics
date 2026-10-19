@@ -31,6 +31,7 @@ from . import NotFoundError, ValidationError
 from . import card_links, cards, device_types
 from .audit import log_audit_event
 from .clock import get_now_utc
+from .locking import locked
 from .settings import get_settings_map, set_setting_value
 
 SLUG = "attendance"
@@ -163,6 +164,13 @@ def close_forgotten(now=None, user=None):
     return len(found)
 
 
+def _one_at_a_time(user):
+    """A person's check-ins, check-outs and corrections, one after another:
+    two readers tapped in the same instant both found no open stay, and both
+    opened one. Their account row is the lock, held until commit."""
+    db.session.execute(locked(db.select(User.id).where(User.id == user.id)))
+
+
 def open_stay(user, owner):
     query = db.select(AttendanceStay).where(
         AttendanceStay.user_id == user.id, AttendanceStay.ended_at.is_(None), AttendanceStay.closed_at.is_(None))
@@ -173,6 +181,7 @@ def check_in(device, user, now=None):
     """``user`` checked in at ``device``: the new stay, or ALREADY_IN with the open one."""
     now = now or get_now_utc()
     owner = device.team
+    _one_at_a_time(user)
     close_forgotten(now, user=user)
     current = open_stay(user, owner)
     if current is not None:
@@ -187,6 +196,7 @@ def check_in(device, user, now=None):
 def check_out(device, user, now=None):
     """``user`` checked out at ``device``: the stay it ended, or NOT_IN."""
     now = now or get_now_utc()
+    _one_at_a_time(user)
     close_forgotten(now, user=user)
     stay = open_stay(user, device.team)
     if stay is None:
@@ -230,6 +240,7 @@ def _checked_times(stay_user, owner, started, ended, *, now, other_than=None):
 def add_stay(actor, owner, user, *, started_at, ended_at, now=None):
     """A stay entered by hand: one forgotten altogether."""
     now = now or get_now_utc()
+    _one_at_a_time(user)
     started, ended = _checked_times(user, owner, started_at, ended_at, now=now)
     stay = AttendanceStay(user_id=user.id, team_id=owner.id if owner is not None else None,
                           started_at=started, ended_at=ended, corrected_by_user_id=actor.id if actor else None,
@@ -245,6 +256,7 @@ def change_stay(actor, stay, *, started_at, ended_at, now=None):
     """When a stay started and ended, set by hand -- a check-out forgotten, a
     wrong tap. A stay closed as not checked out then counts again."""
     now = now or get_now_utc()
+    _one_at_a_time(stay.user)
     before = _snapshot(stay)
     stay.started_at, stay.ended_at = _checked_times(stay.user, stay.team, started_at, ended_at, now=now,
                                                     other_than=stay)
@@ -256,6 +268,7 @@ def change_stay(actor, stay, *, started_at, ended_at, now=None):
 
 
 def delete_stay(actor, stay):
+    _one_at_a_time(stay.user)
     log_audit_event("attendance", "attendance_stay_deleted", actor_user=actor, target_user=stay.user,
                     before=_snapshot(stay), metadata={"stay_id": stay.id, "team_id": stay.team_id})
     db.session.delete(stay)

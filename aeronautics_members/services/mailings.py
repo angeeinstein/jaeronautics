@@ -258,7 +258,7 @@ def render_body(text):
 
 
 def _clean_text(subject, body):
-    subject = (subject or "").strip()
+    subject = " ".join((subject or "").split())  # a header: one line
     body = (body or "").strip()
     if not subject:
         _fail("subject", "A subject is missing.")
