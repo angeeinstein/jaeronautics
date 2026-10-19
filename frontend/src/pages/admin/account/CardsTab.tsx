@@ -45,7 +45,13 @@ function Actions({ card, userId }: { card: Card; userId: number }) {
     mutationFn: (blocked: boolean) =>
       call(api.PATCH('/api/v1/admin/cards/{card_id}', { ...path, body: { blocked } })),
     onSuccess: (_card, blocked) =>
-      done(blocked ? `${card.name} blocked: refused at every reader.` : `${card.name} unblocked.`),
+      done(
+        blocked
+          ? `${card.name} blocked: refused at every reader.`
+          : card.removed
+            ? `${card.name}: block lifted; it may be linked again.`
+            : `${card.name} unblocked.`,
+      ),
     onError: notifyFailed,
   });
   const remove = useMutation({
@@ -79,17 +85,19 @@ function Actions({ card, userId }: { card: Card; userId: number }) {
           Block
         </ConfirmButton>
       )}
-      <ConfirmButton
-        size="xs"
-        variant="default"
-        confirmLabel="Yes, remove"
-        loading={remove.isPending}
-        onConfirm={() => {
-          remove.mutate();
-        }}
-      >
-        Remove
-      </ConfirmButton>
+      {card.removed ? null : (
+        <ConfirmButton
+          size="xs"
+          variant="default"
+          confirmLabel="Yes, remove"
+          loading={remove.isPending}
+          onConfirm={() => {
+            remove.mutate();
+          }}
+        >
+          Remove
+        </ConfirmButton>
+      )}
     </>
   );
 }

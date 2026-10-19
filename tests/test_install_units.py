@@ -350,6 +350,15 @@ def test_nginx_shows_a_page_of_its_own_while_the_portal_does_not_answer(installe
     assert "error_page 502 503 504 =503 /maintenance.html;" in deployed
 
 
+def test_the_example_nginx_config_passes_the_visitors_address_on_as_the_installer_does(installer):
+    """Without it every visitor is 127.0.0.1, and a limit per address is shared by all."""
+    body = _function(installer, "render_nginx_config")
+    deployed = (INSTALLER.parent / "deploy" / "nginx" / "aeronautics.conf").read_text(encoding="utf-8")
+    for line in ("real_ip_header CF-Connecting-IP;", "real_ip_recursive on;", "set_real_ip_from 127.0.0.1;",
+                 "set_real_ip_from ::1;", "client_max_body_size 20m;"):
+        assert line in body and line in deployed, line
+
+
 def test_the_devices_nothing_changed_is_not_logged_by_nginx(installer):
     """Every 2 seconds per device (docs/devices-plan.md): only the 304 to the
     sign of life is left out of the access log; a change, an error, every

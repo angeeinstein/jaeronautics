@@ -1214,6 +1214,9 @@ class SaleTicket(db.Model):
     card_id = db.Column(db.Integer, db.ForeignKey("cards.id", ondelete="CASCADE"), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     expires_at = db.Column(db.DateTime, nullable=False)
+    #: The prices the menu showed, ``{"<item id>": cents}``: a tap buys at
+    #: these or is refused. Null for tickets from before they were kept.
+    prices = db.Column(db.JSON, nullable=True)
     #: Bought with: the sale it made.
     used_at = db.Column(db.DateTime, nullable=True)
     entry_id = db.Column(db.Integer, db.ForeignKey("credit_entries.id", ondelete="SET NULL"), nullable=True)

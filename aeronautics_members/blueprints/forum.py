@@ -47,17 +47,16 @@ from itsdangerous import (
     BadSignature,
     SignatureExpired,
 )
-from pathlib import (
-    Path,
-)
 from ..db_models import (
     ForumAvatarSubmission,
     ImportedForumProfile,
     db,
 )
+from .. import forum_service
 from ..forum_service import (
     ForumProviderError,
 )
+from ..services.stored_files import stored_file
 from ..app import (
     build_forum_context,
     get_current_member_for_user,
@@ -165,11 +164,10 @@ def forum_avatar_public_file(token):
     submission = db.session.execute(
         db.select(ForumAvatarSubmission).where(ForumAvatarSubmission.public_token == token)
     ).scalar_one_or_none()
-    if submission is None or not submission.storage_path:
+    if submission is None:
         abort(404)
-
-    storage_path = Path(submission.storage_path)
-    if not storage_path.exists():
+    storage_path = stored_file(submission.storage_path, forum_service.get_forum_storage_dir())
+    if storage_path is None:
         abort(404)
 
     return send_file(storage_path, mimetype=submission.content_type or "application/octet-stream", conditional=True)
@@ -195,11 +193,10 @@ def forum_imported_avatar_public_file(token):
             ImportedForumProfile.avatar_public_token == token
         )
     ).scalar_one_or_none()
-    if profile is None or not profile.avatar_path or profile.user.deleted_at is not None:
+    if profile is None or profile.user.deleted_at is not None:
         abort(404)
-
-    path = Path(profile.avatar_path)
-    if not path.exists():
+    path = stored_file(profile.avatar_path, forum_service.get_forum_storage_dir())
+    if path is None:
         abort(404)
     return send_file(path, conditional=True)
 

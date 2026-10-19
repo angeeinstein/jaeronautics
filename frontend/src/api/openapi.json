@@ -1060,6 +1060,11 @@
           "owner": {
             "$ref": "#/components/schemas/CardOwnerOut"
           },
+          "removed": {
+            "default": false,
+            "title": "Removed",
+            "type": "boolean"
+          },
           "state": {
             "enum": [
               "active",
@@ -2631,6 +2636,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "removed": {
+            "default": false,
+            "title": "Removed",
+            "type": "boolean"
           },
           "state": {
             "enum": [

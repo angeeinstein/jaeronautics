@@ -4120,6 +4120,11 @@ export interface components {
             name: string;
             owner: components["schemas"]["CardOwnerOut"];
             /**
+             * Removed
+             * @default false
+             */
+            removed?: boolean;
+            /**
              * State
              * @enum {string}
              */
@@ -4625,6 +4630,11 @@ export interface components {
             linked_how: string;
             /** Name */
             name: string;
+            /**
+             * Removed
+             * @default false
+             */
+            removed?: boolean;
             /**
              * State
              * @enum {string}

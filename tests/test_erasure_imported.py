@@ -31,7 +31,11 @@ def no_remote_calls(monkeypatch):
 
 
 @pytest.fixture
-def archived_with_avatar(app, tmp_path):
+def archived_with_avatar(app, tmp_path, monkeypatch):
+    from aeronautics_members import forum_service
+
+    # Served only from inside the folder imported avatars are kept in.
+    monkeypatch.setattr(forum_service, "get_forum_storage_dir", lambda: tmp_path)
     profile = _archived()
     avatar = tmp_path / "imported-avatar.png"
     avatar.write_bytes(b"\x89PNG not really")

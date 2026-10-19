@@ -67,6 +67,8 @@ def build_app(db_path):
         "PUBLIC_BASE_URL": BASE,
         # Beside the throwaway database, never the repository's storage.
         "TEAM_LOGO_DIR": str(Path(db_path).parent / "team_logos"),
+        # The made-up profile pictures lie beside the database: served only from there.
+        "FORUM_AVATAR_DIR": str(Path(db_path).parent),
         "FIRMWARE_DIR": str(Path(db_path).parent / "firmware"),
         "DEVICE_CRASH_DIR": str(Path(db_path).parent / "crashes"),
         "BACKUP_STORAGE_DIR": str(Path(db_path).parent / "storage"),

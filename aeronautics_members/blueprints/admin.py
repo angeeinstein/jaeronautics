@@ -5,7 +5,6 @@ picture, the legal texts' waiting-versions PDF and Markdown template, backup
 files, and the update's progress for the admin page.
 """
 
-from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify
 
@@ -24,6 +23,8 @@ from .app_shell import app_shell
 from ._responses import json_download_response
 from ..services import backup as backup_service
 from ..services import reviews
+from ..services.stored_files import stored_file
+from .. import forum_service
 from ..services.system_update import (
     describe_update_state,
 )
@@ -88,11 +89,8 @@ def admin_archived_avatar(user_id):
     profile = db.session.execute(
         db.select(ImportedForumProfile).filter_by(user_id=user_id)
     ).scalar_one_or_none()
-    if profile is None or not profile.avatar_path:
-        abort(404)
-
-    path = Path(profile.avatar_path)
-    if not path.exists():
+    path = stored_file(profile.avatar_path, forum_service.get_forum_storage_dir()) if profile is not None else None
+    if path is None:
         abort(404)
     return send_file(path, conditional=True)
 

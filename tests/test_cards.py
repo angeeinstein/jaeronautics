@@ -123,6 +123,25 @@ class TestCards:
         cards.unblock(None, card)
         assert cards.state(card) == cards.ACTIVE
 
+    def test_a_blocked_card_removed_stays_blocked_until_an_admin_lifts_it(self, anna):
+        """Removing and linking it again must not lift what only an admin lifts --
+        whoever links it next."""
+        card = cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
+        cards.block(None, card)
+        cards.remove(anna, card)
+        assert cards.kept_blocked(card) and card not in cards.cards_of(anna)
+
+        bert = _person("bert@example.com")
+        for person in (anna, bert):
+            with pytest.raises(ConflictError) as refused:
+                cards.link(person, CARD, by=person, how=cards.BY_PHONE)
+            assert refused.value.code == "card_blocked"
+        assert cards.cards_of(anna, with_kept_blocks=True) == [card]
+
+        cards.unblock(None, card)
+        assert cards.state(card) == cards.REMOVED and not cards.cards_of(anna, with_kept_blocks=True)
+        assert cards.state(cards.link(bert, CARD, by=bert, how=cards.BY_PHONE)) == cards.ACTIVE
+
     def test_at_most_ten_each(self, anna):
         for number in range(cards.MOST_CARDS):
             cards.link(anna, f"04{number:012X}", by=anna, how=cards.BY_PHONE)
@@ -192,6 +211,21 @@ class TestSalesPoint:
         assert len(_sales_of(anna)) == 1
         # Tapped again: another purchase.
         assert _tap(app, key)["result"] == "sold" and len(_sales_of(anna)) == 2
+
+    def test_bought_at_the_price_the_menu_showed_or_not_at_all(self, app, anna, beer, reader):
+        _device, key = reader
+        cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
+        db.session.commit()
+        menu = _card(app, key)
+        assert menu["items"][0]["price_cents"] == 150
+        credit_sales.update_item(None, beer, price_cents=200)  # changed while the menu was open
+        db.session.commit()
+
+        assert _buy(app, key, menu["ticket"], beer.id) == {
+            "result": "refused", "reason": "price_changed", "message": "The price has changed: tap your card again."}
+        assert not _sales_of(anna)
+        # Tapped again: the new menu, at the new price.
+        assert _tap(app, key)["price_cents"] == 200
 
     def test_a_ticket_lasts_a_few_seconds_and_only_on_its_device(self, app, anna, beer, reader):
         _device, key = reader
@@ -496,7 +530,27 @@ class TestPages:
         assert set(person) == {"user_id", "items"} and person["items"][0]["state"] == "blocked"
         assert send(client, "POST", url, {"card_id": OTHER_CARD}).status_code == 405
         assert send(client, "POST", f"{url}/wait", {"device_id": 1}).status_code == 404
-        assert send(client, "DELETE", f"/api/v1/admin/cards/{card.id}").get_json()["state"] == "removed"
+        removed = send(client, "DELETE", f"/api/v1/admin/cards/{card.id}").get_json()
+        assert (removed["state"], removed["removed"]) == ("blocked", True)  # the block stays with the card
+
+    def test_admins_lift_the_block_of_a_card_its_owner_removed(self, client, admin, anna):
+        from api_helpers import send, signed_in
+
+        card = cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
+        cards.block(None, card)
+        cards.remove(anna, card)
+        db.session.commit()
+        signed_in(client, admin)
+
+        [listed] = client.get("/api/v1/admin/cards").get_json()["items"]
+        [theirs] = client.get(f"/api/v1/admin/accounts/{anna.id}/cards").get_json()["items"]
+        assert (listed["state"], listed["removed"]) == (theirs["state"], theirs["removed"]) == ("blocked", True)
+        assert send(client, "PATCH", f"/api/v1/admin/cards/{card.id}", {"name": "Mine"}).status_code == 409
+        assert send(client, "DELETE", f"/api/v1/admin/cards/{card.id}").status_code == 404
+
+        lifted = send(client, "PATCH", f"/api/v1/admin/cards/{card.id}", {"blocked": False}).get_json()
+        assert lifted["state"] == "removed"
+        assert client.get("/api/v1/admin/cards").get_json()["items"] == []
 
     def test_members_may_not_manage_others_cards(self, client, anna):
         from api_helpers import signed_in

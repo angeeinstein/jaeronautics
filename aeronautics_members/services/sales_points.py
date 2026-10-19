@@ -24,7 +24,7 @@ arriving at the same moment are one sale.
 
 ``reason`` of a refusal is one of ``card_unknown``, ``card_disabled``,
 ``card_blocked``, ``account_off``, ``credit_off``, ``not_set_up`` (no items
-chosen), ``ticket_expired``, ``ticket_used``, ``item_off``, ``not_enough``
+chosen), ``ticket_expired``, ``ticket_used``, ``price_changed``, ``item_off``, ``not_enough``
 (with ``balance_cents``); ``message`` says it in words.
 """
 
@@ -58,6 +58,7 @@ CREDIT_OFF = "credit_off"
 NOT_SET_UP = "not_set_up"
 TICKET_EXPIRED = "ticket_expired"
 TICKET_USED = "ticket_used"
+PRICE_CHANGED = "price_changed"
 
 MESSAGES = {
     **cards.REFUSALS,
@@ -67,6 +68,7 @@ MESSAGES = {
     NOT_SET_UP: "This device has nothing to sell yet.",
     TICKET_EXPIRED: "Too late: tap your card again.",
     TICKET_USED: "Already bought: tap your card again.",
+    PRICE_CHANGED: "The price has changed: tap your card again.",
 }
 
 #: What the sale refused with, as the device is told.
@@ -231,7 +233,8 @@ def _card(device, data, event_id):
 
     now = get_now_utc()
     ticket = SaleTicket(token=f"t_{secrets.token_urlsafe(18)}", device_id=device.id, card_id=tap.card.id,
-                        created_at=now, expires_at=now + TICKET_LASTS)
+                        created_at=now, expires_at=now + TICKET_LASTS,
+                        prices={str(item.id): item.price_cents for item in offered})
     db.session.add(ticket)
     db.session.flush()
     user = tap.card.user
@@ -264,6 +267,11 @@ def _buy(device, data, event_id):
     item = next((offered for offered in items_of(device) if offered.id == item_id), None)
     if item is None:
         return _refused(ITEM_OFF)
+    # Bought at the price the menu showed, or not at all: its owner may have
+    # changed it in the seconds between menu and tap.
+    shown = (ticket.prices or {}).get(str(item.id))
+    if shown is not None and shown != item.price_cents:
+        return _refused(PRICE_CHANGED)
     # The card as it is now: blocked or switched off since the menu opened.
     card = ticket.card
     state = cards.state(card)
@@ -348,8 +356,9 @@ portal's to decide. The `answer` is one of:
   from 1); `actions` is empty when there is nothing to switch. Say how many outputs the device has
   with the `X-Device-Outputs` header (see the sign of life).
 - `{"result": "refused", "reason": "...", "message": "..."}` -- `reason` one of `ticket_expired` (tap
-  again), `ticket_used` (one ticket buys once), `item_off`, `not_enough` (with `balance_cents`),
-  `credit_off`, `card_blocked`, `card_disabled`, `account_off`.
+  again), `ticket_used` (one ticket buys once), `price_changed` (its price changed after the menu
+  was shown: tap again), `item_off`, `not_enough` (with `balance_cents`), `credit_off`,
+  `card_blocked`, `card_disabled`, `account_off`.
 
 Show `message` for a reason you do not know.
 

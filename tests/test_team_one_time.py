@@ -243,6 +243,26 @@ def test_a_refund_comes_off_the_payment(app, client, monkeypatch, stripe_fake):
 
 
 @pytest.mark.usefixtures("switched_on")
+def test_an_older_refund_total_arriving_late_changes_nothing(app, client, monkeypatch, stripe_fake):
+    import stripe
+
+    _member_paid_once(client, monkeypatch, stripe_fake)
+    monkeypatch.setattr(stripe.PaymentIntent, "retrieve", staticmethod(
+        lambda pi_id, **k: {"id": pi_id, "object": "payment_intent", "metadata": {"purpose": "team"}}))
+
+    def refunded(event_id, cents):
+        return post_event(client, monkeypatch, {"id": event_id, "type": "charge.refunded", "data": {"object": {
+            "id": "ch_1", "object": "charge", "payment_intent": "pi_1", "amount": 2500, "amount_refunded": cents,
+            "metadata": {},
+        }}})
+
+    refunded("evt_second", 1500)  # both partial refunds, reported first
+    refunded("evt_first", 1000)  # the first alone, reported late
+
+    assert db.session.query(Payment).one().refunded_cents == 1500
+
+
+@pytest.mark.usefixtures("switched_on")
 class TestSwitchingTheWayOfPaying:
     def test_from_subscription_to_once_per_period(self, app, client, monkeypatch, stripe_fake):
         team, lead = _led()

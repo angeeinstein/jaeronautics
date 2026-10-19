@@ -757,14 +757,18 @@ def _when(entry):
 
 
 def export_rows(user):
-    return [(_when(entry), KIND_LABELS.get(entry.kind, entry.kind), entry.description,
+    from .teams import csv_cell  # an item's name or a note: shown, never run
+
+    return [(_when(entry), KIND_LABELS.get(entry.kind, entry.kind), csv_cell(entry.description),
              _plain_euros(entry.amount_cents), _plain_euros(entry.balance_after_cents))
             for entry in reversed(history(user))]
 
 
 def export_rows_all():
+    from .teams import csv_cell
+
     entries = db.session.execute(db.select(CreditEntry).order_by(CreditEntry.id)).scalars().all()
-    return [(_when(entry), f"#{entry.user_id}", KIND_LABELS.get(entry.kind, entry.kind), entry.description,
+    return [(_when(entry), f"#{entry.user_id}", KIND_LABELS.get(entry.kind, entry.kind), csv_cell(entry.description),
              _plain_euros(entry.amount_cents), _plain_euros(entry.balance_after_cents),
              f"#{entry.booked_by_user_id}" if entry.booked_by_user_id else "")
             for entry in entries]

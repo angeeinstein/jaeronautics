@@ -36,6 +36,7 @@ from ..security_utils import build_public_url
 from . import ConflictError, ValidationError
 from . import payments
 from .audit import log_audit_event
+from .locking import locked
 from ..config import MEMBERSHIP_TIMEZONE
 from .clock import get_membership_today, get_now_utc, start_of_day_unix
 from .membership import format_membership_date_display
@@ -867,13 +868,17 @@ def _payment_of_charge(charge, payment_intent=None):
 
 
 def _charge_refunded(charge):
-    """Money given back in Stripe comes off what the team earned."""
-    payment = _payment_of_charge(charge)
-    if payment is None:
+    """Money given back in Stripe comes off what the team earned. Stripe
+    reports the total given back so far, and not always in order: an older,
+    smaller total arriving late changes nothing -- the total only grows, as
+    for credit."""
+    found = _payment_of_charge(charge)
+    if found is None:
         return
-    refunded = int(charge.get("amount_refunded") or 0)
-    if refunded != payment.refunded_cents:
-        payment.refunded_cents = min(refunded, payment.amount_cents)
+    payment = db.session.execute(locked(db.select(Payment).filter_by(id=found.id))).scalars().first()
+    refunded = min(int(charge.get("amount_refunded") or 0), payment.amount_cents)
+    if refunded > payment.refunded_cents:
+        payment.refunded_cents = refunded
         log_audit_event("payments", "team_payment_refunded", metadata={
             "payment_id": payment.id, "team_id": payment.team_id, "refunded_cents": payment.refunded_cents,
         })

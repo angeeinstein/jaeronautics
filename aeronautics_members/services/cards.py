@@ -140,25 +140,42 @@ def tail(card):
     return f"…{card.id_tail}"
 
 
-def cards_of(user, *, include_removed=False):
-    query = db.select(Card).filter_by(user_id=user.id)
-    if not include_removed:
-        query = query.where(Card.removed_at.is_(None))
+def kept_blocked(card):
+    """Removed by its owner while blocked: the block stays with the card, and
+    nobody links it again until an admin lifts it (:func:`remove`)."""
+    return card.removed_at is not None and card.blocked_at is not None and card.id_hash is not None
+
+
+_KEPT_BLOCKED = db.and_(Card.removed_at.is_not(None), Card.blocked_at.is_not(None), Card.id_hash.is_not(None))
+
+
+def _shown(query, include_removed, with_kept_blocks):
+    if include_removed:
+        return query
+    if with_kept_blocks:
+        return query.where(db.or_(Card.removed_at.is_(None), _KEPT_BLOCKED))
+    return query.where(Card.removed_at.is_(None))
+
+
+def cards_of(user, *, include_removed=False, with_kept_blocks=False):
+    """The person's cards; for admins (``with_kept_blocks``) also those
+    removed while blocked, whose block an admin may lift."""
+    query = _shown(db.select(Card).filter_by(user_id=user.id), include_removed, with_kept_blocks)
     return db.session.execute(query.order_by(Card.linked_at, Card.id)).scalars().all()
 
 
-def card_of(card_id, user=None):
-    """One card (of ``user``, when given), not removed; else NotFoundError."""
+def card_of(card_id, user=None, *, with_kept_blocks=False):
+    """One card (of ``user``, when given), not removed -- or, for an admin,
+    removed while blocked; else NotFoundError."""
     card = db.session.get(Card, card_id)
-    if card is None or card.removed_at is not None or (user is not None and card.user_id != user.id):
+    removed = card is not None and card.removed_at is not None and not (with_kept_blocks and kept_blocked(card))
+    if card is None or removed or (user is not None and card.user_id != user.id):
         raise NotFoundError("No such card.", code="card_not_found")
     return card
 
 
-def all_cards(*, include_removed=False):
-    query = db.select(Card)
-    if not include_removed:
-        query = query.where(Card.removed_at.is_(None))
+def all_cards(*, include_removed=False, with_kept_blocks=False):
+    query = _shown(db.select(Card), include_removed, with_kept_blocks)
     return db.session.execute(query.order_by(Card.linked_at.desc(), Card.id.desc())).scalars().all()
 
 
@@ -194,6 +211,8 @@ def link_hashed(user, hashed, id_tail, *, name=None, by, how):
             raise ConflictError(f"This card is linked to this account already, as {existing.name}.",
                                 code="card_linked_already")
         raise ConflictError("This card belongs to another account. Ask an admin.", code="card_linked_elsewhere")
+    if db.session.execute(db.select(Card.id).where(Card.id_hash == hashed, _KEPT_BLOCKED)).first() is not None:
+        raise ConflictError("This card is blocked. Ask an admin.", code="card_blocked")
     if len(cards_of(user)) >= MOST_CARDS:
         raise ConflictError(f"At most {MOST_CARDS} cards per person.", code="card_too_many")
     now = get_now_utc()
@@ -243,6 +262,8 @@ def block(actor, card):
 
 
 def unblock(actor, card):
+    """The block lifted. A card removed while blocked stays removed, and may
+    be linked again."""
     if card.blocked_at is not None:
         card.blocked_at = None
         card.blocked_by_user_id = None
@@ -252,7 +273,12 @@ def unblock(actor, card):
 
 def remove(actor, card):
     """Gone from the person's cards; its ID may be linked again. The row
-    stays, nameless of its ID, so what was paid with it still names it."""
+    stays, nameless of its ID, so what was paid with it still names it.
+
+    A blocked card keeps its block: removing and linking it again must not
+    lift what only an admin lifts (a card passed around stays stopped,
+    whoever links it next). Its ``id_hash`` stays for that, and admins still
+    see it, blocked."""
     if card.removed_at is None:
         card.removed_at = get_now_utc()
         card.removed_by_user_id = actor.id if actor is not None else None

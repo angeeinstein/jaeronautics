@@ -1250,7 +1250,10 @@ def create_app(config_overrides=None):
         flush_marked_notification_channels()
         return response
 
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)
+    # The visitor's address and the scheme from nginx. Not the host: nginx
+    # passes the browser's own Host on and sets no X-Forwarded-Host, so one
+    # the browser sent itself would be believed.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=0, x_proto=1)
     stripe.api_key = STRIPE_SECRET_KEY
     configure_stripe_http_client()
 

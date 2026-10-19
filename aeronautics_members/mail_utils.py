@@ -314,7 +314,9 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
         # attached to the mail sit beside that, in a "mixed" message around it.
         body_part = MIMEMultipart("related")
         message = MIMEMultipart("mixed") if files else body_part
-        message["Subject"] = subject
+        # One line: a line break in a header is refused, and the email would
+        # fail on every retry. Whatever wrote it, it goes out joined.
+        message["Subject"] = " ".join(str(subject).split())
         shown_name = from_name or config.get("from_name")
         message["From"] = formataddr((shown_name, sender)) if shown_name else sender
         message["To"] = primary_recipient

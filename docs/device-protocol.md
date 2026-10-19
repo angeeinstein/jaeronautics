@@ -516,8 +516,8 @@ Two reports:
    chosen. The answer:
    - `{"result": "sold", "item": "Coffee", "price_cents": 80, "balance_cents": 1170, "first_name": "Alex", "actions": [{"output": 1, "seconds": 5}]}`
      -- `actions`: see below;
-   - or `refused` with `ticket_expired`, `ticket_used`, `item_off`,
-     `not_enough`, `credit_off`, or -- the card changed while the menu was
+   - or `refused` with `ticket_expired`, `ticket_used`, `price_changed`,
+     `item_off`, `not_enough`, `credit_off`, or -- the card changed while the menu was
      open -- `card_unknown`, `card_disabled`, `card_blocked`, `account_off`.
 
 A refusal is `{"result": "refused", "reason": "…", "message": "…"}`:
@@ -532,6 +532,7 @@ A refusal is `{"result": "refused", "reason": "…", "message": "…"}`:
 | `not_set_up` | No items chosen for this device yet. |
 | `ticket_expired` | The ticket is too old, or not this device's: tap the card again. |
 | `ticket_used` | One ticket buys once: tap the card again. |
+| `price_changed` | The item's price changed after the menu was shown: tap the card again, for the new menu. |
 | `item_off` | The item is no longer on this device's menu, or no longer on sale. |
 | `not_enough` | Not enough credit; `balance_cents` says what there is. |
 
