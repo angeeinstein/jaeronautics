@@ -157,7 +157,8 @@ def close_forgotten(now=None, user=None):
         AttendanceStay.started_at < day_start(day_of(now)),
     )
     if user is not None:
-        query = query.where(AttendanceStay.user_id == user.id)
+        # The person is locked (``_one_at_a_time``): read what is committed now.
+        query = locked(query.where(AttendanceStay.user_id == user.id))
     found = db.session.execute(query).scalars().all()
     for stay in found:
         stay.closed_at = _stored(now)
@@ -167,14 +168,22 @@ def close_forgotten(now=None, user=None):
 def _one_at_a_time(user):
     """A person's check-ins, check-outs and corrections, one after another:
     two readers tapped in the same instant both found no open stay, and both
-    opened one. Their account row is the lock, held until commit."""
+    opened one. Their account row is the lock, held until commit.
+
+    The reads after it that decide -- the open stay, the forgotten ones, an
+    overlap -- are locking reads too: on MariaDB a plain read keeps seeing
+    the transaction's first snapshot, from before the other request
+    committed its stay, while a locking read sees what is committed."""
     db.session.execute(locked(db.select(User.id).where(User.id == user.id)))
 
 
-def open_stay(user, owner):
-    query = db.select(AttendanceStay).where(
-        AttendanceStay.user_id == user.id, AttendanceStay.ended_at.is_(None), AttendanceStay.closed_at.is_(None))
-    return db.session.execute(_owner_filter(query, owner).order_by(AttendanceStay.id.desc())).scalars().first()
+def open_stay(user, owner, *, current=False):
+    """The person's open stay with ``owner``; ``current`` (after
+    ``_one_at_a_time``): read and locked as committed now."""
+    query = _owner_filter(db.select(AttendanceStay).where(
+        AttendanceStay.user_id == user.id, AttendanceStay.ended_at.is_(None), AttendanceStay.closed_at.is_(None)),
+        owner).order_by(AttendanceStay.id.desc())
+    return db.session.execute(locked(query) if current else query).scalars().first()
 
 
 def check_in(device, user, now=None):
@@ -183,7 +192,7 @@ def check_in(device, user, now=None):
     owner = device.team
     _one_at_a_time(user)
     close_forgotten(now, user=user)
-    current = open_stay(user, owner)
+    current = open_stay(user, owner, current=True)
     if current is not None:
         return ALREADY_IN, current
     stay = AttendanceStay(user_id=user.id, team_id=owner.id if owner is not None else None,
@@ -198,7 +207,7 @@ def check_out(device, user, now=None):
     now = now or get_now_utc()
     _one_at_a_time(user)
     close_forgotten(now, user=user)
-    stay = open_stay(user, device.team)
+    stay = open_stay(user, device.team, current=True)
     if stay is None:
         return NOT_IN, None
     stay.ended_at, stay.out_device_id = _stored(now), device.id
@@ -230,7 +239,7 @@ def _checked_times(stay_user, owner, started, ended, *, now, other_than=None):
     )
     if other_than is not None:
         query = query.where(AttendanceStay.id != other_than.id)
-    clash = db.session.execute(_owner_filter(query, owner)).scalars().first()
+    clash = db.session.execute(locked(_owner_filter(query, owner))).scalars().first()
     if clash is not None:
         message = f"It overlaps the stay from {local(clash.started_at):%d.%m.%Y %H:%M}."
         raise ValidationError(message, code="attendance_overlap", details={"fields": {"started_at": message}})

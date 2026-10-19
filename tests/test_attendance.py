@@ -109,7 +109,8 @@ class TestAtTheReader:
 class TestOnePersonAtATime:
     """Two readers tapped by one person in the same instant both found no open
     stay and both opened one. SQLite has no row locks: what is tested is that
-    each way of changing someone's stays takes the lock on them."""
+    each way of changing someone's stays takes the lock on them, and reads
+    what decides with a locking read."""
 
     @pytest.fixture
     def locks(self, monkeypatch):
@@ -133,7 +134,13 @@ class TestOnePersonAtATime:
                                     now=_at(14, 15, 0))
         attendance.delete_stay(None, added)
 
-        assert len(locks) == 5 and all("users" in statement for statement in locks)
+        people = [statement for statement in locks if "FROM users" in statement]
+        stays = [statement for statement in locks if "FROM attendance_stays" in statement]
+        assert len(people) == 5
+        # And what decides after the lock is read as committed now, not from the
+        # transaction's first snapshot (MariaDB's REPEATABLE READ): the open
+        # stay at check-in and check-out, the forgotten ones, an overlap.
+        assert len(stays) >= 6
 
     def test_the_lock_really_is_a_lock_on_the_real_database(self):
         from sqlalchemy.dialects import mysql
