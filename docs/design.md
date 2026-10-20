@@ -181,6 +181,12 @@ logo lockup. Links are white. The section you are in is cyan with a thick
 cyan line under it; a link under the pointer stays white and gets a thin
 white line with a soft glow. The two never look alike.
 
+**Side menu** -- an area's sections in groups (People, Money, Messages, ...):
+a hairline above each group but the first, room above its heading, and the
+heading in small capitals between white and the muted grey -- lighter than
+help text, quieter than the entries. Not cyan: that is the current page's
+(2026-10-18).
+
 **Menus and dialogs** -- surface fill, hairline border, header and footer
 bands, and the one real shadow (`0 12px 32px rgba(0,0,0,0.45)`).
 
