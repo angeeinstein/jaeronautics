@@ -174,8 +174,16 @@ describe('a team’s Sales page', () => {
     await waitFor(() => {
       expect(within(table).getByRole('row', { name: /^Beer/ })).toHaveTextContent('€2.003€6.00');
     });
+    // Not sold in the last 30 days: no row for it then.
+    expect(within(table).queryByText(/no longer on the list/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByText('Ever'));
     expect(within(table).getByRole('row', { name: /^Beer/ })).toHaveTextContent('€2.005€10.00');
+    // Folded into one row; opened, the item itself.
+    const folded = within(table).getByRole('button', { name: '1 no longer on the list' });
+    expect(folded).toHaveAttribute('aria-expanded', 'false');
+    expect(within(table).queryByRole('row', { name: /Old cola/ })).not.toBeInTheDocument();
+    expect(within(table).getByRole('row', { name: /1 no longer on the list/ })).toHaveTextContent('2€3.00');
+    await userEvent.click(folded);
     expect(within(table).getByRole('row', { name: /Old cola/ })).toHaveTextContent(
       'No longer on the list2€3.00',
     );

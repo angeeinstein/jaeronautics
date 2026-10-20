@@ -6,7 +6,10 @@
  * fixed list; it can be renamed, repriced, given another icon, moved,
  * switched off or deleted. With each item, how many were sold and what they
  * made, the last 30 days or ever; below, what was sold of items deleted
- * since. A new price counts for the next sale; sales made keep theirs.
+ * since, folded into one row that opens to show them -- they would pile up
+ * over the years -- and still counted in *Together*. In *30 days* the row
+ * counts only those sold then, and is not there when there are none. A new
+ * price counts for the next sale; sales made keep theirs.
  */
 import {
   ActionIcon,
@@ -22,9 +25,18 @@ import {
   Text,
   TextInput,
   Tooltip,
+  UnstyledButton,
   VisuallyHidden,
 } from '@mantine/core';
-import { IconArrowDown, IconArrowUp, IconPencil, IconPlus, IconTag, IconTrash } from '@tabler/icons-react';
+import {
+  IconArrowDown,
+  IconArrowUp,
+  IconChevronRight,
+  IconPencil,
+  IconPlus,
+  IconTag,
+  IconTrash,
+} from '@tabler/icons-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -360,6 +372,48 @@ function GoneRow({ found, period }: { found: ItemSales; period: Period }) {
   );
 }
 
+/** The deleted items as one row, "3 no longer on the list", opening to show each. */
+function GoneRows({ gone, period }: { gone: ItemSales[]; period: Period }) {
+  const [open, setOpen] = useState(false);
+  const shown = period === '30' ? gone.filter((found) => found.sold_30_days > 0) : gone;
+  if (!shown.length) return null;
+  const sold = shown.reduce((sum, found) => sum + figures(found, period).sold, 0);
+  const made = shown.reduce((sum, found) => sum + figures(found, period).made, 0);
+  return (
+    <>
+      <Table.Tr style={{ opacity: 0.55 }}>
+        <Table.Td colSpan={2}>
+          <UnstyledButton
+            aria-expanded={open}
+            onClick={() => {
+              setOpen(!open);
+            }}
+          >
+            <Group gap="xs" wrap="nowrap">
+              <IconChevronRight
+                size={14}
+                aria-hidden
+                style={{ transform: open ? 'rotate(90deg)' : undefined, transition: 'transform 0.15s' }}
+              />
+              <Text size="sm">{`${String(shown.length)} no longer on the list`}</Text>
+            </Group>
+          </UnstyledButton>
+        </Table.Td>
+        <Table.Td ta="right" className="ja-figures">
+          {sold}
+        </Table.Td>
+        <Table.Td ta="right" className="ja-figures">
+          {formatEuros(made)}
+        </Table.Td>
+        <Table.Td colSpan={2} />
+      </Table.Tr>
+      {open
+        ? shown.map((found) => <GoneRow key={`gone-${found.name}`} found={found} period={period} />)
+        : null}
+    </>
+  );
+}
+
 function AddItem({
   icons,
   queryKey,
@@ -531,9 +585,7 @@ export function PriceListPanel({
                     columns={columns}
                   />
                 ))}
-                {gone.map((found) => (
-                  <GoneRow key={`gone-${found.name}`} found={found} period={period} />
-                ))}
+                {sales ? <GoneRows gone={gone} period={period} /> : null}
               </Table.Tbody>
               {together ? (
                 <Table.Tfoot>
