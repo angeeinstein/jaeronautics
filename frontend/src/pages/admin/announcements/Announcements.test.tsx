@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -258,6 +258,7 @@ describe('Admin › Messages', () => {
                 {
                   id: 2,
                   body: 'Thanks! The receipt is attached.',
+                  quoted: 'On 09.10.2026 at 11:00, Support wrote:\n> It was paid.',
                   author: null,
                   created_at: '2026-10-09T10:00:00Z',
                   sent_at: '2026-10-09T10:00:00Z',
@@ -277,6 +278,10 @@ describe('Admin › Messages', () => {
     expect(reply).toHaveTextContent(/Vera Visitor replied/);
     expect(reply).toHaveTextContent('Files in the mailbox');
     expect(reply).toHaveTextContent('Thanks! The receipt is attached.');
+    // What their mail program quoted below it: folded, one click away.
+    expect(reply).not.toHaveTextContent('Support wrote:');
+    await userEvent.click(within(reply).getByRole('button', { name: 'Show quoted text' }));
+    expect(reply).toHaveTextContent('Support wrote:');
   });
 
   it('linked to the account, marked done', async () => {

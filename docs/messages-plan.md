@@ -141,14 +141,16 @@ like you proposed."
   `frontend/src/components/MessageList.tsx`,
   `frontend/src/pages/admin/settings/Email.tsx`.
 
-## Whole conversations, and team leads answering in the portal (decided 2026-10-18, not built)
+## Whole conversations, and team leads answering in the portal (decided 2026-10-18)
 
 Tried on the test server with a few answers back and forth: "the reply that
 is sent out by our portal … shows the original message that the person sent
 in the contact form … even after some writing back and forth … and this
 could be a bit confusing."
 
-**The email that goes out quotes the whole conversation.**
+**The email that goes out quotes the whole conversation.** *Built 2026-10-20*
+(`messages._quoted_conversation`, `QUOTED_MOST`; our answers are named after
+the replies account's sender name).
 
 - Newest first, each step under its own line ("On 18.10.2026 at 16:24,
   Anna Example wrote:"), as a mail program nests a thread. Built from what the
@@ -162,7 +164,8 @@ could be a bit confusing."
 - Today: `messages._send_reply` passes `quoted_text=message.body` (always the
   first message); `templates/emails/contact_reply.html` shows one quote.
 
-**An answer that comes back is shown without what it quotes.**
+**An answer that comes back is shown without what it quotes.** *Built
+2026-10-20* (`messages.split_quote`; the API gives the cut part as `quoted`).
 
 - Their mail program quotes our email below their answer; the portal showed
   all of it (our logo text, "Support <…> schrieb am …", the copyright
@@ -174,7 +177,8 @@ could be a bit confusing."
 - The whole text is kept; *Show quoted text* under the answer opens the
   rest, so a wrong cut loses nothing.
 
-**Team leads answer a message to their team in the portal.**
+**Team leads answer a message to their team in the portal.** *Not built:
+put off ("I don't want to work on this now").*
 
 - Today a team's message is emailed to each lead's login address (usually
   private) with the sender as Reply-To; *Answer by email* opens their own

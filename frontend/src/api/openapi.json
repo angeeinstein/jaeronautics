@@ -3922,6 +3922,18 @@
             "title": "Incoming",
             "type": "boolean"
           },
+          "quoted": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Quoted"
+          },
           "sent_at": {
             "anyOf": [
               {

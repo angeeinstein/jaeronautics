@@ -5019,6 +5019,11 @@ export interface components {
             id: number;
             /** Incoming */
             incoming: boolean;
+            /**
+             * Quoted
+             * @default null
+             */
+            quoted?: string | null;
             /** Sent At */
             sent_at: string | null;
         };

@@ -410,8 +410,8 @@ def sample_email_for(template_name):
             "Re: Workshop on Monday?",
             {
                 "body_html": Markup("<p>Hello Anna,</p><p>yes, from 18:00. See you there!</p>"),
-                "quoted_intro": f"On {today:%d.%m.%Y} at 09:41, Anna Muster wrote:",
-                "quoted_text": "Hello,\n\nis the workshop open on Monday evening?\n\nThanks, Anna",
+                "quoted": [{"intro": f"On {today:%d.%m.%Y} at 09:41, Anna Muster wrote:",
+                            "text": "Hello,\n\nis the workshop open on Monday evening?\n\nThanks, Anna"}],
             },
         ),
         "mailing.html": (
