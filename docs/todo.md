@@ -25,73 +25,13 @@ email field when a university address looks mistyped), and, with the
 security fixes of 2026-10-17, no browser autofill in the Microsoft 365 fields
 and the export password; then email through Microsoft 365 with a backup
 account (`docs/microsoft-mail-plan.md`, merged 2026-10-18 and in use on the
-live portal).
+live portal); the rest of the security review (`claude/audit-fixes`, merged
+2026-10-19); and the batch of 2026-10-20 (an answer's email quotes the whole
+conversation and a reply is shown without its quote, the side menu's groups
+set apart, deleted price-list items folded into one row, what the teams are
+owed off the dashboard).
 
 ## Open
-
-### Messages: the whole conversation in the email, an answer without its quote
-
-- **Added:** 2026-10-18
-- **What:** (1) the email of an answer written in Admin › Messages quotes the
-  whole conversation, newest first, capped at about the last 10 steps, the
-  contact form's message always at the bottom; (2) an answer that comes back
-  by email is shown without the part that quotes our email, with *Show
-  quoted text* to open the rest.
-- **Where:** `services/messages.py` (`_send_reply`: today
-  `quoted_text=message.body`), `templates/emails/contact_reply.html`,
-  `services/mail_replies.py` (`_text_of`), `db_models.ContactReply` (the
-  whole text kept), `frontend/src/components/MessageList.tsx`.
-- **Why:** "even after some writing back and forth, the reply … is still the
-  original message, and this could be a bit confusing"; the answer shown in
-  the portal carried our whole email again (logo text, "Support <…> schrieb
-  am …", the copyright line).
-- **Decided:** whole conversation rather than only the last message; the
-  first message kept "because this message was the original question or
-  problem"; trimming "makes sense". The details, and where the quote is
-  cut: `docs/messages-plan.md`, "Whole conversations, and team leads
-  answering in the portal".
-- The same code serves the team replies below; built first, or with them.
-
-### Side menu: the groups set apart more clearly
-
-- **Added:** 2026-10-18
-- **What:** the groups of a side menu (People, Money, Messages, Teams,
-  System in the admin area) read as one long list; the headings are small
-  and muted (`.groupLabel` in `frontend/src/frame/Frame.module.css`). "Make
-  this sidebar menu a bit more intuitive and easy to use … separate those
-  categories a bit more."
-- **Where:** `frame/Sidebar.tsx` and `Frame.module.css` -- one component for
-  the admin area, Settings and a team's area, so all three change. My
-  Account's menu has no groups and stays ("not necessary because it has no
-  categories").
-- **Decided (2026-10-18):** a 1px hairline above each group but the first,
-  more room above a heading (about 1.25rem instead of 0.875rem), and the
-  heading in the secondary text colour rather than the muted one, still
-  small capitals. "I think your idea works well."
-- **Ruled out:** the headings in cyan (the maintainer's first idea) --
-  `docs/design.md` keeps cyan for "act here" ("It is not decoration"), and
-  the current page in the menu is already cyan; cyan headings would compete
-  with it.
-
-### Admin dashboard: money owed to teams out of *Needs your attention*
-
-- **Added:** 2026-10-18
-- **What:** the card *Needs your attention* on the admin dashboard lists
-  "Teams to transfer money to" (the open amount, and teams without bank
-  details) beside reviews, forum and system problems. Take it out of the
-  card; nothing else on the dashboard replaces it.
-- **Where:** `frontend/src/pages/admin/AdminDashboard.tsx` (`tasksOf`, the
-  `transfers` task; `allClearDetail`, "nothing to transfer to the teams"),
-  `aeronautics_members/api/admin_dashboard.py` (`transfers`,
-  `team_money.open_transfers()`) -- the field goes from the API, then
-  `api-schema` and `npm run api:types`; their tests.
-- **Why:** "those are not really urgent in any sense. So I would transfer the
-  money maybe twice a year or once a month or so. And this would mean that
-  basically all the time this message will show up here in this card. And
-  this doesn't make any sense for such a card and for its intended purpose."
-- **Decided:** the open amounts stay where the money is looked after (Admin
-  › Money, the teams' balances and payouts); the card keeps only what wants
-  doing soon.
 
 ### Team leads answer their team's messages in the portal
 
@@ -145,25 +85,6 @@ live portal).
   group in the admin center, no PowerShell. `docs/microsoft-mail-setup.md`,
   step 5, to be rewritten for it when this is done. Sending only for
   `noreply` stays possible with a second group, if still wanted.
-
-### Price lists: deleted items folded into one row
-
-- **Added:** 2026-10-15
-- **What:** an item deleted after it was sold now stays in its price list for
-  good, greyed, "No longer on the list" -- in *30 days* too, with 0. "Over
-  the time, there are multiple or dozens of products that are deleted, but
-  are still shown in the list here. This would be annoying." Instead, **one
-  row**, folded: "▸ 3 no longer on the list · 9 sold · €18.40"; a click
-  unfolds the items, greyed as now. In *30 days* it counts only those sold in
-  the last 30 days, and is not there when there are none.
-- **Where:** `frontend/src/components/PriceList.tsx` (`GoneRow`, the `gone`
-  list), on Admin › Sales and a team's Sales page.
-- **Why folded, not hidden:** *Together* still adds up -- what they made does
-  not vanish from the totals -- and the detail stays one click away. A
-  deleted item never sold stays out of the list, as now.
-- **Decided (2026-10-18):** the folded row as proposed on 2026-10-15 ("I
-  like your ideas"). Hiding, removing or another list -- the other options
-  the maintainer had named -- were not taken.
 
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
