@@ -5,10 +5,12 @@ Messages, emailed to the sender from the mail account chosen for replies --
 with, if chosen, a blind copy to that account's own address -- then done.
 Only the contact form's: a message to a team's leads is answered by email.
 """
+from datetime import timedelta
+
 import pytest
 
 from conftest import db
-from aeronautics_members.db_models import AuditLog, ContactReply, MailAccount
+from aeronautics_members.db_models import AuditLog, ContactReply, MailAccount, utcnow
 from aeronautics_members.services import messages, settings_sections
 from aeronautics_members.services.privacy import erase_account, export_account_data
 from api_helpers import send
@@ -76,7 +78,8 @@ class TestAnswering:
         assert (email["from_account"], email["to_email"], email["subject"]) == (
             "support", "anna@example.com", "Re: My fee")
         assert "<strong>Monday</strong>" in str(email["body_html"])
-        assert email["quoted_text"] == "Was it paid?" and "wrote:" in email["quoted_intro"]
+        [quoted] = email["quoted"]
+        assert quoted["text"] == "Was it paid?" and "wrote:" in quoted["intro"]
         assert email.get("bcc_emails") is None and email.get("reply_to") is None
         out = response.get_json()
         assert out["done_at"] is not None and out["can_reply"] is True
@@ -168,3 +171,106 @@ class TestTheirData:
         erase_account(anna, actor_user=admins[1])
         db.session.commit()
         assert db.session.query(ContactReply).count() == 0
+
+
+class TestTheConversationQuoted:
+    """The email of an answer quotes the conversation before it, newest first,
+    the message it began with always last (docs/messages-plan.md)."""
+
+    def _reply_in(self, message, text):
+        db.session.add(ContactReply(message=message, incoming=True, body=text, account_key="support",
+                                    email_message_id=f"<in-{len(message.replies)}@example.com>"))
+        db.session.commit()
+
+    def test_newest_first_and_the_message_last(self, client, admins, written, mail):
+        _reply_settings()
+        messages.reply(admins[0], written, "First answer.")
+        self._reply_in(written, "Thanks!\n\nOn Sun, 18 Oct 2026 at 16:23, Support <support@example.org> wrote:\n"
+                                "> First answer.")
+        mail.clear()
+
+        messages.reply(admins[0], written, "Second answer.")
+
+        quoted = mail[0]["quoted"]
+        assert [step["text"] for step in quoted] == ["Thanks!", "First answer.", "Was it paid?"]
+        assert quoted[1]["intro"].endswith("Joanneum Aeronautics wrote:")
+        assert "wrote:" in quoted[0]["intro"] and "wrote:" in quoted[2]["intro"]
+
+    def test_a_long_one_is_cut_but_keeps_its_first_message(self, client, admins, written, mail):
+        _reply_settings()
+        for number in range(messages.QUOTED_MOST + 2):
+            messages.reply(admins[0], written, f"Answer {number}.")
+        mail.clear()
+
+        messages.reply(admins[0], written, "The last.")
+
+        quoted = mail[0]["quoted"]
+        assert len(quoted) == messages.QUOTED_MOST + 2
+        assert quoted[0]["text"] == f"Answer {messages.QUOTED_MOST + 1}."
+        assert quoted[-2] == {"intro": "2 earlier messages left out.", "text": ""}
+        assert quoted[-1]["text"] == "Was it paid?"
+
+    def test_in_the_order_written_not_stored(self, client, admins, written, mail):
+        # Their reply arrived between our two answers but was found later.
+        _reply_settings()
+        messages.reply(admins[0], written, "First answer.")
+        messages.reply(admins[0], written, "Second answer.")
+        first, second = written.replies
+        first.created_at = utcnow() - timedelta(hours=2)
+        second.created_at = utcnow() - timedelta(hours=1)
+        db.session.add(ContactReply(message=written, incoming=True, body="Thanks!", account_key="support",
+                                    email_message_id="<late@example.com>",
+                                    created_at=utcnow() - timedelta(minutes=90)))
+        db.session.commit()
+        mail.clear()
+
+        messages.reply(admins[0], written, "Third answer.")
+
+        assert [step["text"] for step in mail[0]["quoted"]] == [
+            "Second answer.", "Thanks!", "First answer.", "Was it paid?"]
+
+    def test_their_reply_is_shown_without_what_it_quotes(self, client, admins, written, mail):
+        _reply_settings()
+        messages.reply(admins[0], written, "Paid on Monday.")
+        self._reply_in(written, "Thank you!\n\nSupport <support@example.org> schrieb am So., 18. Okt. 2026, 16:23:\n"
+                                "[Joanneum Aeronautics]\n\nPaid on Monday.")
+        _login(client, admins[0].id)
+
+        [shown] = [message for message in client.get("/api/v1/admin/messages?state=all").get_json()["items"]
+                   if message["id"] == written.id]
+        reply = shown["replies"][-1]
+
+        assert reply["body"] == "Thank you!"
+        assert reply["quoted"].startswith("Support <support@example.org> schrieb am")
+        assert db.session.query(ContactReply).filter_by(incoming=True).one().body.endswith("Paid on Monday.")
+
+
+@pytest.mark.parametrize(("text", "written"), [
+    # Gmail, English, its "On ... wrote:" wrapped over two lines.
+    ("Thanks!\n\nOn Sun, 18 Oct 2026 at 16:23, Support Team of the Association <support@example.org>\nwrote:\n> Hi",
+     "Thanks!"),
+    # Gmail, German.
+    ("Danke!\n\nAm So., 18. Okt. 2026 um 16:23 Uhr schrieb Support <support@example.org>:\n> Hallo", "Danke!"),
+    ("Danke!\n\nSupport <support@example.org> schrieb am So., 18. Okt. 2026, 16:23:\nHallo", "Danke!"),
+    # Outlook.
+    ("Thanks\n\nFrom: Support <support@example.org>\nSent: Sunday, 18 October 2026 16:23\nTo: Anna", "Thanks"),
+    ("Thanks\n\n________________________________\nVon: Support", "Thanks"),
+    ("Thanks\n\n-----Original Message-----\nFrom: Support", "Thanks"),
+    # A quote at the end, line by line.
+    ("Thanks\n\n> Hello\n> there", "Thanks"),
+])
+def test_where_a_mail_program_starts_quoting(text, written):
+    assert messages.split_quote(text)[0] == written
+
+
+@pytest.mark.parametrize("text", [
+    "Just a reply, nothing quoted.",
+    # Answered between the quoted lines: all of it is theirs.
+    "> Was it paid?\nYes, on Monday.\n> And the receipt?\nAttached.",
+    # Nothing written above the quote: kept whole rather than shown empty.
+    "On Sun, 18 Oct 2026 at 16:23, Support <support@example.org> wrote:\n> Hi",
+    # A sentence that only mentions someone writing.
+    "From: my side, all good.\nThanks",
+])
+def test_left_whole(text):
+    assert messages.split_quote(text) == (text, None)

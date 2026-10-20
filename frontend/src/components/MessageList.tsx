@@ -40,6 +40,32 @@ interface MessageListProps {
 
 type Reply = ContactMessage['replies'][number];
 
+/** What their mail program quoted below their reply: folded, one click away. */
+function Quoted({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Stack gap={4} mt={4}>
+      <Anchor
+        component="button"
+        type="button"
+        size="xs"
+        c="dimmed"
+        aria-expanded={open}
+        onClick={() => {
+          setOpen(!open);
+        }}
+      >
+        {open ? 'Hide quoted text' : 'Show quoted text'}
+      </Anchor>
+      {open ? (
+        <Text size="sm" c="dimmed" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+          {text}
+        </Text>
+      ) : null}
+    </Stack>
+  );
+}
+
 /**
  * The answers written here, under the message: who, when, and whether it went
  * out -- and the sender's replies to them by email, set apart by their line.
@@ -68,6 +94,7 @@ function Replies({ replies, sender }: { replies: Reply[]; sender: string }) {
           <Text size="sm" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
             {answer.body}
           </Text>
+          {answer.quoted ? <Quoted text={answer.quoted} /> : null}
           {answer.sent_at || !answer.error ? null : (
             <Text size="xs" c="dimmed">
               {`Tried again shortly. ${answer.error}`}

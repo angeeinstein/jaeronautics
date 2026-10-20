@@ -174,12 +174,45 @@ describe('a team’s Sales page', () => {
     await waitFor(() => {
       expect(within(table).getByRole('row', { name: /^Beer/ })).toHaveTextContent('€2.003€6.00');
     });
+    // Not sold in the last 30 days: no row for it then.
+    expect(within(table).queryByText(/no longer on the list/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByText('Ever'));
     expect(within(table).getByRole('row', { name: /^Beer/ })).toHaveTextContent('€2.005€10.00');
+    // Folded into one row; opened, the item itself.
+    const folded = within(table).getByRole('button', { name: '1 no longer on the list' });
+    expect(folded).toHaveAttribute('aria-expanded', 'false');
+    expect(within(table).queryByRole('row', { name: /Old cola/ })).not.toBeInTheDocument();
+    expect(within(table).getByRole('row', { name: /1 no longer on the list/ })).toHaveTextContent('2€3.00');
+    await userEvent.click(folded);
     expect(within(table).getByRole('row', { name: /Old cola/ })).toHaveTextContent(
       'No longer on the list2€3.00',
     );
     expect(within(table).getByRole('row', { name: /Together/ })).toHaveTextContent('5€10.00');
+  });
+
+  it('a deleted item’s sale taken back in the last 30 days keeps its row then', async () => {
+    showTeam(['team.edit_prices'], {
+      '/api/v1/teams/rocket/manage/sales': {
+        body: seller({
+          items: [
+            ...seller().items,
+            {
+              item_id: 9,
+              listed: false,
+              name: 'Old cola',
+              icon: 'soft_drink',
+              sold_30_days: -1,
+              earned_30_days: -150,
+              sold: 1,
+              earned: 150,
+            },
+          ],
+        }),
+      },
+    });
+
+    const table = await screen.findByRole('table', { name: 'Price list' });
+    expect(await within(table).findByRole('button', { name: '1 no longer on the list' })).toBeInTheDocument();
   });
 
   it('an item deleted after asking once more', async () => {

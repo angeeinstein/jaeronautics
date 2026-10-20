@@ -23,12 +23,34 @@ checked by its chip), attendance with the same cards
 with its tabs, Admin › Attendance always in the menu, a hint under every
 email field when a university address looks mistyped), and, with the
 security fixes of 2026-10-17, no browser autofill in the Microsoft 365 fields
-and the export password. The price-list proposal below waits for the
-maintainer's answer.
+and the export password; then email through Microsoft 365 with a backup
+account (`docs/microsoft-mail-plan.md`, merged 2026-10-18 and in use on the
+live portal); the rest of the security review (`claude/audit-fixes`, merged
+2026-10-19); and the batch of 2026-10-20 (an answer's email quotes the whole
+conversation and a reply is shown without its quote, the side menu's groups
+set apart, deleted price-list items folded into one row, what the teams are
+owed off the dashboard).
 
 ## Open
 
-### Microsoft 365: narrow the app's mail permissions to the two mailboxes
+### Team leads answer their team's messages in the portal
+
+- **Added:** 2026-10-18
+- **What:** a feature, its own branch. Admins choose a mail account for a
+  team (its shared mailbox); the team's leads in force answer a message on
+  the team's Messages page; it goes out from that account; answers come back
+  into the thread when it is a Microsoft 365 mailbox, and the leads are told
+  by email. A team without an account keeps *Answer by email* (a `mailto:`
+  link), which goes once it has one; so does the Reply-To of the email to
+  the leads.
+- **Where:** `docs/messages-plan.md`, "Whole conversations, and team leads
+  answering in the portal" -- what was decided, in full.
+- **Why:** today the lead answers from their private mailbox, so the sender
+  sees that address and the portal never sees the answer.
+- **When:** "I don't want to work on this now" (2026-10-18) -- built when the
+  maintainer asks for it, not with a batch.
+
+### Microsoft 365: narrow the app's mail permissions (later)
 
 - **Added:** 2026-10-18
 - **What:** for testing, the app registration `Portal mail` was given the
@@ -53,25 +75,16 @@ maintainer's answer.
   *Enterprise applications* › `Portal mail` › *Permissions*; then *Test*
   on both accounts in Settings › Email. The two kinds add up: the roles do
   not narrow what is granted in Entra.
-- **Before** the live portal uses the Microsoft accounts.
-
-### Price lists: deleted items folded into one row
-
-- **Added:** 2026-10-15
-- **What:** an item deleted after it was sold now stays in its price list for
-  good, greyed, "No longer on the list" -- in *30 days* too, with 0. "Over
-  the time, there are multiple or dozens of products that are deleted, but
-  are still shown in the list here. This would be annoying." Instead, **one
-  row**, folded: "▸ 3 no longer on the list · 9 sold · €18.40"; a click
-  unfolds the items, greyed as now. In *30 days* it counts only those sold in
-  the last 30 days, and is not there when there are none.
-- **Where:** `frontend/src/components/PriceList.tsx` (`GoneRow`, the `gone`
-  list), on Admin › Sales and a team's Sales page.
-- **Why folded, not hidden:** *Together* still adds up -- what they made does
-  not vanish from the totals -- and the detail stays one click away. A
-  deleted item never sold stays out of the list, as now.
-- **Open question:** the proposal above, offered 2026-10-15 (the maintainer
-  named hiding, removing, a collapsed section or another list as options).
+- **Put off (2026-10-18):** "that's a point for later on." The live
+  portal sends through the Microsoft accounts since 2026-10-18 with the wide
+  permissions.
+- **Changed (2026-10-18):** with team mailboxes coming (the item above), not
+  two mailboxes named one by one: a **mail-enabled security group**
+  ("Portal mailboxes") holds every mailbox the portal may use, and the
+  management scope is that group -- a new team mailbox is then added to the
+  group in the admin center, no PowerShell. `docs/microsoft-mail-setup.md`,
+  step 5, to be rewritten for it when this is done. Sending only for
+  `noreply` stays possible with a second group, if still wanted.
 
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
@@ -251,6 +264,26 @@ Talked about, not agreed as work. Not built unless the maintainer brings them up
 What the maintainer did not want, and why -- a record, not a ban. Any of it
 may be suggested again, saying what has changed since. Only what the
 maintainer explicitly says must never change is marked so.
+
+- **Small points of the security review of 2026-10-17, left as they are**
+  (2026-10-19). The rest of that review is fixed (`claude/audit-fixes`).
+  - *A second credit top-up while the first is still being reported* can
+    take a balance past the limit. "This limit is mainly meant so that I
+    don't have to deal with a thousand euros sitting as credit in our
+    portal. If a single person has a bit more than 20 euros, I don't care."
+  - *Signing out of the portal by a plain link* (`/forum/logout`, where
+    Discourse sends a browser after signing out of the forum): another site
+    can sign a visitor out. A nuisance only; "if it ever becomes an issue,
+    we can fix this" -- then: sign out at once only when the forum or the
+    portal sends the browser there, else a *Sign out?* button.
+  - *Signing in answers a little faster for an address with no account.*
+    Signing up says so anyway: "I don't think this is really an issue."
+  - *Made-up presence pings* could fill the count of open tabs that Settings
+    › Updates shows: "for the past weeks this has worked quite well." Fix
+    if needed: only signed-in tabs count toward the cap.
+  - *The Stripe library's key set per request* (one global variable): only
+    matters with a second Stripe account -- "I only have a single Stripe
+    account."
 
 - **The credit switch hiding everything that belongs to credit** (2026-10-15).
   Asked: with credit off, Admin › Credit and Admin › Sales still showed (they

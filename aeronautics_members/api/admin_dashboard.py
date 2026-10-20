@@ -11,7 +11,7 @@ from typing import Literal
 from flask_login import current_user
 
 from ..permissions import Permission
-from ..services import dashboard, reviews, team_money
+from ..services import dashboard, reviews
 from ..services.audit import get_recent_audit_logs
 from ..services.diagnostics import collect_system_health
 from ..services.membership import format_membership_date_display
@@ -26,15 +26,6 @@ class WaitingCountOut(Model):
     at: UtcDateTime | None
 
 
-class Transfers(Model):
-    """What the teams are owed and not yet sent, in cents."""
-
-    teams: int
-    open: int
-    #: Of those teams, how many have given no account to send it to.
-    without_account: int
-
-
 class Attention(Model):
     """``None`` for a kind the person may not act on, so the page does not offer it."""
 
@@ -42,7 +33,6 @@ class Attention(Model):
     pictures: WaitingCountOut | None
     sync_problems: WaitingCountOut | None
     health_problems: list[str] | None
-    transfers: Transfers | None
 
 
 class Figure(Model):
@@ -101,11 +91,10 @@ def _attention():
     health = None
     if current_user.can(Permission.SYSTEM_UPDATE):
         health = list(collect_system_health(check_pages=False)["problems"])
-    transfers = None
-    if current_user.can(Permission.TEAMS_MONEY):
-        transfers = Transfers(**team_money.open_transfers())
+    # What the teams are owed is not here: it is passed on a few times a year,
+    # so it would always be waiting. Admin › Money has it.
     return Attention(name_changes=name_changes, pictures=pictures, sync_problems=sync_problems,
-                     health_problems=health, transfers=transfers)
+                     health_problems=health)
 
 
 def _figures():

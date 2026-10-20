@@ -26,6 +26,7 @@ elsewhere): a hidden field people do not see and bots fill in, a form sent
 faster than a person types, and rate limits on the endpoint.
 """
 
+import re
 from datetime import timedelta, timezone
 from email.utils import make_msgid
 
@@ -248,6 +249,102 @@ def local_time(moment):
     return aware.astimezone(MEMBERSHIP_TIMEZONE)
 
 
+#: How many of the latest steps of a conversation an answer's email quotes;
+#: the message it began with is always quoted as well, last.
+QUOTED_MOST = 10
+
+#: A line where a mail program starts quoting what it answers: Gmail's and
+#: Outlook's in English and German (docs/messages-plan.md, "Whole
+#: conversations").
+_QUOTE_STARTS = (
+    re.compile(r"^On\b.{0,300}\bwrote:$"),
+    re.compile(r"^Am\b.{0,300}\bschrieb\b.{0,300}:$"),
+    re.compile(r"^.{0,300}\bschrieb am\b.{0,300}:$"),
+    re.compile(r"^-{2,}\s*(Original Message|Ursprüngliche Nachricht|Forwarded message|Weitergeleitete Nachricht)"
+               r"\s*-{2,}$", re.IGNORECASE),
+    re.compile(r"^_{10,}$"),
+)
+_HEADER_FROM = re.compile(r"^(From|Von):\s", re.IGNORECASE)
+_HEADER_SENT = re.compile(r"^(Sent|Gesendet|Date|Datum):\s", re.IGNORECASE)
+
+
+def _quote_starts_at(lines):
+    """The index of the line where quoting starts, or None."""
+    for index, line in enumerate(lines):
+        text = line.strip()
+        joined = f"{text} {lines[index + 1].strip()}" if index + 1 < len(lines) else text
+        if any(pattern.match(text) for pattern in _QUOTE_STARTS):
+            return index
+        # Gmail wraps a long "On ... wrote:" over two lines.
+        if text.startswith(("On ", "Am ")) and any(pattern.match(joined) for pattern in _QUOTE_STARTS[:2]):
+            return index
+        # Outlook: "From: ..." with "Sent: ..." or "Date: ..." below it.
+        if _HEADER_FROM.match(text) and any(_HEADER_SENT.match(below.strip()) for below in lines[index + 1:index + 5]):
+            return index
+        # A block of "> ..." lines to the end.
+        if text.startswith(">") and all(not rest.strip() or rest.lstrip().startswith(">") for rest in lines[index:]):
+            return index
+    return None
+
+
+def split_quote(text):
+    """An emailed reply as ``(what they wrote, what their mail program quoted
+    below it)``; the second is None when nothing is quoted. The whole text is
+    kept; only what is shown, and what an answer quotes, is cut. A reply that
+    would be nothing without its quote is kept whole."""
+    lines = (text or "").split("\n")
+    start = _quote_starts_at(lines)
+    if start is None:
+        return text, None
+    written = "\n".join(lines[:start]).rstrip()
+    if not written:
+        return text, None
+    return written, "\n".join(lines[start:]).strip() or None
+
+
+def _wrote(moment, name):
+    written = local_time(moment)
+    return f"On {written:%d.%m.%Y} at {written:%H:%M}, {name} wrote:"
+
+
+def _our_name(account_key):
+    """Who our answers are from, as the email said: the account's sender name."""
+    from ..db_models import MailAccount
+
+    account = db.session.execute(db.select(MailAccount).filter_by(account_key=account_key)).scalar_one_or_none()
+    if account is not None and (account.from_name or account.from_email):
+        return account.from_name or account.from_email
+    return "We"
+
+
+def _quoted_conversation(reply):
+    """What the email of ``reply`` quotes: every step before it, newest first
+    -- the latest ``QUOTED_MOST``, then a line for those left out -- and the
+    message it began with, always, last. From what the portal keeps, so it
+    stays clean: their replies without what their mail program quoted."""
+    message = reply.message
+
+    # By when each was written or arrived -- a reply found by the 15-minute
+    # look can be stored after a newer one -- the id only breaking a tie.
+    def when(step):
+        return (step.created_at, step.id)
+
+    earlier = [step for step in sorted(message.replies, key=when) if when(step) < when(reply)]
+    shown = earlier[-QUOTED_MOST:]
+    quoted = []
+    for step in reversed(shown):
+        if step.incoming:
+            quoted.append({"intro": _wrote(step.created_at, message.sender_name), "text": split_quote(step.body)[0]})
+        else:
+            quoted.append({"intro": _wrote(step.created_at, _our_name(step.account_key)), "text": step.body})
+    left_out = len(earlier) - len(shown)
+    if left_out:
+        quoted.append({"intro": f"{left_out} earlier {'message' if left_out == 1 else 'messages'} left out.",
+                       "text": ""})
+    quoted.append({"intro": _wrote(message.created_at, message.sender_name), "text": message.body})
+    return quoted
+
+
 def _reply_subject(message):
     return message.subject if message.subject.lower().startswith("re:") else f"Re: {message.subject}"
 
@@ -268,7 +365,6 @@ def _send_reply(reply):
                   if key in existing]
         reply.account_key = usable[0] if usable else reply.account_key
     copy = mailings.account_address(reply.account_key) if mailings.reply_copy() else ""
-    written = local_time(message.created_at)
     # Its Message-ID, kept: a reply to it is recognised by it
     # (services/mail_replies.py). Made once, so a retry is the same email.
     if not reply.email_message_id:
@@ -290,8 +386,7 @@ def _send_reply(reply):
         subject=_reply_subject(message),
         template_name="contact_reply.html",
         body_html=mailings.render_body(reply.body),
-        quoted_intro=f"On {written:%d.%m.%Y} at {written:%H:%M}, {message.sender_name} wrote:",
-        quoted_text=message.body,
+        quoted=_quoted_conversation(reply),
         bcc_emails=[copy] if copy and copy.lower() != message.sender_email.lower() else None,
         headers=headers,
         return_error=True,

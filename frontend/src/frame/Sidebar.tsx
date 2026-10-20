@@ -80,7 +80,7 @@ export function Sidebar({ content, onNavigate }: { content: SidebarContent; onNa
             </Group>
           ) : null}
           {content.groups.map((group) => (
-            <section key={group.label} aria-label={group.label}>
+            <section key={group.label} aria-label={group.label} className={classes.group}>
               <div className={classes.groupLabel} aria-hidden>
                 {group.label}
               </div>

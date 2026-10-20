@@ -16,7 +16,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { Panel } from '../../components/Panel';
 import { StatTile } from '../../components/StatTile';
 import { EmptyState, ErrorState, LoadingState } from '../../components/States';
-import { formatDateTime, formatEuros, plural, titleFromCode } from '../../lib/format';
+import { formatDateTime, plural, titleFromCode } from '../../lib/format';
 import classes from './AdminDashboard.module.css';
 import { EVERY_30_SECONDS, useLiveRefresh } from '../../lib/live';
 
@@ -41,13 +41,7 @@ interface Task {
 /** What is waiting, as one task per kind -- only kinds with something waiting. */
 export function tasksOf(attention: Attention): Task[] {
   const tasks: Task[] = [];
-  const {
-    name_changes: changes,
-    pictures,
-    sync_problems: sync,
-    health_problems: health,
-    transfers,
-  } = attention;
+  const { name_changes: changes, pictures, sync_problems: sync, health_problems: health } = attention;
   if (changes?.count) {
     tasks.push({
       key: 'name_changes',
@@ -94,21 +88,6 @@ export function tasksOf(attention: Attention): Task[] {
       primary: false,
     });
   }
-  if (transfers?.teams) {
-    tasks.push({
-      key: 'transfers',
-      count: transfers.teams,
-      title: plural(transfers.teams, 'Team to transfer money to', 'Teams to transfer money to'),
-      detail: `${formatEuros(transfers.open)} open${
-        transfers.without_account
-          ? `; ${plural(transfers.without_account, '1 team has', `${String(transfers.without_account)} teams have`)} no bank details yet`
-          : ''
-      }`,
-      to: '/admin/money',
-      action: 'Open Money',
-      primary: false,
-    });
-  }
   return tasks;
 }
 
@@ -118,22 +97,28 @@ function allClearDetail(attention: Attention): string {
   if (attention.name_changes !== null || attention.pictures !== null) clear.push('no reviews waiting');
   if (attention.sync_problems !== null) clear.push('no forum problems');
   if (attention.health_problems !== null) clear.push('no system problems');
-  if (attention.transfers !== null) clear.push('nothing to transfer to the teams');
   const sentence = clear.join(', ');
   return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`;
 }
 
-function NeedsAttention({ attention }: { attention: Attention }) {
+/**
+ * What waits for the person. Somebody who may act on none of it -- the
+ * treasurer, whose work is under Money -- and sees nothing else here is not
+ * left with an empty page.
+ */
+function NeedsAttention({ attention, alone }: { attention: Attention; alone: boolean }) {
   const tasks = tasksOf(attention);
   const seesAnyKind = [
     attention.name_changes,
     attention.pictures,
     attention.sync_problems,
     attention.health_problems,
-    attention.transfers,
   ].some((kind) => kind !== null);
   if (!tasks.length) {
-    if (!seesAnyKind) return null;
+    if (!seesAnyKind)
+      return alone ? (
+        <AllClear title="Nothing needs your attention" detail="The rest is in the side menu." />
+      ) : null;
     return <AllClear title="Nothing needs your attention" detail={allClearDetail(attention)} />;
   }
   return (
@@ -210,7 +195,10 @@ export function AdminDashboard() {
         <ErrorState error={dashboard.error} onRetry={() => void dashboard.refetch()} />
       ) : (
         <Stack gap="lg">
-          <NeedsAttention attention={dashboard.data.attention} />
+          <NeedsAttention
+            attention={dashboard.data.attention}
+            alone={!dashboard.data.figures.length && dashboard.data.recent_activity === null}
+          />
           {dashboard.data.figures.length ? (
             <SimpleGrid cols={{ base: 1, sm: 2, lg: dashboard.data.figures.length }} spacing="md">
               {dashboard.data.figures.map((figure) => (

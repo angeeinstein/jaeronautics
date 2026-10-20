@@ -63,7 +63,10 @@ class MessageSentOut(Model):
 
 class ContactReplyOut(Model):
     id: int
+    #: For a reply by email, what they wrote -- without what their mail
+    #: program quoted below it, which is ``quoted``.
     body: str
+    quoted: str | None = None
     author: str | None
     created_at: UtcDateTime
     #: None while its email has not gone out; ``error`` says why. For a reply
@@ -126,6 +129,13 @@ def _name(user):
     return f"{member.first_name} {member.last_name}".strip() if member is not None else user.email
 
 
+def _reply_out(answer):
+    body, quoted = (messages_service.split_quote(answer.body) if answer.incoming else (answer.body, None))
+    return ContactReplyOut(id=answer.id, body=body, quoted=quoted, author=_name(answer.author),
+                           created_at=answer.created_at, sent_at=answer.sent_at, error=answer.error,
+                           incoming=bool(answer.incoming), has_attachments=bool(answer.has_attachments))
+
+
 def message_out(message):
     context = message.context or {}
     return ContactMessageOut(
@@ -143,10 +153,7 @@ def message_out(message):
         delivered=message.delivered_at is not None,
         done_at=message.done_at,
         done_by=_name(message.done_by),
-        replies=[ContactReplyOut(id=answer.id, body=answer.body, author=_name(answer.author),
-                                 created_at=answer.created_at, sent_at=answer.sent_at, error=answer.error,
-                                 incoming=bool(answer.incoming), has_attachments=bool(answer.has_attachments))
-                 for answer in message.replies],
+        replies=[_reply_out(answer) for answer in message.replies],
         can_reply=message.team_id is None,
     )
 
