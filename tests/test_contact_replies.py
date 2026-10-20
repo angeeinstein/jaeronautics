@@ -5,10 +5,12 @@ Messages, emailed to the sender from the mail account chosen for replies --
 with, if chosen, a blind copy to that account's own address -- then done.
 Only the contact form's: a message to a team's leads is answered by email.
 """
+from datetime import timedelta
+
 import pytest
 
 from conftest import db
-from aeronautics_members.db_models import AuditLog, ContactReply, MailAccount
+from aeronautics_members.db_models import AuditLog, ContactReply, MailAccount, utcnow
 from aeronautics_members.services import messages, settings_sections
 from aeronautics_members.services.privacy import erase_account, export_account_data
 from api_helpers import send
@@ -207,6 +209,25 @@ class TestTheConversationQuoted:
         assert quoted[0]["text"] == f"Answer {messages.QUOTED_MOST + 1}."
         assert quoted[-2] == {"intro": "2 earlier messages left out.", "text": ""}
         assert quoted[-1]["text"] == "Was it paid?"
+
+    def test_in_the_order_written_not_stored(self, client, admins, written, mail):
+        # Their reply arrived between our two answers but was found later.
+        _reply_settings()
+        messages.reply(admins[0], written, "First answer.")
+        messages.reply(admins[0], written, "Second answer.")
+        first, second = written.replies
+        first.created_at = utcnow() - timedelta(hours=2)
+        second.created_at = utcnow() - timedelta(hours=1)
+        db.session.add(ContactReply(message=written, incoming=True, body="Thanks!", account_key="support",
+                                    email_message_id="<late@example.com>",
+                                    created_at=utcnow() - timedelta(minutes=90)))
+        db.session.commit()
+        mail.clear()
+
+        messages.reply(admins[0], written, "Third answer.")
+
+        assert [step["text"] for step in mail[0]["quoted"]] == [
+            "Second answer.", "Thanks!", "First answer.", "Was it paid?"]
 
     def test_their_reply_is_shown_without_what_it_quotes(self, client, admins, written, mail):
         _reply_settings()

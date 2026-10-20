@@ -190,6 +190,31 @@ describe('a team’s Sales page', () => {
     expect(within(table).getByRole('row', { name: /Together/ })).toHaveTextContent('5€10.00');
   });
 
+  it('a deleted item’s sale taken back in the last 30 days keeps its row then', async () => {
+    showTeam(['team.edit_prices'], {
+      '/api/v1/teams/rocket/manage/sales': {
+        body: seller({
+          items: [
+            ...seller().items,
+            {
+              item_id: 9,
+              listed: false,
+              name: 'Old cola',
+              icon: 'soft_drink',
+              sold_30_days: -1,
+              earned_30_days: -150,
+              sold: 1,
+              earned: 150,
+            },
+          ],
+        }),
+      },
+    });
+
+    const table = await screen.findByRole('table', { name: 'Price list' });
+    expect(await within(table).findByRole('button', { name: '1 no longer on the list' })).toBeInTheDocument();
+  });
+
   it('an item deleted after asking once more', async () => {
     const { calls } = showTeam(['team.edit_prices'], {
       'DELETE /api/v1/teams/rocket/manage/prices/1': { body: { ...list, items: [list.items[1]] } },

@@ -8,7 +8,8 @@
  * made, the last 30 days or ever; below, what was sold of items deleted
  * since, folded into one row that opens to show them -- they would pile up
  * over the years -- and still counted in *Together*. In *30 days* the row
- * counts only those sold then, and is not there when there are none. A new
+ * counts only those sold or taken back then, and is not there when there are
+ * none. A new
  * price counts for the next sale; sales made keep theirs.
  */
 import {
@@ -375,7 +376,9 @@ function GoneRow({ found, period }: { found: ItemSales; period: Period }) {
 /** The deleted items as one row, "3 no longer on the list", opening to show each. */
 function GoneRows({ gone, period }: { gone: ItemSales[]; period: Period }) {
   const [open, setOpen] = useState(false);
-  const shown = period === '30' ? gone.filter((found) => found.sold_30_days > 0) : gone;
+  // In 30 days: those with anything then -- a sale taken back counts too.
+  const shown =
+    period === '30' ? gone.filter((found) => found.sold_30_days !== 0 || found.earned_30_days !== 0) : gone;
   if (!shown.length) return null;
   const sold = shown.reduce((sum, found) => sum + figures(found, period).sold, 0);
   const made = shown.reduce((sum, found) => sum + figures(found, period).made, 0);

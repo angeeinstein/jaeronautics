@@ -323,7 +323,13 @@ def _quoted_conversation(reply):
     message it began with, always, last. From what the portal keeps, so it
     stays clean: their replies without what their mail program quoted."""
     message = reply.message
-    earlier = [step for step in sorted(message.replies, key=lambda step: step.id) if step.id < reply.id]
+
+    # By when each was written or arrived -- a reply found by the 15-minute
+    # look can be stored after a newer one -- the id only breaking a tie.
+    def when(step):
+        return (step.created_at, step.id)
+
+    earlier = [step for step in sorted(message.replies, key=when) if when(step) < when(reply)]
     shown = earlier[-QUOTED_MOST:]
     quoted = []
     for step in reversed(shown):
