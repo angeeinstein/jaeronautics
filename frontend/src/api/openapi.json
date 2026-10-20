@@ -1701,24 +1701,13 @@
                 "type": "null"
               }
             ]
-          },
-          "transfers": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Transfers"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "required": [
           "name_changes",
           "pictures",
           "sync_problems",
-          "health_problems",
-          "transfers"
+          "health_problems"
         ],
         "title": "Attention",
         "type": "object"
@@ -18190,31 +18179,6 @@
           "amount"
         ],
         "title": "TransferIn",
-        "type": "object"
-      },
-      "Transfers": {
-        "additionalProperties": false,
-        "description": "What the teams are owed and not yet sent, in cents.",
-        "properties": {
-          "open": {
-            "title": "Open",
-            "type": "integer"
-          },
-          "teams": {
-            "title": "Teams",
-            "type": "integer"
-          },
-          "without_account": {
-            "title": "Without Account",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "teams",
-          "open",
-          "without_account"
-        ],
-        "title": "Transfers",
         "type": "object"
       },
       "TreasurerIn": {

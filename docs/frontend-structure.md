@@ -512,7 +512,8 @@ The mockup's CSS is at the top of `docs/design/navigation-mockup.html`.
 - **What the association's Treasurer sees** -- *decided (step 4.5).* Everything
   that touches the money they transfer to the teams, and nothing else of the admin
   area: Money (what each team is owed, the check against Stripe), each team's money
-  with its payments, transfers and bank details, and a dashboard that shows what is
-  open to transfer -- not the membership figures, which need the accounts
-  permission. Who paid is shown, as it is what leads to the amounts; no other member
+  with its payments, transfers and bank details. The dashboard shows them nothing
+  to do (what is open to transfer is passed on a few times a year and would always
+  be waiting there, 2026-10-18: it is under Money) -- not the membership figures,
+  which need the accounts permission. Who paid is shown, as it is what leads to the amounts; no other member
   data.

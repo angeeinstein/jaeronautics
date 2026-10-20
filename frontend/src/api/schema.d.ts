@@ -4332,7 +4332,6 @@ export interface components {
             name_changes: components["schemas"]["WaitingCountOut"] | null;
             pictures: components["schemas"]["WaitingCountOut"] | null;
             sync_problems: components["schemas"]["WaitingCountOut"] | null;
-            transfers: components["schemas"]["Transfers"] | null;
         };
         /** AudienceIn */
         AudienceIn: {
@@ -9713,18 +9712,6 @@ export interface components {
              * @default null
              */
             reference?: string | null;
-        };
-        /**
-         * Transfers
-         * @description What the teams are owed and not yet sent, in cents.
-         */
-        Transfers: {
-            /** Open */
-            open: number;
-            /** Teams */
-            teams: number;
-            /** Without Account */
-            without_account: number;
         };
         /** TreasurerIn */
         TreasurerIn: {

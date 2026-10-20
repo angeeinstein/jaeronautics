@@ -393,17 +393,6 @@ def all_teams_money():
     return rows
 
 
-def open_transfers():
-    """What is waiting to be passed on: how many teams are owed something, how
-    much in all, and how many of those have given no account to send it to."""
-    owed = [row for row in all_teams_money() if row["open"] > 0]
-    return {
-        "teams": len(owed),
-        "open": sum(row["open"] for row in owed),
-        "without_account": sum(1 for row in owed if not row["team"].bank_iban),
-    }
-
-
 # --- The team's bank account -------------------------------------------------------
 
 

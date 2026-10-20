@@ -24,18 +24,16 @@ test.describe('money', () => {
     await page.goto('/admin');
 
     await expect(page.getByText('What needs doing.')).toBeVisible();
-    const attention = page.getByRole('region', { name: 'Needs your attention' });
-    await expect(attention).toContainText('€12.00 open');
+    // What the teams are owed waits under Money, not on the dashboard.
+    await expect(page.getByText('Nothing needs your attention')).toBeVisible();
     await expect(page.getByText('Active members')).toHaveCount(0);
     if (!isMobile) {
       // On a phone the sections are behind the menu button.
       const sidebar = page.getByRole('navigation', { name: 'Sections' });
-      await expect(sidebar.getByRole('link', { name: 'Money' })).toBeVisible();
       await expect(sidebar.getByRole('link', { name: 'Accounts' })).toHaveCount(0);
+      await sidebar.getByRole('link', { name: 'Money' }).click();
+      await expect(page).toHaveURL(/\/admin\/money$/);
     }
-    await attention.getByRole('link', { name: 'Open Money' }).click();
-
-    await expect(page).toHaveURL(/\/admin\/money$/);
   });
 
   test('on a phone nothing sticks out of the page', async ({ page, isMobile }) => {
