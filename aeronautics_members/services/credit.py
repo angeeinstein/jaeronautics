@@ -470,6 +470,15 @@ def _paid(session, account):
         db.select(Payment.id).filter_by(stripe_payment_intent_id=payment_intent)
     ).first() is not None:
         return  # reported twice
+    # Reported twice, the first time without the payment it was made with:
+    # the receipt invoice is the same, so is the payment.
+    invoice = _id(session.get("invoice"))
+    known = db.session.execute(
+        db.select(Payment).filter_by(stripe_invoice_id=invoice)
+    ).scalars().first() if invoice else None
+    if known is not None:
+        known.stripe_payment_intent_id = known.stripe_payment_intent_id or payment_intent
+        return
     amount = int(session.get("amount_total") or 0)
     currency = (session.get("currency") or CURRENCY)[:3].lower()
     if amount <= 0 or currency != CURRENCY:
@@ -478,7 +487,7 @@ def _paid(session, account):
         return
     payment = Payment(
         purpose=PURPOSE, user_id=account.user_id, stripe_payment_intent_id=payment_intent,
-        stripe_invoice_id=_id(session.get("invoice")), amount_cents=amount, currency=currency,
+        stripe_invoice_id=invoice, amount_cents=amount, currency=currency,
         paid_at=get_now_utc(),
     )
     db.session.add(payment)

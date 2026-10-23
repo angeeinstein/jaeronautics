@@ -129,6 +129,25 @@ class TestJoining:
         db.session.refresh(membership)
         assert membership.status == teams.ACTIVE and db.session.query(Payment).count() == 1
 
+    def test_confirmed_again_with_the_payment_the_first_report_lacked(self, app, client, monkeypatch, stripe_fake):
+        # The same receipt invoice: the same payment, not a second one.
+        team, lead = _led()
+        _once_per_period(team)
+        _anna, membership = _approved(team, lead)
+        until = team_payments.joining_period(team)["paid_until"]
+        first = _session_event("evt_1", "checkout.session.completed", membership, covers_until=until,
+                               payment_intent=None)
+        first["data"]["object"]["invoice"] = "in_receipt"
+        post_event(client, monkeypatch, first)
+
+        again = _session_event("evt_2", "checkout.session.async_payment_succeeded", membership, covers_until=until)
+        again["data"]["object"]["invoice"] = "in_receipt"
+        response = post_event(client, monkeypatch, again)
+
+        assert response.status_code == 200
+        [payment] = db.session.query(Payment).all()
+        assert (payment.stripe_invoice_id, payment.stripe_payment_intent_id) == ("in_receipt", "pi_1")
+
     def test_a_sepa_debit_that_fails(self, app, client, monkeypatch, stripe_fake):
         team, lead = _led()
         _once_per_period(team)
