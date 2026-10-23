@@ -921,16 +921,25 @@ def _one_time_paid(session, membership):
 
     payment_intent = session.get("payment_intent")
     payment_intent = payment_intent if isinstance(payment_intent, str) else (payment_intent or {}).get("id")
+    invoice = session.get("invoice")
+    invoice = invoice if isinstance(invoice, str) else (invoice or {}).get("id")
     if payment_intent and db.session.execute(
         db.select(Payment.id).filter_by(stripe_payment_intent_id=payment_intent)
     ).first() is not None:
         return  # reported twice
+    # Reported twice, the first time without the payment it was made with:
+    # the receipt invoice is the same, so is the payment.
+    known = db.session.execute(
+        db.select(Payment).filter_by(stripe_invoice_id=invoice)
+    ).scalars().first() if invoice else None
+    if known is not None:
+        known.stripe_payment_intent_id = known.stripe_payment_intent_id or payment_intent
+        return
     covers_until = parse_iso_date((session.get("metadata") or {}).get("covers_until"))
-    invoice = session.get("invoice")
     db.session.add(Payment(
         purpose=payments.PURPOSE_TEAM, user_id=membership.user_id, team_id=membership.team_id,
         team_membership_id=membership.id, stripe_payment_intent_id=payment_intent,
-        stripe_invoice_id=invoice if isinstance(invoice, str) else (invoice or {}).get("id"),
+        stripe_invoice_id=invoice,
         amount_cents=int(session.get("amount_total") or 0),
         currency=(session.get("currency") or "eur")[:3], covers_until=covers_until, paid_at=get_now_utc(),
     ))

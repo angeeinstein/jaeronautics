@@ -229,6 +229,20 @@ class TestWhatStripeReports:
 
         assert credit.balance_of(anna) == 1000
 
+    def test_reported_again_with_the_payment_the_first_report_lacked(self, client, monkeypatch, credit_on):
+        # The same receipt invoice: the same payment, added once.
+        anna = _person()
+        first = _paid_session(anna, 1000)
+        first["data"]["object"]["payment_intent"] = None
+        post_event(client, monkeypatch, first)
+
+        again = _paid_session(anna, 1000, event="checkout.session.async_payment_succeeded")
+        assert post_event(client, monkeypatch, again).status_code == 200
+
+        assert credit.balance_of(anna) == 1000
+        payment = db.session.query(Payment).filter_by(purpose="credit").one()
+        assert (payment.stripe_payment_intent_id, payment.stripe_invoice_id) == ("pi_1", "in_1")
+
     def test_added_even_when_switched_off_since(self, client, monkeypatch, credit_on):
         anna = _person()
         credit.save_settings(None, enabled=False, product_id=PRODUCT, min_top_up_cents=1000,
