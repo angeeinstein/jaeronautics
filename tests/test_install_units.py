@@ -129,13 +129,14 @@ def test_the_timers_are_restarted_not_only_enabled(installer):
     body = body[: body.index("\n}")]
     assert 'systemctl restart "${SERVICE_NAME}-${timer}.timer"' in body
     for timer in ("billing-reconcile", "notifications", "cleanup-logs",
-                  "forum-drift", "external-work", "update-runner"):
+                  "forum-drift", "external-work", "automatic-updates", "update-runner"):
         assert timer in body
 
 
 # --- An update while people use the portal -------------------------------------
 
-JOB_TIMERS = ("billing-reconcile", "notifications", "cleanup-logs", "forum-drift", "external-work")
+JOB_TIMERS = ("billing-reconcile", "notifications", "cleanup-logs", "forum-drift", "external-work",
+              "automatic-updates")
 
 
 def _function(installer, name):

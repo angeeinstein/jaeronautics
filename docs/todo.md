@@ -33,24 +33,22 @@ owed off the dashboard).
 
 ## Open
 
-### Automatic updates: the server installs them, Ubuntu, telling a person
+### Automatic updates: telling a person (part 4)
 
 - **Added:** 2026-10-28
-- **What:** parts 2 to 4 of `docs/automatic-updates-plan.md`: the server
-  installing from `main` by itself at night (a setting in Settings ›
-  Updates), unattended-upgrades checked and allowed to restart at night, and
-  System health showing what is stuck -- an email only then, never daily.
-- **Where:** `docs/automatic-updates-plan.md` -- what was decided.
+- **What:** part 4 of `docs/automatic-updates-plan.md`: System health shows
+  whether the automatic updates work (unattended-upgrades' last run, updates
+  waiting, a restart pending, what the nightly job last came to) and what is
+  stuck -- a security update waiting more than 14 days, an update CI failed,
+  a major version waiting for a person -- with an email only then, once,
+  never daily; and the support ends (Ubuntu 24.04, Node.js 24) a year ahead,
+  with a step-by-step guide for moving to the next release.
+- **Where:** `docs/automatic-updates-plan.md`, part 4.
 - **Why:** "isn't dependent on me, myself and my knowledge, and isn't
   dependent on you as an agent being there."
-- **When:** parts 2 and 3 built now, on `claude/automatic-installs`, once
-  Dependabot's first pull requests (#47-#57) are through and the end of the
-  chain is seen to work (CI's merge, the run on `main` it starts, the Updates
-  page counting it). Automatic installs ship switched off where the portal
-  runs already; the live server's is switched on after part 1 has run
-  cleanly for a few weeks. Part 4 after that.
-- **Decided (2026-10-28):** installs at 04:30, off where already installed
-  and on for new installations; Ubuntu may restart at 04:00.
+- **When:** after parts 2 and 3 (`claude/automatic-installs`) are merged and
+  automatic installs are switched on on the live server -- a few weeks after
+  part 1 (merged 2026-10-28) has run cleanly.
 
 ### Team leads answer their team's messages in the portal
 

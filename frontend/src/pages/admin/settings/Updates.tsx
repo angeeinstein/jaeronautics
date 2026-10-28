@@ -16,11 +16,34 @@
  * new version's front end. Beside the button: whether anybody else is using
  * the portal right now (Presence.tsx). Data: GET|POST
  * /api/v1/admin/settings/updates (aeronautics_members/api/admin_system.py).
+ *
+ * Below it, *Automatic updates*: a switch for installing the newest version
+ * by itself at night, once its checks have passed (PUT .../updates/automatic;
+ * docs/automatic-updates-plan.md), and what the last night came to.
  */
-import { Alert, Anchor, Button, Code, Collapse, Group, Loader, Progress, Stack, Text } from '@mantine/core';
+import {
+  Alert,
+  Anchor,
+  Button,
+  Code,
+  Collapse,
+  Group,
+  Loader,
+  Progress,
+  Stack,
+  Switch,
+  Text,
+} from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import { IconArrowBackUp, IconDownload, IconHistory, IconInfoCircle, IconRefresh } from '@tabler/icons-react';
+import {
+  IconArrowBackUp,
+  IconClock,
+  IconDownload,
+  IconHistory,
+  IconInfoCircle,
+  IconRefresh,
+} from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
 import { PageTabs } from '../../../components/PageTabs';
@@ -32,7 +55,7 @@ import { Panel } from '../../../components/Panel';
 import { Pill } from '../../../components/Pill';
 import { ErrorState, LoadingState } from '../../../components/States';
 import { formatDateTime, plural } from '../../../lib/format';
-import { notifyFailed } from '../../../lib/notify';
+import { notifyDone, notifyFailed } from '../../../lib/notify';
 import { reloadPage } from '../../../lib/reload';
 import classes from './Maintenance.module.css';
 import { PresenceNote } from './Presence';
@@ -316,6 +339,55 @@ function Install({
   );
 }
 
+// What the last night came to, in a few words.
+function nightSaid(run: Schemas['AutomaticRunOut']): string {
+  const version = run.revision ?? 'the newest version';
+  switch (run.outcome) {
+    case 'requested':
+      return `Started the update to ${version}.`;
+    case 'up_to_date':
+      return 'Up to date.';
+    case 'ci_not_passed':
+      return `Not installed: ${version} has not passed its checks yet.`;
+    case 'failed_before':
+      return `Not tried again: ${version} did not install. A newer version will be.`;
+    case 'busy':
+      return 'Not started: an update was running.';
+    case 'unreachable':
+      return 'Not checked: the newest version could not be asked for.';
+    default:
+      return 'Not started: the update runner is not installed on this server.';
+  }
+}
+
+function Automatic({
+  automatic,
+  saving,
+  onSwitch,
+}: {
+  automatic: State['automatic'];
+  saving: boolean;
+  onSwitch: (enabled: boolean) => void;
+}) {
+  const last = automatic.last_run;
+  return (
+    <Panel icon={IconClock} title="Automatic updates">
+      <Stack gap="md">
+        <Switch
+          label="Install updates automatically"
+          description={`Every night at ${automatic.at}, once a newer version has passed its checks. One that fails undoes itself and is not tried again.`}
+          checked={automatic.enabled}
+          disabled={saving}
+          onChange={(event) => {
+            onSwitch(event.currentTarget.checked);
+          }}
+        />
+        {last?.at ? <Details items={[[`Last night, ${formatDateTime(last.at)}`, nightSaid(last)]]} /> : null}
+      </Stack>
+    </Panel>
+  );
+}
+
 function Rollback({
   state,
   busy,
@@ -453,6 +525,16 @@ export function Updates() {
     onError: notifyFailed,
   });
 
+  const automatic = useMutation({
+    mutationFn: (enabled: boolean) =>
+      call(api.PUT('/api/v1/admin/settings/updates/automatic', { body: { enabled } })),
+    onSuccess: (fresh) => {
+      client.setQueryData(KEY, fresh);
+      notifyDone(fresh.automatic.enabled ? 'Automatic updates on.' : 'Automatic updates off.');
+    },
+    onError: notifyFailed,
+  });
+
   const phase = finished ? 'finished' : updates.isError ? 'restarting' : 'running';
   return (
     <>
@@ -488,11 +570,18 @@ export function Updates() {
                       <Running state={state} phase={phase} />
                     </Panel>
                   ) : (
-                    <Install
-                      state={state}
-                      busy={start.isPending && start.variables === 'update'}
-                      onStart={start.mutate}
-                    />
+                    <>
+                      <Install
+                        state={state}
+                        busy={start.isPending && start.variables === 'update'}
+                        onStart={start.mutate}
+                      />
+                      <Automatic
+                        automatic={state.automatic}
+                        saving={automatic.isPending}
+                        onSwitch={automatic.mutate}
+                      />
+                    </>
                   )}
                 </Stack>
               ),

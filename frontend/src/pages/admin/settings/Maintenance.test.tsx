@@ -168,6 +168,7 @@ const upToDate: Schemas['UpdatesOut'] = {
     log_tail: null,
     interrupted: null,
   },
+  automatic: { enabled: false, at: '04:30', last_run: null },
 };
 
 const running: Schemas['UpdatesOut'] = {
@@ -334,6 +335,32 @@ describe('updates', () => {
 
     await userEvent.click(await screen.findByRole('tab', { name: 'History' }));
     expect(await screen.findByRole('button', { name: 'Roll back to cccc3333' })).toBeEnabled();
+  });
+
+  it('installing by itself at night, switched on at once; what the last night came to', async () => {
+    const switchedOn = {
+      ...upToDate,
+      automatic: {
+        enabled: true,
+        at: '04:30',
+        last_run: { at: '2026-10-28T03:30:00Z', outcome: 'ci_not_passed', revision: 'bbbb2222' },
+      },
+    };
+    const { calls } = show(<Updates />, {
+      [UPDATES]: { body: upToDate },
+      [`PUT ${UPDATES}/automatic`]: { body: switchedOn },
+    });
+
+    const toggle = await screen.findByRole('switch', { name: /^Install updates automatically/ });
+    expect(toggle).not.toBeChecked();
+    await userEvent.click(toggle);
+
+    expect(
+      await screen.findByText('Not installed: bbbb2222 has not passed its checks yet.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: /^Install updates automatically/ })).toBeChecked();
+    const put = calls.find((call) => call.method === 'PUT');
+    expect(await put?.clone().json()).toEqual({ enabled: true });
   });
 
   it('without the runner nothing can be started', async () => {

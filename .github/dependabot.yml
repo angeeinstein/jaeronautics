@@ -36,6 +36,12 @@ updates:
     groups:
       frontend:
         update-types: [minor, patch]
+    ignore:
+      # Follows the Node.js that builds the front end (NODE_VERSION in
+      # workflows/ci.yml, NODE_MAJOR in install.sh), and is raised by hand
+      # with it: its new majors would otherwise wait for a person forever.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   # The actions CI runs. Named by major version only, so every update is a
   # major one -- merged too when CI, which runs it, passes.

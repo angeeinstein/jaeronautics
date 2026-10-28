@@ -71,6 +71,9 @@ FORUM_DRIFT_SERVICE_FILE=""
 FORUM_DRIFT_TIMER_FILE=""
 EXTERNAL_WORK_SERVICE_FILE=""
 EXTERNAL_WORK_TIMER_FILE=""
+AUTOMATIC_UPDATES_SERVICE_FILE=""
+AUTOMATIC_UPDATES_TIMER_FILE=""
+UNATTENDED_UPGRADES_FILE=""
 UPDATE_RUNNER_SERVICE_FILE=""
 UPDATE_RUNNER_TIMER_FILE=""
 UPDATE_RUNNER_PATH_FILE=""
@@ -177,6 +180,7 @@ collect_diagnostics() {
             "${SERVICE_NAME}-notifications.timer"
             "${SERVICE_NAME}-billing-reconcile.timer"
             "${SERVICE_NAME}-forum-drift.timer"
+            "${SERVICE_NAME}-automatic-updates.timer"
         )
     fi
     [[ "${USE_LOCAL_DB:-0}" == "1" && -n "${DB_SERVICE_NAME:-}" ]] && units+=("${DB_SERVICE_NAME}")
@@ -277,7 +281,7 @@ on_exit() {
 trap 'on_exit' EXIT
 
 # The jobs the timers run, each a oneshot service of its own.
-BACKGROUND_JOBS=(billing-reconcile notifications cleanup-logs forum-drift external-work)
+BACKGROUND_JOBS=(billing-reconcile notifications cleanup-logs forum-drift external-work automatic-updates)
 BACKGROUND_JOBS_PAUSED=0
 # How long an update waits for a job that is already running to finish.
 BACKGROUND_JOB_WAIT_SECONDS=180
@@ -615,6 +619,9 @@ resolve_paths() {
     FORUM_DRIFT_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-forum-drift.timer"
     EXTERNAL_WORK_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-external-work.service"
     EXTERNAL_WORK_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-external-work.timer"
+    AUTOMATIC_UPDATES_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-automatic-updates.service"
+    AUTOMATIC_UPDATES_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-automatic-updates.timer"
+    UNATTENDED_UPGRADES_FILE="/etc/apt/apt.conf.d/52${SERVICE_NAME}-unattended-upgrades"
     UPDATE_RUNNER_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.service"
     UPDATE_RUNNER_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.timer"
     UPDATE_RUNNER_PATH_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.path"
@@ -1360,6 +1367,7 @@ roll_back_installation() {
     render_cleanup_logs_timer_files
     render_forum_drift_timer_files
     render_external_work_timer_files
+    render_automatic_updates_timer_files
     render_update_runner
     render_update_command
     render_nginx_config
@@ -2988,6 +2996,107 @@ EOF
     chmod 644 "${EXTERNAL_WORK_SERVICE_FILE}" "${EXTERNAL_WORK_TIMER_FILE}"
 }
 
+# Updates installed by themselves at night (docs/automatic-updates-plan.md,
+# part 2). The job only asks, the way the Updates page's button does -- it
+# writes the request the root runner below acts on --, and only when the
+# switch on that page is on and CI passed for the newest version.
+render_automatic_updates_timer_files() {
+    step "Writing automatic updates timer"
+    local unit_after="After=network-online.target"
+    local unit_requires=""
+
+    if [[ "${USE_LOCAL_DB}" == "1" ]]; then
+        unit_after="After=network-online.target ${DB_SERVICE_NAME}.service"
+        unit_requires="Requires=${DB_SERVICE_NAME}.service"
+    fi
+
+    cat > "${AUTOMATIC_UPDATES_SERVICE_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics automatic updates (asks for the newest version)
+${unit_after}
+Wants=network-online.target
+${unit_requires}
+
+[Service]
+Type=oneshot
+User=${APP_USER}
+Group=${APP_GROUP}
+WorkingDirectory=${INSTALL_DIR}
+EnvironmentFile=${ENV_FILE}
+Environment=PYTHONPATH=${INSTALL_DIR}
+ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_app automatic-updates run
+TimeoutStartSec=180
+PrivateTmp=true
+NoNewPrivileges=true
+# Reduce what a compromised process can reach: the filesystem is read-only apart
+# from the paths granted below, and the usual escalation surfaces are closed.
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+# ProtectSystem=strict makes everything read-only, so grant back the two places
+# the application legitimately writes: staged forum avatars await approval in
+# storage, and the update request goes into the state directory.
+ReadWritePaths=${INSTALL_DIR}/storage ${UPDATE_STATE_DIR}
+EOF
+
+    # Not Persistent: a night missed -- the server was off -- is not made up
+    # in the day, while people use the portal. The next night comes soon.
+    cat > "${AUTOMATIC_UPDATES_TIMER_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics automatic updates timer
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+Persistent=false
+Unit=${SERVICE_NAME}-automatic-updates.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    chmod 644 "${AUTOMATIC_UPDATES_SERVICE_FILE}" "${AUTOMATIC_UPDATES_TIMER_FILE}"
+}
+
+# A new installation installs updates by itself; one that runs already keeps
+# them off until an administrator switches them on (Settings > Updates).
+switch_on_automatic_updates() {
+    step "Switching on automatic updates (a new installation)"
+    run_as_app_user env PYTHONPATH="${INSTALL_DIR}" "${INSTALL_DIR}/.venv/bin/flask" \
+        --app aeronautics_members.app:create_app automatic-updates on \
+        || warn "Could not switch automatic updates on; do it under Settings > Updates."
+}
+
+# Ubuntu's own security updates (docs/automatic-updates-plan.md, part 3):
+# unattended-upgrades installs them every day; here it is made sure it is
+# there and switched on, and allowed to restart the server at 04:00 when an
+# update needs it -- a new kernel, say --, which otherwise waits for a person.
+# A file of the portal's own, after Ubuntu's (20auto-upgrades,
+# 50unattended-upgrades), so what is set there stays and only this is added.
+configure_unattended_upgrades() {
+    if [[ "${PACKAGE_MANAGER}" != "apt" ]]; then
+        info "Automatic system updates are set up for apt only; on this system, set them up yourself (dnf-automatic)."
+        return 0
+    fi
+    step "Switching on automatic security updates of the system"
+    install_packages unattended-upgrades
+    cat > "${UNATTENDED_UPGRADES_FILE}" <<EOF
+// Written by the portal's installer (docs/automatic-updates-plan.md, part 3);
+// removed again by its uninstall. Ubuntu's security updates every day, and a
+// restart at 04:00 when one needs it.
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-Time "04:00";
+EOF
+    chmod 644 "${UNATTENDED_UPGRADES_FILE}"
+    systemctl enable --now unattended-upgrades 2>/dev/null || true
+}
+
 render_update_runner() {
     step "Installing admin-page update runner"
 
@@ -3571,7 +3680,7 @@ reload_services() {
     # counts as running. Restarting re-arms it from its new definition.
     local timer
     for timer in billing-reconcile notifications cleanup-logs forum-drift \
-                 external-work update-runner; do
+                 external-work automatic-updates update-runner; do
         systemctl enable "${SERVICE_NAME}-${timer}.timer"
         systemctl restart "${SERVICE_NAME}-${timer}.timer"
     done
@@ -3596,6 +3705,7 @@ verify_installation() {
     systemctl is-active --quiet "${SERVICE_NAME}-cleanup-logs.timer"
     systemctl is-active --quiet "${SERVICE_NAME}-forum-drift.timer"
     systemctl is-active --quiet "${SERVICE_NAME}-external-work.timer"
+    systemctl is-active --quiet "${SERVICE_NAME}-automatic-updates.timer"
     systemctl is-active --quiet "${SERVICE_NAME}-update-runner.timer"
     check_health_endpoint "http://127.0.0.1:${APP_PORT}/__health"
     success "The application is responding on 127.0.0.1:${APP_PORT}"
@@ -3774,6 +3884,11 @@ install_or_update() {
         migrate_database_for_update
     else
         initialize_database_schema
+        # A database moved from elsewhere keeps its own setting; a backup
+        # restored after this brings its own too.
+        if [[ "${MIGRATE_DB_DATA}" != "1" ]]; then
+            switch_on_automatic_updates
+        fi
     fi
     ensure_admin_account
     render_service_file
@@ -3782,8 +3897,10 @@ install_or_update() {
     render_cleanup_logs_timer_files
     render_forum_drift_timer_files
     render_external_work_timer_files
+    render_automatic_updates_timer_files
     render_update_runner
     render_update_command
+    configure_unattended_upgrades
     obtain_ssl_certificate
     render_nginx_config
     write_cloudflare_tunnel_files
@@ -3928,6 +4045,16 @@ uninstall_everything() {
     if [[ -f "${EXTERNAL_WORK_SERVICE_FILE}" ]]; then
         rm -f "${EXTERNAL_WORK_SERVICE_FILE}"
     fi
+    if [[ -f "${AUTOMATIC_UPDATES_TIMER_FILE}" ]]; then
+        systemctl disable --now "${SERVICE_NAME}-automatic-updates.timer" || true
+        rm -f "${AUTOMATIC_UPDATES_TIMER_FILE}"
+    fi
+    if [[ -f "${AUTOMATIC_UPDATES_SERVICE_FILE}" ]]; then
+        rm -f "${AUTOMATIC_UPDATES_SERVICE_FILE}"
+    fi
+    # The system keeps its own security updates; only the restart at night
+    # and what else this file set go with the portal.
+    rm -f "${UNATTENDED_UPGRADES_FILE}"
     if [[ -f "${UPDATE_RUNNER_PATH_FILE}" ]]; then
         systemctl disable --now "${SERVICE_NAME}-update-runner.path" || true
         rm -f "${UPDATE_RUNNER_PATH_FILE}"

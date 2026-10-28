@@ -2242,6 +2242,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/settings/updates/automatic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Switch installing updates by themselves at night on or off. */
+        put: operations["admin_automatic_updates"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/settings/updates/log": {
         parameters: {
             query?: never;
@@ -4350,6 +4367,31 @@ export interface components {
              * @default []
              */
             teams?: number[];
+        };
+        /** AutomaticRunOut */
+        AutomaticRunOut: {
+            /** At */
+            at: string | null;
+            /** Outcome */
+            outcome: string;
+            /** Revision */
+            revision: string | null;
+        };
+        /** AutomaticUpdatesIn */
+        AutomaticUpdatesIn: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /**
+         * AutomaticUpdatesOut
+         * @description Installing the newest version by itself, at night, once CI passed for it.
+         */
+        AutomaticUpdatesOut: {
+            /** At */
+            at: string;
+            /** Enabled */
+            enabled: boolean;
+            last_run: components["schemas"]["AutomaticRunOut"] | null;
         };
         /** BackupDeletedOut */
         BackupDeletedOut: {
@@ -9796,6 +9838,7 @@ export interface components {
         };
         /** UpdatesOut */
         UpdatesOut: {
+            automatic: components["schemas"]["AutomaticUpdatesOut"];
             /** In Progress */
             in_progress: boolean;
             installed: components["schemas"]["VersionOut"];
@@ -18242,6 +18285,66 @@ export interface operations {
         responses: {
             /** @description OK */
             202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdatesOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_automatic_updates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomaticUpdatesIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

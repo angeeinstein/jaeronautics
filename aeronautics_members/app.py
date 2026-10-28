@@ -4454,6 +4454,30 @@ def create_app(config_overrides=None):
             for item in stuck:
                 click.echo(f"  #{item.id} {item.kind} member_id={item.member_id}: {item.last_error}")
 
+    @app.cli.command("automatic-updates")
+    @click.argument("what", type=click.Choice(["run", "on", "off"]))
+    @with_appcontext
+    def automatic_updates_command(what):
+        """Installs the newest version at night when it is time to (run); or switches that on or off.
+
+        "run" is what the timer does at 04:30 (docs/automatic-updates-plan.md):
+        it asks for the newest version only when the switch is on, CI passed
+        for it and no update is running. "on" is what install.sh does for a
+        new installation.
+        """
+        from .services import automatic_updates
+
+        if what in ("on", "off"):
+            automatic_updates.set_enabled(what == "on")
+            db.session.commit()
+            click.echo(f"Automatic updates: {what}.")
+            return
+        if _stand_down_while_paused("automatic-updates"):
+            return
+        outcome = automatic_updates.run()
+        db.session.commit()
+        click.echo(f"Automatic updates: {outcome}.")
+
     @app.cli.command("cleanup-logs")
     @click.option("--audit-days", default=AUDIT_LOG_RETENTION_DAYS, show_default=True, type=int,
                   help="Delete audit logs older than this many days. 0 keeps them forever.")

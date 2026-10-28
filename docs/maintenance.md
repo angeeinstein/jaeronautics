@@ -140,6 +140,36 @@ installer printed, as in a terminal; after the update the same list and output
 stay under *Last update*. A step's name is the same on every update, so a
 revision or a count it mentions goes on a line of its own.
 
+### Automatic updates
+
+Below the button, *Install updates automatically* (docs/automatic-updates-plan.md,
+part 2). Switched on, the job `automatic-updates` (timer, 04:30, server time)
+asks for the newest version the way the button does -- it writes the same
+request, nothing more -- when:
+
+- the branch this installation follows has a newer version than the one running;
+- CI passed for that very version (strictly: when GitHub cannot be asked,
+  nothing is installed unattended -- the page still offers it to a person);
+- no update is running;
+- that version was not asked for automatically before. A version that failed
+  and undid itself, or that somebody went back from, is not tried night after
+  night; the next newer one is.
+
+The page shows what the last night came to. Off where the portal ran before
+this setting existed, until an administrator switches it on; on for a new
+installation (`install.sh` runs `flask automatic-updates on` once the new
+database is there). A database moved from elsewhere or a restored backup keeps
+its own setting. The timer is not `Persistent`: a night missed -- the server
+was off -- is not made up during the day. Like the other jobs, it stands down
+while background jobs are paused after a restore.
+
+Ubuntu updates itself too (part 3): the installer makes sure
+unattended-upgrades is installed and on, and allows it to restart the server
+at 04:00 when an update needs that (a new kernel) --
+`/etc/apt/apt.conf.d/52<service>-unattended-upgrades`, after Ubuntu's own
+files, so what is set there stays. Uninstall removes that file; the system
+keeps installing its security updates.
+
 **A rollback restores the program only.** It does *not* restore the database.
 The schema is deliberately left where it is, because every migration here adds
 tables and columns that older code simply ignores, while undoing one would mean

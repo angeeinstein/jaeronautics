@@ -1748,6 +1748,89 @@
         "title": "AudienceIn",
         "type": "object"
       },
+      "AutomaticRunOut": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "at",
+          "outcome",
+          "revision"
+        ],
+        "title": "AutomaticRunOut",
+        "type": "object"
+      },
+      "AutomaticUpdatesIn": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "AutomaticUpdatesIn",
+        "type": "object"
+      },
+      "AutomaticUpdatesOut": {
+        "additionalProperties": false,
+        "description": "Installing the newest version by itself, at night, once CI passed for it.",
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AutomaticRunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "enabled",
+          "at",
+          "last_run"
+        ],
+        "title": "AutomaticUpdatesOut",
+        "type": "object"
+      },
       "BackupDeletedOut": {
         "additionalProperties": false,
         "properties": {
@@ -18416,6 +18499,9 @@
       "UpdatesOut": {
         "additionalProperties": false,
         "properties": {
+          "automatic": {
+            "$ref": "#/components/schemas/AutomaticUpdatesOut"
+          },
           "in_progress": {
             "title": "In Progress",
             "type": "boolean"
@@ -18493,7 +18579,8 @@
           "request_never_picked_up",
           "progress",
           "rollback_point",
-          "last_run"
+          "last_run",
+          "automatic"
         ],
         "title": "UpdatesOut",
         "type": "object"
@@ -29485,6 +29572,80 @@
           }
         },
         "summary": "Ask the server to install the update (or roll back). It starts within moments and restarts the site.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "system.update"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/updates/automatic": {
+      "put": {
+        "operationId": "admin_automatic_updates",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomaticUpdatesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdatesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Switch installing updates by themselves at night on or off.",
         "tags": [
           "Admin"
         ],

@@ -17,7 +17,7 @@ from ..app import limiter
 from ..config import RATELIMIT_ADMIN_EMAIL
 from ..db_models import db
 from ..permissions import Permission
-from ..services import maintenance
+from ..services import automatic_updates, maintenance
 from ..services.diagnostics import collect_system_health
 from ..services.notifications import list_undelivered_emails
 from ..services.clock import get_now_utc
@@ -213,6 +213,26 @@ class LatestCheckOut(Model):
     typical_minutes: int | None
 
 
+class AutomaticRunOut(Model):
+    at: UtcDateTime | None
+    #: requested (an update was asked for), up_to_date, ci_not_passed (not
+    #: installed: CI has not passed for it), failed_before (not tried again: it
+    #: failed, or somebody went back from it), busy (an update was running),
+    #: unreachable (the git remote could not be asked), no_runner.
+    outcome: str
+    revision: str | None
+
+
+class AutomaticUpdatesOut(Model):
+    """Installing the newest version by itself, at night, once CI passed for it."""
+
+    enabled: bool
+    #: When, server time: "04:30".
+    at: str
+    #: What the last night's check came to; None before the first.
+    last_run: AutomaticRunOut | None
+
+
 class UpdatesOut(Model):
     installed: VersionOut
     #: None when it could not be checked.
@@ -232,6 +252,7 @@ class UpdatesOut(Model):
     progress: ProgressOut
     rollback_point: RollbackPointOut | None
     last_run: LastRunOut
+    automatic: AutomaticUpdatesOut
 
 
 _CI_STATES = {"success": "passed", "running": "running", "none": "running", "failure": "failed"}
@@ -246,6 +267,15 @@ def _latest_check(ci):
                if state == "running" and started else None)
     return LatestCheckOut(state=state, url=ci.get("url"), started_at=started, minutes_running=running,
                           typical_minutes=ci.get("typical_minutes"))
+
+
+def _automatic():
+    last = automatic_updates.last_run()
+    return AutomaticUpdatesOut(
+        enabled=automatic_updates.is_enabled(), at=automatic_updates.AT,
+        last_run=AutomaticRunOut(at=parse_time(last.get("at")), outcome=last.get("outcome") or "",
+                                 revision=(last.get("revision") or "")[:8] or None) if last else None,
+    )
 
 
 def _updates(force_remote_check=False):
@@ -268,6 +298,7 @@ def _updates(force_remote_check=False):
                             exit_code=run.get("exit_code"),
                             revision_after=(run.get("revision_after") or "")[:8] or None,
                             log_tail=run.get("log_tail"), interrupted=run.get("interrupted")),
+        automatic=_automatic(),
     )
 
 
@@ -307,5 +338,18 @@ class UpdateIn(Model):
 def admin_update_start(body):
     """Ask the server to install the update (or roll back). It starts within moments and restarts the site."""
     maintenance.request_version_change(current_user, body.action)
+    db.session.commit()
+    return _updates()
+
+
+class AutomaticUpdatesIn(Model):
+    enabled: bool
+
+
+@endpoint("PUT", "/admin/settings/updates/automatic", response=UpdatesOut, body=AutomaticUpdatesIn,
+          permissions=SYSTEM, tag=TAG)
+def admin_automatic_updates(body):
+    """Switch installing updates by themselves at night on or off."""
+    automatic_updates.set_enabled(body.enabled, actor=current_user)
     db.session.commit()
     return _updates()
