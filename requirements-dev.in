@@ -2,7 +2,7 @@
 # the lock compiled from this file, requirements-dev.txt (docs/maintenance.md,
 # "Dependencies").
 -r requirements.in
-pytest==9.0.3
+pytest==9.1.1
 # Runs the tests on every core: python -m pytest -n auto
 pytest-xdist==3.8.0
-ruff==0.15.22
+ruff==0.17.1
