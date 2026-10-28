@@ -43,8 +43,10 @@ jaeronautics/
 |-- deploy/                 # Example nginx and systemd files
 |-- docs/                   # Operational notes; design.md is the design concept
 |-- .env.example            # Safe environment template
-|-- requirements.txt
-|-- requirements-dev.txt    # Test/development dependencies
+|-- requirements.in         # What the app asks for
+|-- requirements.txt        # ... locked with hashes: what install.sh installs
+|-- requirements-dev.in     # Test/development dependencies
+|-- requirements-dev.txt    # ... locked, for CI
 `-- wsgi.py                 # Gunicorn entrypoint
 ```
 
@@ -70,7 +72,7 @@ jaeronautics/
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.txt
 Copy-Item .env.example .env
 flask --app aeronautics_members.app:create_app db-init
 flask --app aeronautics_members.app:create_app run --debug

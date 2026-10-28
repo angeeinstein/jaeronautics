@@ -1,0 +1,30 @@
+# What the application asks for. Not installed as it is: pip-compile resolves it
+# into requirements.txt -- every package, the transitive ones too, pinned to a
+# version and checked against its hash -- which is what install.sh deploys.
+# Dependabot keeps both up to date (docs/maintenance.md, "Dependencies").
+Flask==3.1.3
+python-dotenv==1.2.2
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.0.7
+PyMySQL==1.1.2
+Flask-Babel==4.0.0
+stripe==13.0.1
+Flask-WTF==1.3.0
+email-validator==2.3.0
+gunicorn==23.0.0
+Flask-Login==0.6.3
+Flask-Limiter==3.8.0
+# The JSON API's requests and answers (aeronautics_members/api/), and its OpenAPI description.
+pydantic==2.13.5
+redis==5.2.1
+Pillow==12.3.0
+cryptography==50.0.1
+# EPC ("GiroCode") QR codes for paying a team out from a banking app.
+segno==1.6.6
+# The legal texts are Markdown files (legal/), rendered without raw HTML.
+markdown-it-py==4.2.0
+# ... each starting with YAML front matter (title, version, effective_from, status).
+PyYAML==6.0.3
+# ... and laid out as PDFs (aeronautics_members/legal_pdf.py). Needs Pango from the system
+# (libpango-1.0-0, libpangoft2-1.0-0 -- install.sh installs them).
+weasyprint==70.0

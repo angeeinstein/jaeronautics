@@ -96,6 +96,10 @@ _remote_cache = {"checked_at": None, "value": None}
 # public, and GitHub answers 60 such questions an hour, so the answers are kept:
 # briefly while CI runs, longer once it has a result.
 CI_WORKFLOW = ".github/workflows/ci.yml"
+# A run for the commit itself: started by its push, or -- a Dependabot update
+# CI merged -- by CI on the branch afterwards (docs/maintenance.md,
+# "Dependencies"). Not a pull request's: that tests it merged into another branch.
+CI_EVENTS = ("push", "workflow_dispatch")
 CI_CHECK_TTL_SECONDS = {"running": 90, "none": 90, "unknown": 120}
 CI_RESULT_TTL_SECONDS = 1800
 CI_TYPICAL_TTL_SECONDS = 6 * 3600
@@ -220,13 +224,13 @@ def ci_state(revision, force=False):
         if age < CI_CHECK_TTL_SECONDS.get(cached[1]["state"], CI_RESULT_TTL_SECONDS):
             return cached[1]
 
-    answer = _github_json(f"/repos/{slug}/actions/runs?head_sha={revision}&event=push&per_page=50")
+    answer = _github_json(f"/repos/{slug}/actions/runs?head_sha={revision}&per_page=50")
     actions = f"https://github.com/{slug}/actions"
     if answer is None:
         result = {"state": "unknown", "url": actions, "started_at": None}
     else:
         runs = [run for run in answer.get("workflow_runs") or []
-                if (run.get("path") or "").split("@")[0] == CI_WORKFLOW]
+                if (run.get("path") or "").split("@")[0] == CI_WORKFLOW and run.get("event") in CI_EVENTS]
         if not runs:
             result = {"state": "none", "url": actions, "started_at": None}
         else:

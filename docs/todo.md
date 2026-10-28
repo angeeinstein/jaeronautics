@@ -33,6 +33,22 @@ owed off the dashboard).
 
 ## Open
 
+### Automatic updates: the server installs them, Ubuntu, telling a person (later)
+
+- **Added:** 2026-10-28
+- **What:** parts 2 to 4 of `docs/automatic-updates-plan.md`: the server
+  installing from `main` by itself at night (a setting in Settings ›
+  Updates), unattended-upgrades checked and allowed to restart at night, and
+  System health showing what is stuck -- an email only then, never daily.
+- **Where:** `docs/automatic-updates-plan.md` -- what was decided and what is
+  only proposed (the times, on by default).
+- **Why:** "isn't dependent on me, myself and my knowledge, and isn't
+  dependent on you as an agent being there."
+- **When:** after part 1 (Dependabot, CI merging; `claude/automatic-updates`)
+  has run a few weeks -- the order agreed on 2026-10-28.
+- **Open questions:** part 2 on by default, and at 04:30? Night restarts at
+  04:00?
+
 ### Team leads answer their team's messages in the portal
 
 - **Added:** 2026-10-18

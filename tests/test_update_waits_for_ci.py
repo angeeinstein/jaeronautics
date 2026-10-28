@@ -14,8 +14,8 @@ LOCAL, REMOTE = "a" * 40, "b" * 40
 CI = ".github/workflows/ci.yml"
 
 
-def _run(status="completed", conclusion="success", number=7, path=CI):
-    return {"path": path, "status": status, "conclusion": conclusion, "run_number": number, "run_attempt": 1,
+def _run(status="completed", conclusion="success", number=7, path=CI, event="push"):
+    return {"path": path, "event": event, "status": status, "conclusion": conclusion, "run_number": number, "run_attempt": 1,
             "html_url": f"https://github.com/o/r/actions/runs/{number}",
             "run_started_at": "2026-10-08T10:00:00Z", "updated_at": "2026-10-08T10:12:00Z"}
 
@@ -76,6 +76,20 @@ def test_not_while_ci_runs_and_with_how_long_it_usually_takes(app, github):
 
 def test_not_before_ci_has_started(app, github):
     github.runs = [_run(path=".github/workflows/other.yml")]
+
+    assert _state(app)["remote_ci"]["state"] == "none"
+
+
+def test_a_dependabot_update_ci_merged_is_tested_by_the_run_it_started(app, github):
+    # Merged by CI itself, so no push started a run: CI started one on main.
+    github.runs = [_run(event="workflow_dispatch")]
+
+    assert _state(app)["update_available"] is True
+
+
+def test_not_by_a_pull_requests_run(app, github):
+    # That tested the commit merged into another branch, not the commit.
+    github.runs = [_run(event="pull_request")]
 
     assert _state(app)["remote_ci"]["state"] == "none"
     assert _state(app)["update_available"] is False

@@ -1567,24 +1567,36 @@ ensure_virtualenv() {
     step "Installing Python dependencies"
     run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --no-cache-dir --upgrade pip wheel
 
-    # Prefer the lock file: it pins the transitive dependencies too and checks
-    # every download against a recorded hash, so an update installs the same
-    # code that was tested rather than whatever the index happens to serve
-    # today. requirements.txt stays the fallback for checkouts that predate the
-    # lock, and USE_DEPENDENCY_LOCK=0 is the escape hatch if a locked version
-    # ever fails to build on a newer Python -- but reach for it knowing the
-    # install is then unpinned.
-    if [[ -f "${INSTALL_DIR}/requirements.lock" && "${USE_DEPENDENCY_LOCK:-1}" != "0" ]]; then
+    # From the lock: it pins the transitive dependencies too and checks every
+    # download against a recorded hash, so an update installs the same code
+    # that was tested rather than whatever the index happens to serve today.
+    # The lock is requirements.txt, compiled from requirements.in (the layout
+    # Dependabot keeps current); a checkout from before that -- a rollback to
+    # it -- has it as requirements.lock, compiled from requirements.txt.
+    # USE_DEPENDENCY_LOCK=0 is the escape hatch if a locked version ever fails
+    # to build on a newer Python -- but reach for it knowing the install is
+    # then unpinned.
+    local lock_file="" loose_file=""
+    if [[ -f "${INSTALL_DIR}/requirements.in" ]]; then
+        lock_file="${INSTALL_DIR}/requirements.txt"
+        loose_file="${INSTALL_DIR}/requirements.in"
+    elif [[ -f "${INSTALL_DIR}/requirements.lock" ]]; then
+        lock_file="${INSTALL_DIR}/requirements.lock"
+        loose_file="${INSTALL_DIR}/requirements.txt"
+    else
+        loose_file="${INSTALL_DIR}/requirements.txt"
+    fi
+    if [[ -n "${lock_file}" && "${USE_DEPENDENCY_LOCK:-1}" != "0" ]]; then
         if ! run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --no-cache-dir \
-            --require-hashes -r "${INSTALL_DIR}/requirements.lock"; then
-            error "If a pinned version cannot be built here, regenerate requirements.lock;"
-            error "as a temporary measure, re-run with USE_DEPENDENCY_LOCK=0 to install"
-            error "from requirements.txt without pinned transitive versions or hashes."
+            --require-hashes -r "${lock_file}"; then
+            error "If a pinned version cannot be built here, regenerate the lock (docs/maintenance.md,"
+            error "\"Dependencies\"); as a temporary measure, re-run with USE_DEPENDENCY_LOCK=0 to install"
+            error "from ${loose_file##*/} without pinned transitive versions or hashes."
             die "Installing the locked dependencies failed."
         fi
     else
-        warn "Installing from requirements.txt: transitive versions are not pinned."
-        run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --no-cache-dir --upgrade -r "${INSTALL_DIR}/requirements.txt"
+        warn "Installing from ${loose_file##*/}: transitive versions are not pinned."
+        run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --no-cache-dir --upgrade -r "${loose_file}"
     fi
 }
 
@@ -1681,11 +1693,14 @@ github_repo_slug() {
 
 # Whether CI passed for a commit: success, failure:<why>, running, none (no
 # run yet) or unknown (GitHub could not be asked). Unauthenticated: the
-# repository is public, and GitHub allows 60 such questions an hour.
+# repository is public, and GitHub allows 60 such questions an hour. A run
+# for the commit itself: started by its push, or -- a Dependabot update CI
+# merged -- by CI on the branch afterwards; not a pull request's, which tests
+# it merged into another branch.
 ci_state() {
     local slug="$1" sha="$2" answer
     if ! answer="$(curl -fsS --max-time 20 -H 'Accept: application/vnd.github+json' \
-        "https://api.github.com/repos/${slug}/actions/runs?head_sha=${sha}&event=push&per_page=50" 2>/dev/null)"; then
+        "https://api.github.com/repos/${slug}/actions/runs?head_sha=${sha}&per_page=50" 2>/dev/null)"; then
         printf 'unknown\n'
         return 0
     fi
@@ -1696,7 +1711,8 @@ try:
 except ValueError:
     print("unknown")
     raise SystemExit
-runs = [run for run in runs if (run.get("path") or "").split("@")[0] == sys.argv[1]]
+runs = [run for run in runs if (run.get("path") or "").split("@")[0] == sys.argv[1]
+        and run.get("event") in ("push", "workflow_dispatch")]
 if not runs:
     print("none")
 else:

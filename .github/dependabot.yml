@@ -1,0 +1,53 @@
+# Dependabot keeps the dependencies current; CI tests each update and merges
+# it when it passes -- security fixes, minor and patch versions; a major
+# version waits for a person (job "merge-dependabot" in workflows/ci.yml).
+# How it fits together: docs/maintenance.md, "Dependencies".
+#
+# Security fixes come as soon as GitHub knows of them. Everything else once a
+# week, grouped into one pull request per kind, and only releases at least 7
+# days old: a tampered release is usually found and withdrawn within days.
+version: 2
+updates:
+  # requirements.in, and the locks pip-compile makes of it (requirements.txt,
+  # requirements-dev.txt), rebuilt with hashes on .python-version's Python.
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Vienna
+    cooldown:
+      default-days: 7
+    groups:
+      python:
+        update-types: [minor, patch]
+
+  # The front end (frontend/package.json and its lock).
+  - package-ecosystem: npm
+    directory: "/frontend"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Vienna
+    cooldown:
+      default-days: 7
+    groups:
+      frontend:
+        update-types: [minor, patch]
+
+  # The actions CI runs. Named by major version only, so every update is a
+  # major one -- merged too when CI, which runs it, passes.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Vienna
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        update-types: [major, minor, patch]
