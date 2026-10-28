@@ -33,21 +33,24 @@ owed off the dashboard).
 
 ## Open
 
-### Automatic updates: the server installs them, Ubuntu, telling a person (later)
+### Automatic updates: the server installs them, Ubuntu, telling a person
 
 - **Added:** 2026-10-28
 - **What:** parts 2 to 4 of `docs/automatic-updates-plan.md`: the server
   installing from `main` by itself at night (a setting in Settings ›
   Updates), unattended-upgrades checked and allowed to restart at night, and
   System health showing what is stuck -- an email only then, never daily.
-- **Where:** `docs/automatic-updates-plan.md` -- what was decided and what is
-  only proposed (the times, on by default).
+- **Where:** `docs/automatic-updates-plan.md` -- what was decided.
 - **Why:** "isn't dependent on me, myself and my knowledge, and isn't
   dependent on you as an agent being there."
-- **When:** after part 1 (Dependabot, CI merging; `claude/automatic-updates`)
-  has run a few weeks -- the order agreed on 2026-10-28.
-- **Open questions:** part 2 on by default, and at 04:30? Night restarts at
-  04:00?
+- **When:** parts 2 and 3 built now, on `claude/automatic-installs`, once
+  Dependabot's first pull requests (#47-#57) are through and the end of the
+  chain is seen to work (CI's merge, the run on `main` it starts, the Updates
+  page counting it). Automatic installs ship switched off where the portal
+  runs already; the live server's is switched on after part 1 has run
+  cleanly for a few weeks. Part 4 after that.
+- **Decided (2026-10-28):** installs at 04:30, off where already installed
+  and on for new installations; Ubuntu may restart at 04:00.
 
 ### Team leads answer their team's messages in the portal
 

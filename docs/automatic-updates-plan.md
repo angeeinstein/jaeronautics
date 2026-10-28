@@ -51,15 +51,22 @@ before the live server installs updates unattended.
 A setting in Admin › Settings › Updates, *Install updates automatically*.
 Once a night the server checks whether `main` has moved and CI passed there,
 and installs it -- everything on `main`, the maintainer's merges too. A failed
-update undoes itself already (code, packages, database). Proposed, not yet
-decided: on by default, at **04:30** (after the 03:15 jobs).
+update undoes itself already (code, packages, database). Decided
+2026-10-28: at **04:30** (after the 03:15 jobs); **off** where the portal is
+running already -- the live server's is switched on by the maintainer once
+part 1 has run cleanly for a few weeks --, on for a new installation. Built
+now, tested on the test server with it switched on.
+
+Also with it: `@types/node` kept at the major version of the Node.js that
+builds the front end (an `ignore` in `.github/dependabot.yml`), so its new
+majors do not wait for a person forever.
 
 ## Part 3: Ubuntu (not built)
 
 unattended-upgrades installs Ubuntu's security updates already. The installer
 is to make sure it is switched on, and to let it restart the server at night
 when an update needs it (a kernel's) -- today nothing restarts the machine.
-Proposed: at **04:00**; about a minute offline.
+Decided 2026-10-28: at **04:00**; about a minute offline. Built with part 2.
 
 ## Part 4: telling a person, only when needed (not built)
 
