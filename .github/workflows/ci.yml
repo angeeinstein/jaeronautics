@@ -429,7 +429,7 @@ jobs:
     steps:
       - name: What the update is
         id: update
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@v3
 
       - name: Merge, then test main
         if: >-
