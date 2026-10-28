@@ -82,9 +82,10 @@ run_as_app_user() {{ "$@"; }}
     )
 
 
-def runs(*runs_):
+def runs(*runs_, event="push"):
     return json.dumps({"workflow_runs": [
-        {"path": path, "status": status, "conclusion": conclusion, "run_number": number, "run_attempt": 1}
+        {"path": path, "event": event, "status": status, "conclusion": conclusion, "run_number": number,
+         "run_attempt": 1}
         for path, status, conclusion, number in runs_
     ]})
 
@@ -115,6 +116,10 @@ class TestWhatCISays:
         (runs((CI, "completed", "failure", 3), (CI, "completed", "success", 4)), "success"),
         # Another workflow's run says nothing about the tests.
         (runs((".github/workflows/other.yml", "completed", "success", 9)), "none"),
+        # Started on the branch after CI merged a Dependabot update: counts.
+        (runs((CI, "completed", "success", 5), event="workflow_dispatch"), "success"),
+        # A pull request's tested the commit merged into another branch.
+        (runs((CI, "completed", "success", 5), event="pull_request"), "none"),
         (runs(), "none"),
         ("not json", "unknown"),
     ])

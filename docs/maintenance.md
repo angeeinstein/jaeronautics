@@ -5,7 +5,7 @@
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.txt
 Copy-Item .env.example .env
 flask --app aeronautics_members.app:create_app db-init
 flask --app aeronautics_members.app:create_app run --debug
@@ -88,7 +88,7 @@ The test suite runs against an ephemeral SQLite database (no MySQL, Redis, or
 Stripe credentials required). Install the dev dependencies and run pytest:
 
 ```powershell
-pip install --require-hashes -r requirements-dev.lock
+pip install --require-hashes -r requirements-dev.txt
 python -m pytest -n auto
 ```
 
@@ -2250,35 +2250,89 @@ request. Background code may use `_()` freely; it will render in English.
 
 ## Dependencies
 
-`requirements.txt` lists the packages the application asks for.
-`requirements.lock` and `requirements-dev.lock` list what actually gets
-installed: those packages, everything they in turn depend on, each pinned to an
-exact version and checked against a recorded SHA-256 hash. `install.sh` deploys
-from `requirements.lock` and CI installs `requirements-dev.lock`, so the
-versions under test are the versions in production, and a package that has been
-tampered with on the index fails the install instead of being deployed.
+`requirements.in` lists the packages the application asks for.
+`requirements.txt` and `requirements-dev.txt` are compiled from it (the second
+from `requirements-dev.in`, which adds the test tools) and list what actually
+gets installed: those packages, everything they in turn depend on, each pinned
+to an exact version and checked against a recorded SHA-256 hash. `install.sh`
+deploys from `requirements.txt` and CI installs `requirements-dev.txt`, so the
+versions under test are the versions in production, and a package that has
+been tampered with on the index fails the install instead of being deployed.
+The front end has the same in `frontend/package-lock.json`.
 
-After changing `requirements.txt`, regenerate **both** lock files — they are
-resolved independently, so updating only one lets the shared pins drift apart:
+### Kept current by Dependabot
 
-```powershell
+Pinned versions only move when someone moves them. Nobody has to:
+
+1. **Dependabot** (`.github/dependabot.yml`) proposes the updates as pull
+   requests -- a security fix as soon as GitHub knows of it; everything else
+   on Mondays, grouped into one pull request each for the Python packages, the
+   front end and the actions CI uses, and only releases at least 7 days old (a
+   tampered release is usually found and withdrawn within days). It rebuilds
+   the locks itself, with hashes, on the Python in `.python-version`.
+2. **CI tests it** like any other change: the whole suite, the front end, the
+   end-to-end tests.
+3. **CI merges it** when everything passed (job `merge-dependabot`): security
+   fixes, minor and patch versions, and new versions of the actions CI uses
+   (that run used them). It then starts CI on `main` -- a merge made by a
+   workflow starts no run itself -- and that run is the one the servers'
+   updates wait for (`ci_state` in `install.sh` and
+   `services/system_update.py` count it).
+4. **The servers** see a new version on Admin › Settings › Updates, as after
+   any merge.
+
+What waits for a person:
+
+- **A major version of a package** (Flask 3 to 4, the Stripe library 13 to
+  14): they change behaviour on purpose, and tests do not catch all of it.
+  The pull request stays open with a note; read the package's release notes
+  (what changed, what to do), then merge it by hand.
+- **An update CI failed**: it stays open, red. Usually a newer version that
+  needs a change in our code. Dependabot rebases it when `main` moves, which
+  runs CI again.
+
+#### What GitHub has to allow
+
+Set once, in the repository's settings on GitHub:
+
+- *Security › Advanced Security* (*Code security* on older pages): Dependabot
+  alerts and Dependabot security updates on. Version updates need nothing;
+  `.github/dependabot.yml` switches them on.
+- *Branches* (or *Rules*), the rule for `main`: CI's checks required -- that
+  is what keeps `merge-dependabot` from merging anything untested --, and no
+  required approving review, which a workflow cannot give.
+- *Actions › General › Workflow permissions*: workflows may ask for more than
+  read access (the default allows it).
+
+### Changing them by hand
+
+After changing `requirements.in`, regenerate **both** lock files -- they are
+resolved independently, so updating only one lets the shared pins drift
+apart -- with Python 3.12, the servers' (`.python-version`):
+
+```sh
 pip install pip-tools
-pip-compile --generate-hashes --strip-extras --no-header --output-file=requirements.lock requirements.txt
-pip-compile --generate-hashes --strip-extras --no-header --output-file=requirements-dev.lock requirements-dev.txt
+pip-compile --generate-hashes --strip-extras --output-file=requirements.txt requirements.in
+pip-compile --generate-hashes --strip-extras --output-file=requirements-dev.txt requirements-dev.in
 ```
 
-`pip-compile` strips the explanatory header comments; put them back (git will
-show what was removed), then run the tests. `tests/test_dependency_lock.py`
-fails if the locks and `requirements.txt` disagree, so a forgotten regeneration
-shows up as a red build rather than as a surprise during a deploy.
+Keep the header pip-compile writes: Dependabot reads the command in it to
+rebuild the lock the same way. `tests/test_dependency_lock.py` fails if the
+locks and `requirements.in` disagree, so a forgotten regeneration shows up as
+a red build rather than as a surprise during a deploy.
 
-To take newer versions of the transitive dependencies without changing anything
-in `requirements.txt`, add `--upgrade` to both commands.
+To take newer versions of the transitive dependencies without changing
+anything in `requirements.in`, add `--upgrade` to both commands.
 
-If a locked version cannot be built on a particular machine — a package with no
-wheel for a newer Python, say — `USE_DEPENDENCY_LOCK=0 ./install.sh` falls back
-to `requirements.txt`. That install is unpinned and unverified, so treat it as a
-way to get unstuck, not as a setting to leave in place.
+If a locked version cannot be built on a particular machine -- a package with
+no wheel for a newer Python, say -- `USE_DEPENDENCY_LOCK=0 ./install.sh` falls
+back to `requirements.in`. That install is unpinned and unverified, so treat it
+as a way to get unstuck, not as a setting to leave in place.
+
+Until 2026-10 the layout was different: `requirements.txt` was the input and
+the locks were `requirements.lock` and `requirements-dev.lock`. `install.sh`
+still installs such a checkout -- a rollback to one -- from its
+`requirements.lock`.
 
 ## The Front End
 

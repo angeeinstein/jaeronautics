@@ -2,8 +2,13 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    # Not Dependabot's branches: their pull request runs CI (and merges them,
+    # job "merge-dependabot"); a second run on the push would test the same.
+    branches: ["**", "!dependabot/**"]
   pull_request:
+  # Started by job "merge-dependabot" on main after it merged: a merge by a
+  # workflow starts no run of its own.
+  workflow_dispatch:
 
 # The versions the servers run: Ubuntu 24.04 (pinned, not ubuntu-latest, so
 # CI does not move to another release on its own), its Python, and the Node.js
@@ -21,7 +26,7 @@ env:
   PYTHON_VERSION: "3.12"
   NODE_VERSION: "24"
 
-# Read-only, except where a job asks for more (publish-frontend).
+# Read-only, except where a job asks for more (publish-frontend, merge-dependabot).
 permissions:
   contents: read
 
@@ -79,7 +84,7 @@ jobs:
 
       - name: Install dependencies
         # The lock file, so CI tests the exact versions a deploy installs.
-        run: pip install --require-hashes -r requirements-dev.lock
+        run: pip install --require-hashes -r requirements-dev.txt
 
       - name: Lint (ruff)
         run: ruff check .
@@ -114,7 +119,7 @@ jobs:
       - name: Install dependencies
         run: |
           npm ci --no-audit --no-fund
-          pip install --require-hashes -r ../requirements.lock
+          pip install --require-hashes -r ../requirements.txt
 
       - name: The API's types are current
         # Generated from the API's own description; a change to the API without
@@ -173,7 +178,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0
-          pip install --require-hashes -r requirements-dev.lock
+          pip install --require-hashes -r requirements-dev.txt
           cd frontend
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
@@ -257,7 +262,7 @@ jobs:
 
       - name: Install dependencies
         # What a server installs.
-        run: pip install --require-hashes -r requirements.lock
+        run: pip install --require-hashes -r requirements.txt
 
       - name: The database, as install.sh makes it
         run: |
@@ -331,7 +336,7 @@ jobs:
     # Python reuses the build before it.
     # Also when the tests were skipped because these files passed already;
     # never when one of them failed.
-    if: github.event_name == 'push' && !failure() && !cancelled()
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && !failure() && !cancelled()
     needs: [tested, test, frontend, e2e-parts, e2e, migrations-mariadb, installer-mariadb]
     runs-on: ubuntu-24.04
     # A build that could not be published is not a failed commit: the
@@ -402,3 +407,46 @@ jobs:
             | grep -v " ${{ steps.build.outputs.name }}$" \
             | sort -r | tail -n +"${KEEP}" | cut -d' ' -f2 \
             | while read -r asset; do gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${asset}"; done
+
+  merge-dependabot:
+    # A Dependabot update that passed everything above is merged by CI itself:
+    # security fixes, minor and patch versions. A major version of a package
+    # waits for a person (docs/maintenance.md, "Dependencies"); one of an
+    # action CI uses does not -- they are only ever named by major version,
+    # and this very run used the new one. The merge is made with
+    # this run's token, and GitHub starts no run for that -- so this job
+    # starts CI on main itself: the run the servers' updates wait for.
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.pull_request.user.login == 'dependabot[bot]'
+      && !failure() && !cancelled()
+    needs: [tested, test, frontend, e2e-parts, e2e, migrations-mariadb, installer-mariadb]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - name: What the update is
+        id: update
+        uses: dependabot/fetch-metadata@v2
+
+      - name: Merge, then test main
+        if: >-
+          steps.update.outputs.update-type == 'version-update:semver-minor'
+          || steps.update.outputs.update-type == 'version-update:semver-patch'
+          || steps.update.outputs.package-ecosystem == 'github_actions'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          # Only the commit these tests ran on: one pushed since waits for its own run.
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --merge --match-head-commit "$HEAD"
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref main
+
+      - name: A major version waits for a person
+        if: >-
+          steps.update.outputs.update-type == 'version-update:semver-major'
+          && steps.update.outputs.package-ecosystem != 'github_actions'
+        run: echo "::notice::A major version, not merged automatically. Read its release notes, then merge it by hand."

@@ -1,0 +1,8 @@
+# Development and test dependencies, on top of the runtime ones. CI installs
+# the lock compiled from this file, requirements-dev.txt (docs/maintenance.md,
+# "Dependencies").
+-r requirements.in
+pytest==9.0.3
+# Runs the tests on every core: python -m pytest -n auto
+pytest-xdist==3.8.0
+ruff==0.15.22
