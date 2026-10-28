@@ -17,7 +17,7 @@ Flask-Limiter==3.8.0
 # The JSON API's requests and answers (aeronautics_members/api/), and its OpenAPI description.
 pydantic==2.14.1
 redis==5.2.1
-Pillow==12.3.0
+Pillow==13.0.0
 cryptography==50.0.2
 # EPC ("GiroCode") QR codes for paying a team out from a banking app.
 segno==1.6.6
