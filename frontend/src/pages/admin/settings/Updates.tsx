@@ -382,7 +382,7 @@ function Automatic({
             onSwitch(event.currentTarget.checked);
           }}
         />
-        {last?.at ? <Details items={[[`Last night, ${formatDateTime(last.at)}`, nightSaid(last)]]} /> : null}
+        {last?.at ? <Details items={[[`Last check, ${formatDateTime(last.at)}`, nightSaid(last)]]} /> : null}
       </Stack>
     </Panel>
   );
