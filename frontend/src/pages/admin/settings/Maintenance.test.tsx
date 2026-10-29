@@ -351,14 +351,14 @@ describe('updates', () => {
       [`PUT ${UPDATES}/automatic`]: { body: switchedOn },
     });
 
-    const toggle = await screen.findByRole('switch', { name: /^Install updates automatically/ });
+    const toggle = await screen.findByRole('switch', { name: /^Install new versions automatically/ });
     expect(toggle).not.toBeChecked();
     await userEvent.click(toggle);
 
     expect(
       await screen.findByText('Not installed: bbbb2222 has not passed its checks yet.'),
     ).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: /^Install updates automatically/ })).toBeChecked();
+    expect(screen.getByRole('switch', { name: /^Install new versions automatically/ })).toBeChecked();
     const put = calls.find((call) => call.method === 'PUT');
     expect(await put?.clone().json()).toEqual({ enabled: true });
   });

@@ -48,7 +48,7 @@ before the live server installs updates unattended.
 
 ## Part 2: installing automatically (built 2026-10-28)
 
-A setting in Admin › Settings › Updates, *Install updates automatically*.
+A setting in Admin › Settings › Updates, *Install new versions automatically*.
 Once a night the server checks whether `main` has moved and CI passed there,
 and installs it -- everything on `main`, the maintainer's merges too. A failed
 update undoes itself already (code, packages, database). Decided

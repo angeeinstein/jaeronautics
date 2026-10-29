@@ -374,8 +374,8 @@ function Automatic({
     <Panel icon={IconClock} title="Automatic updates">
       <Stack gap="md">
         <Switch
-          label="Install updates automatically"
-          description={`Every night at ${automatic.at}, once a newer version has passed its checks. One that fails undoes itself and is not tried again.`}
+          label="Install new versions automatically"
+          description={`Every night at ${automatic.at}, once a newer version has passed its checks: changes and updated packages alike. One that fails undoes itself and is not tried again.`}
           checked={automatic.enabled}
           disabled={saving}
           onChange={(event) => {
@@ -383,6 +383,9 @@ function Automatic({
           }}
         />
         {last?.at ? <Details items={[[`Last check, ${formatDateTime(last.at)}`, nightSaid(last)]]} /> : null}
+        <Text size="sm" c="dimmed">
+          Ubuntu installs its own security updates separately, at 03:40.
+        </Text>
       </Stack>
     </Panel>
   );
@@ -540,7 +543,7 @@ export function Updates() {
     <>
       <PageHeader
         title="Updates"
-        description="The version running, the newest one, and going back."
+        description="The portal's version: the one running, the newest, and going back."
         crumbs={[{ label: 'Admin', to: '/admin' }, { label: 'Settings' }, { label: 'Updates' }]}
       />
       {state === undefined ? (

@@ -142,7 +142,7 @@ revision or a count it mentions goes on a line of its own.
 
 ### Automatic updates
 
-Below the button, *Install updates automatically* (docs/automatic-updates-plan.md,
+Below the button, *Install new versions automatically* (docs/automatic-updates-plan.md,
 part 2). Switched on, the job `automatic-updates` (03:30, one of the night's
 steps below) asks for the newest version the way the button does -- it writes
 the same request, nothing more -- when:
@@ -155,7 +155,11 @@ the same request, nothing more -- when:
   and undid itself, or that somebody went back from, is not tried night after
   night; the next newer one is.
 
-The page shows what the last night came to. Off where the portal ran before
+It installs what the button installs -- the newest version of the portal on
+the branch this installation follows: changes merged there and updated
+packages alike; on the live server, `main`. Ubuntu's own updates are
+separate (below, "The night"); the page says so in one line. The page shows
+what the last check came to. Off where the portal ran before
 this setting existed, until an administrator switches it on; on for a new
 installation (`install.sh` runs `flask automatic-updates on` once the new
 database is there). A database moved from elsewhere or a restored backup keeps
