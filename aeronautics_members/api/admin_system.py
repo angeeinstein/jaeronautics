@@ -227,7 +227,7 @@ class AutomaticUpdatesOut(Model):
     """Installing the newest version by itself, at night, once CI passed for it."""
 
     enabled: bool
-    #: When, server time: "04:30".
+    #: When, in the portal's time zone: "03:30".
     at: str
     #: What the last night's check came to; None before the first.
     last_run: AutomaticRunOut | None

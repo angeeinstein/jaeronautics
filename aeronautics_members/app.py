@@ -4460,7 +4460,7 @@ def create_app(config_overrides=None):
     def automatic_updates_command(what):
         """Installs the newest version at night when it is time to (run); or switches that on or off.
 
-        "run" is what the timer does at 04:30 (docs/automatic-updates-plan.md):
+        "run" is what the timer does at 03:30 (docs/automatic-updates-plan.md):
         it asks for the newest version only when the switch is on, CI passed
         for it and no update is running. "on" is what install.sh does for a
         new installation.

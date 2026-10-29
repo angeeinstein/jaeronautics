@@ -168,7 +168,7 @@ const upToDate: Schemas['UpdatesOut'] = {
     log_tail: null,
     interrupted: null,
   },
-  automatic: { enabled: false, at: '04:30', last_run: null },
+  automatic: { enabled: false, at: '03:30', last_run: null },
 };
 
 const running: Schemas['UpdatesOut'] = {
@@ -342,7 +342,7 @@ describe('updates', () => {
       ...upToDate,
       automatic: {
         enabled: true,
-        at: '04:30',
+        at: '03:30',
         last_run: { at: '2026-10-28T03:30:00Z', outcome: 'ci_not_passed', revision: 'bbbb2222' },
       },
     };

@@ -1,7 +1,8 @@
 """Updates installed by themselves, at night (docs/automatic-updates-plan.md, part 2).
 
 A switch on Settings › Updates. When it is on, the job ``automatic-updates``
-(a timer, 04:30) asks for the newest version the same way the button does --
+(a timer, 03:30 in the portal's time zone, one of the night's steps behind its
+lock) asks for the newest version the same way the button does --
 it writes the request the privileged runner acts on, and nothing more, so the
 unprivileged side still cannot choose what an update is. It asks only when
 there is a newer version, CI has passed for that very version, and no update
@@ -26,7 +27,7 @@ ENABLED_KEY = "automatic_updates"
 LAST_RUN_KEY = "automatic_updates.last_run"
 # The version the last automatic update asked for.
 ATTEMPT_KEY = "automatic_updates.attempt"
-AT = "04:30"
+AT = "03:30"
 
 # What a run can come to; the page says each in words.
 OFF = "off"

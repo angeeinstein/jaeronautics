@@ -143,9 +143,9 @@ revision or a count it mentions goes on a line of its own.
 ### Automatic updates
 
 Below the button, *Install updates automatically* (docs/automatic-updates-plan.md,
-part 2). Switched on, the job `automatic-updates` (timer, 04:30, server time)
-asks for the newest version the way the button does -- it writes the same
-request, nothing more -- when:
+part 2). Switched on, the job `automatic-updates` (03:30, one of the night's
+steps below) asks for the newest version the way the button does -- it writes
+the same request, nothing more -- when:
 
 - the branch this installation follows has a newer version than the one running;
 - CI passed for that very version (strictly: when GitHub cannot be asked,
@@ -159,16 +159,50 @@ The page shows what the last night came to. Off where the portal ran before
 this setting existed, until an administrator switches it on; on for a new
 installation (`install.sh` runs `flask automatic-updates on` once the new
 database is there). A database moved from elsewhere or a restored backup keeps
-its own setting. The timer is not `Persistent`: a night missed -- the server
-was off -- is not made up during the day. Like the other jobs, it stands down
-while background jobs are paused after a restore.
+its own setting. Like the other jobs, it stands down while background jobs are
+paused after a restore.
 
-Ubuntu updates itself too (part 3): the installer makes sure
-unattended-upgrades is installed and on, and allows it to restart the server
-at 04:00 when an update needs that (a new kernel) --
-`/etc/apt/apt.conf.d/52<service>-unattended-upgrades`, after Ubuntu's own
-files, so what is set there stays. Uninstall removes that file; the system
-keeps installing its security updates.
+### The night
+
+The night's work runs one step at a time, in the portal's time zone
+(`MEMBERSHIP_TIMEZONE`, Vienna by default; summer and winter time follow by
+themselves), not the server's clock, which is usually UTC:
+
+| | Step | Who |
+|---|---|---|
+| 03:15 | billing check with Stripe; forgotten check-outs closed | portal |
+| 03:20 | forum check (after the billing check: a membership just found lapsed is recorded first) | portal |
+| 03:25 | log cleanup, on the 1st of the month | portal |
+| 03:30 | automatic-update check, and the update | portal, then root's runner |
+| 03:40 | Ubuntu's security updates (unattended-upgrades) | Ubuntu |
+| 04:00 | a restart, only if one of those needs it (`/run/reboot-required`) | root |
+
+**One at a time:** each holds one lock while it runs
+(`/var/lib/jaeronautics/update-runner/night.lock`) and one that finds it held
+waits -- up to an hour, then it gives up for the night. The times only set the
+order; a step that runs long makes the next one wait instead of overlapping.
+Updates started with the button queue the same way, and a nightly job that
+starts during an update waits and then runs on the new code. The lock is the
+kernel's, on an open file (`flock`): it goes with the process however that ends
+-- finished, crashed, stopped by its time limit, the power gone --, so nothing
+is ever left locked and there is nothing to clear by hand. Email delivery and
+the forum queue (every 15 and every 2 minutes) are not in the queue: they are
+short and must not stop for the night.
+
+**Why from 03:15:** between 02:00 and 03:00 the clock changes -- that hour is
+missing one night in spring and there twice one night in autumn --, and 03:15
+is where an attendance day ends, which the billing step closes
+(`services/attendance.py`); it also leaves Stripe's changes around midnight
+time to arrive.
+
+**Ubuntu** (part 3): the installer makes sure unattended-upgrades is installed
+and on (`/etc/apt/apt.conf.d/52<service>-unattended-upgrades`, after Ubuntu's
+own files, so what is set there stays), and moves its run into the night with
+drop-ins for `apt-daily-upgrade` (its timer and its command, queued behind the
+lock). The restart is the portal's own step (`<service>-restart-if-needed`),
+not unattended-upgrades', so that it too waits its turn: never in the middle of
+an update. Uninstall removes these files; the system then keeps installing its
+security updates at its own times.
 
 **A rollback restores the program only.** It does *not* restore the database.
 The schema is deliberately left where it is, because every migration here adds
@@ -931,9 +965,9 @@ stripe_subscription_id IS NOT NULL`. A membership paid by transfer, an invoiced
 company, an honorary member appointed by the association — none of them are in
 it.
 
-So a second timer asks the question directly, at 03:45, half an hour after the
-billing reconciliation so that anything Stripe has just been found to have
-lapsed is already recorded here:
+So a second timer asks the question directly, at 03:20, after the billing
+reconciliation -- and while that still runs, waiting for it ("The night") -- so
+that anything Stripe has just been found to have lapsed is already recorded here:
 
 ```
 jaeronautics-forum-drift.timer  ->  flask sync-forum-members --only-changed

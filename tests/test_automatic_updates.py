@@ -97,7 +97,7 @@ class TestTheNightlyCheck:
 class TestTheSwitch:
     def test_off_until_switched_on_and_each_change_logged(self, server, client):
         boss = signed_in(client, _staff("boss@example.org", "superadmin"))
-        assert boss.get(UPDATES).get_json()["automatic"] == {"enabled": False, "at": "04:30", "last_run": None}
+        assert boss.get(UPDATES).get_json()["automatic"] == {"enabled": False, "at": "03:30", "last_run": None}
 
         body = send(boss, "PUT", f"{UPDATES}/automatic", json={"enabled": True}).get_json()
 

@@ -74,6 +74,10 @@ EXTERNAL_WORK_TIMER_FILE=""
 AUTOMATIC_UPDATES_SERVICE_FILE=""
 AUTOMATIC_UPDATES_TIMER_FILE=""
 UNATTENDED_UPGRADES_FILE=""
+RESTART_IF_NEEDED_SERVICE_FILE=""
+RESTART_IF_NEEDED_TIMER_FILE=""
+APT_UPGRADE_TIMER_DROPIN=""
+APT_UPGRADE_SERVICE_DROPIN=""
 UPDATE_RUNNER_SERVICE_FILE=""
 UPDATE_RUNNER_TIMER_FILE=""
 UPDATE_RUNNER_PATH_FILE=""
@@ -86,6 +90,16 @@ LAST_DB_BACKUP_FILE=""
 UPDATE_STATE_DIR="/var/lib/jaeronautics/updates"
 # The update runner's own files (lock, status, log): root's, read by the app.
 UPDATE_RUNNER_DIR="/var/lib/jaeronautics/update-runner"
+# The night's work, one thing at a time (docs/automatic-updates-plan.md, "The
+# night"): each nightly job, the update and Ubuntu's own updates hold this lock
+# while they run, and one that finds it held waits. A lock of the kernel's, on
+# an open file: it goes with the process however that ends -- finished,
+# crashed, killed, the power gone --, so nothing is ever left locked. In the
+# runner's folder (root's; the portal's group may read it), so root never opens
+# a file the portal could have put there.
+NIGHT_LOCK="${UPDATE_RUNNER_DIR}/night.lock"
+# How long one waits for the one before it, at most; then it gives up for the night.
+NIGHT_WAIT_SECONDS=3600
 UPDATE_COMMAND_PATH="/usr/local/bin/update"
 PACKAGE_CACHE_UPDATED=0
 INSTALLATION_EXISTS=0
@@ -293,6 +307,17 @@ background_job_running() {
     [[ "${state}" == "activating" || "${state}" == "active" || "${state}" == "deactivating" ]]
 }
 
+# The jobs that queue behind the night lock.
+NIGHT_JOBS=(billing-reconcile forum-drift cleanup-logs automatic-updates)
+
+night_job() {
+    local job
+    for job in "${NIGHT_JOBS[@]}"; do
+        [[ "${job}" == "$1" ]] && return 0
+    done
+    return 1
+}
+
 pause_background_jobs() {
     # Between the new code arriving on disk and the restart, a job started by
     # its timer would run that code against packages and a database not yet
@@ -307,6 +332,10 @@ pause_background_jobs() {
     BACKGROUND_JOBS_PAUSED=1
     for job in "${BACKGROUND_JOBS[@]}"; do
         unit="${SERVICE_NAME}-${job}.service"
+        if [[ "${NIGHT_LOCK_HELD:-0}" == "1" ]] && night_job "${job}"; then
+            # Queued behind this update, not at work: it runs after it, on the new code.
+            continue
+        fi
         waited=0
         while background_job_running "${unit}"; do
             if (( waited >= BACKGROUND_JOB_WAIT_SECONDS )); then
@@ -622,6 +651,10 @@ resolve_paths() {
     AUTOMATIC_UPDATES_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-automatic-updates.service"
     AUTOMATIC_UPDATES_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-automatic-updates.timer"
     UNATTENDED_UPGRADES_FILE="/etc/apt/apt.conf.d/52${SERVICE_NAME}-unattended-upgrades"
+    RESTART_IF_NEEDED_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-restart-if-needed.service"
+    RESTART_IF_NEEDED_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-restart-if-needed.timer"
+    APT_UPGRADE_TIMER_DROPIN="/etc/systemd/system/apt-daily-upgrade.timer.d/50-${SERVICE_NAME}.conf"
+    APT_UPGRADE_SERVICE_DROPIN="/etc/systemd/system/apt-daily-upgrade.service.d/50-${SERVICE_NAME}.conf"
     UPDATE_RUNNER_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.service"
     UPDATE_RUNNER_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.timer"
     UPDATE_RUNNER_PATH_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.path"
@@ -2676,6 +2709,35 @@ EOF
     chmod 644 "${SERVICE_FILE}"
 }
 
+# When the night's steps run, in the portal's time zone (MEMBERSHIP_TIMEZONE,
+# Vienna by default) rather than the server's clock, which is usually UTC.
+# From 03:15: between 02:00 and 03:00 the clock changes in spring and autumn --
+# that hour is missing one night and there twice another --, and 03:15 is
+# where an attendance day ends, which the first step closes (services/attendance.py).
+night_at() {
+    printf '*-*-* %s %s' "$1" "$(night_timezone)"
+}
+
+# The portal's time zone, if the system knows it -- a timer naming one it does
+# not know would not start at all --, else the server's own clock.
+night_timezone() {
+    local zone="${MEMBERSHIP_TIMEZONE:-Europe/Vienna}"
+    if [[ "${zone}" =~ ^[A-Za-z0-9_+/-]+$ && -f "/usr/share/zoneinfo/${zone}" ]]; then
+        printf '%s' "${zone}"
+    else
+        printf 'UTC'
+    fi
+}
+
+# A nightly job's command, queued behind the night lock; its own time limit
+# counts once it has the lock.
+night_queued() {
+    local work_seconds="$1"
+    shift
+    printf '/usr/bin/flock --wait %s %s /usr/bin/timeout %s %s' \
+        "${NIGHT_WAIT_SECONDS}" "${NIGHT_LOCK}" "${work_seconds}" "$*"
+}
+
 render_billing_reconcile_timer_files() {
     step "Writing billing reconciliation timer"
     local unit_after="After=network.target"
@@ -2699,8 +2761,8 @@ Group=${APP_GROUP}
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=${ENV_FILE}
 Environment=PYTHONPATH=${INSTALL_DIR}
-ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_app reconcile-billing --lookahead-days 3
-TimeoutStartSec=180
+ExecStart=$(night_queued 180 "${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_app reconcile-billing --lookahead-days 3")
+TimeoutStartSec=$(( NIGHT_WAIT_SECONDS + 240 ))
 PrivateTmp=true
 NoNewPrivileges=true
 # Reduce what a compromised process can reach: the filesystem is read-only apart
@@ -2724,8 +2786,7 @@ EOF
 Description=Daily Joanneum Aeronautics billing reconciliation
 
 [Timer]
-OnCalendar=*-*-* 03:15:00
-RandomizedDelaySec=10m
+OnCalendar=$(night_at 03:15)
 Persistent=true
 Unit=${SERVICE_NAME}-billing-reconcile.service
 
@@ -2827,8 +2888,8 @@ Group=${APP_GROUP}
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=${ENV_FILE}
 Environment=PYTHONPATH=${INSTALL_DIR}
-ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_app cleanup-logs
-TimeoutStartSec=300
+ExecStart=$(night_queued 300 "${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_app cleanup-logs")
+TimeoutStartSec=$(( NIGHT_WAIT_SECONDS + 360 ))
 PrivateTmp=true
 NoNewPrivileges=true
 # Reduce what a compromised process can reach: the filesystem is read-only apart
@@ -2852,8 +2913,7 @@ EOF
 Description=Joanneum Aeronautics log retention cleanup timer
 
 [Timer]
-OnCalendar=monthly
-AccuracySec=6h
+OnCalendar=*-*-01 03:25:00 $(night_timezone)
 Persistent=true
 Unit=${SERVICE_NAME}-cleanup-logs.service
 
@@ -2891,8 +2951,8 @@ Group=${APP_GROUP}
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=${ENV_FILE}
 Environment=PYTHONPATH=${INSTALL_DIR}
-ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_app sync-forum-members --only-changed
-TimeoutStartSec=900
+ExecStart=$(night_queued 900 "${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_app sync-forum-members --only-changed")
+TimeoutStartSec=$(( NIGHT_WAIT_SECONDS + 960 ))
 PrivateTmp=true
 NoNewPrivileges=true
 # Reduce what a compromised process can reach: the filesystem is read-only apart
@@ -2908,16 +2968,16 @@ LockPersonality=true
 ReadWritePaths=${INSTALL_DIR}/storage ${UPDATE_STATE_DIR}
 EOF
 
-    # Half an hour after the billing reconciliation, so that a membership Stripe
-    # has just been found to have lapsed is already recorded here before this
-    # asks what the forum should be told.
+    # After the billing reconciliation -- and while that still runs, waiting
+    # for it (the night lock) --, so that a membership Stripe has just been
+    # found to have lapsed is already recorded here before this asks what the
+    # forum should be told.
     cat > "${FORUM_DRIFT_TIMER_FILE}" <<EOF
 [Unit]
 Description=Joanneum Aeronautics forum membership drift timer
 
 [Timer]
-OnCalendar=*-*-* 03:45:00
-RandomizedDelaySec=10m
+OnCalendar=$(night_at 03:20)
 Persistent=true
 Unit=${SERVICE_NAME}-forum-drift.service
 
@@ -3024,8 +3084,8 @@ Group=${APP_GROUP}
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=${ENV_FILE}
 Environment=PYTHONPATH=${INSTALL_DIR}
-ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_app automatic-updates run
-TimeoutStartSec=180
+ExecStart=$(night_queued 180 "${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_app automatic-updates run")
+TimeoutStartSec=$(( NIGHT_WAIT_SECONDS + 240 ))
 PrivateTmp=true
 NoNewPrivileges=true
 # Reduce what a compromised process can reach: the filesystem is read-only apart
@@ -3051,7 +3111,7 @@ EOF
 Description=Joanneum Aeronautics automatic updates timer
 
 [Timer]
-OnCalendar=*-*-* 04:30:00
+OnCalendar=$(night_at 03:30)
 Persistent=false
 Unit=${SERVICE_NAME}-automatic-updates.service
 
@@ -3072,9 +3132,12 @@ switch_on_automatic_updates() {
 }
 
 # Ubuntu's own security updates (docs/automatic-updates-plan.md, part 3):
-# unattended-upgrades installs them every day; here it is made sure it is
-# there and switched on, and allowed to restart the server at 04:00 when an
-# update needs it -- a new kernel, say --, which otherwise waits for a person.
+# unattended-upgrades installs them; here it is made sure it is there and
+# switched on, and they become a step of the night: at 03:40, queued behind
+# the night lock (Ubuntu's own time is a random one in the morning), and at
+# 04:00 the server restarts if one of them needs that -- a new kernel, say.
+# The restart is the portal's own step, not unattended-upgrades', so that it
+# too waits for whatever still runs: never in the middle of an update.
 # A file of the portal's own, after Ubuntu's (20auto-upgrades,
 # 50unattended-upgrades), so what is set there stays and only this is added.
 configure_unattended_upgrades() {
@@ -3090,11 +3153,56 @@ configure_unattended_upgrades() {
 // restart at 04:00 when one needs it.
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
-Unattended-Upgrade::Automatic-Reboot "true";
-Unattended-Upgrade::Automatic-Reboot-Time "04:00";
+// The restart is the portal's (${SERVICE_NAME}-restart-if-needed): after the
+// night's other steps, never in the middle of one.
+Unattended-Upgrade::Automatic-Reboot "false";
 EOF
     chmod 644 "${UNATTENDED_UPGRADES_FILE}"
+
+    install -d -m 0755 "$(dirname "${APT_UPGRADE_TIMER_DROPIN}")" "$(dirname "${APT_UPGRADE_SERVICE_DROPIN}")"
+    cat > "${APT_UPGRADE_TIMER_DROPIN}" <<EOF
+# Written by the portal's installer: Ubuntu's updates as a step of the night.
+[Timer]
+OnCalendar=
+OnCalendar=$(night_at 03:40)
+RandomizedDelaySec=0
+EOF
+    cat > "${APT_UPGRADE_SERVICE_DROPIN}" <<EOF
+# Written by the portal's installer: queued behind the night lock.
+[Service]
+ExecStart=
+ExecStart=/usr/bin/flock --wait ${NIGHT_WAIT_SECONDS} ${NIGHT_LOCK} /usr/lib/apt/apt.systemd.daily install
+EOF
+
+    cat > "${RESTART_IF_NEEDED_SERVICE_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics: restart the server if an update needs it
+
+[Service]
+Type=oneshot
+# Root: it restarts the machine. Only when Ubuntu says an update needs that,
+# and only once nothing else of the night runs.
+ExecStart=/usr/bin/flock --wait ${NIGHT_WAIT_SECONDS} ${NIGHT_LOCK} /bin/sh -c 'if [ -f /run/reboot-required ]; then echo "An update needs a restart: restarting."; systemctl reboot; else echo "No restart needed."; fi'
+TimeoutStartSec=$(( NIGHT_WAIT_SECONDS + 120 ))
+EOF
+    cat > "${RESTART_IF_NEEDED_TIMER_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics: restart the server if an update needs it (timer)
+
+[Timer]
+OnCalendar=$(night_at 04:00)
+Persistent=false
+Unit=${SERVICE_NAME}-restart-if-needed.service
+
+[Install]
+WantedBy=timers.target
+EOF
+    chmod 644 "${APT_UPGRADE_TIMER_DROPIN}" "${APT_UPGRADE_SERVICE_DROPIN}" \
+        "${RESTART_IF_NEEDED_SERVICE_FILE}" "${RESTART_IF_NEEDED_TIMER_FILE}"
+    systemctl daemon-reload
     systemctl enable --now unattended-upgrades 2>/dev/null || true
+    systemctl enable "${SERVICE_NAME}-restart-if-needed.timer"
+    systemctl restart "${SERVICE_NAME}-restart-if-needed.timer" apt-daily-upgrade.timer 2>/dev/null || true
 }
 
 render_update_runner() {
@@ -3116,6 +3224,12 @@ render_update_runner() {
         rm -f -- "${UPDATE_RUNNER_DIR}"
     fi
     install -d -o root -g "${APP_GROUP}" -m 0750 "${UPDATE_RUNNER_DIR}"
+    # There before the night's jobs first run: they open it to read only (the
+    # portal's services see the file system read-only), so cannot create it.
+    if [[ -L "${NIGHT_LOCK}" || ( -e "${NIGHT_LOCK}" && ! -f "${NIGHT_LOCK}" ) ]]; then
+        rm -rf -- "${NIGHT_LOCK}"
+    fi
+    install -m 0640 -o root -g "${APP_GROUP}" /dev/null "${NIGHT_LOCK}"
     install -d -m 0755 "$(dirname "${UPDATE_RUNNER_SCRIPT}")"
 
     # Write via a temporary file and rename: bash reads a script incrementally,
@@ -3145,11 +3259,14 @@ Environment=UPDATE_RUNNER_DIR=${UPDATE_RUNNER_DIR}
 Environment=UPDATE_COMMAND=${UPDATE_COMMAND_PATH}
 Environment=INSTALL_DIR=${INSTALL_DIR}
 Environment=LOG_GROUP=${APP_GROUP}
+Environment=NIGHT_LOCK=${NIGHT_LOCK}
+Environment=NIGHT_WAIT_SECONDS=${NIGHT_WAIT_SECONDS}
 ExecStart=${UPDATE_RUNNER_SCRIPT}
 # Above the runner's own limit (UPDATE_TIMEOUT, 45 minutes, plus a minute for
 # the update to stop): the runner is what records a hung update as failed. At
 # 1800 systemd killed it first, mid-run, and the page showed "running" for good.
-TimeoutStartSec=3300
+# Plus the wait for the night's jobs (NIGHT_WAIT_SECONDS), which it queues behind.
+TimeoutStartSec=$(( 3300 + NIGHT_WAIT_SECONDS ))
 EOF
 
     # A path unit starts the runner the moment the request file appears, so an
@@ -4052,9 +4169,14 @@ uninstall_everything() {
     if [[ -f "${AUTOMATIC_UPDATES_SERVICE_FILE}" ]]; then
         rm -f "${AUTOMATIC_UPDATES_SERVICE_FILE}"
     fi
-    # The system keeps its own security updates; only the restart at night
-    # and what else this file set go with the portal.
-    rm -f "${UNATTENDED_UPGRADES_FILE}"
+    # The system keeps its own security updates, at its own times again; only
+    # what the portal set goes with it.
+    rm -f "${UNATTENDED_UPGRADES_FILE}" "${APT_UPGRADE_TIMER_DROPIN}" "${APT_UPGRADE_SERVICE_DROPIN}"
+    if [[ -f "${RESTART_IF_NEEDED_TIMER_FILE}" ]]; then
+        systemctl disable --now "${SERVICE_NAME}-restart-if-needed.timer" || true
+        rm -f "${RESTART_IF_NEEDED_TIMER_FILE}"
+    fi
+    rm -f "${RESTART_IF_NEEDED_SERVICE_FILE}"
     if [[ -f "${UPDATE_RUNNER_PATH_FILE}" ]]; then
         systemctl disable --now "${SERVICE_NAME}-update-runner.path" || true
         rm -f "${UPDATE_RUNNER_PATH_FILE}"
