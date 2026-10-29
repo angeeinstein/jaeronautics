@@ -272,12 +272,12 @@ function Undelivered({ emails }: { emails: Schemas['UndeliveredOut'][] }) {
 }
 
 function Waiting({ waiting }: { waiting: Schemas['CurrentOut']['waiting'] }) {
-  if (waiting === null) return <Text size="sm">Could not be checked</Text>;
-  if (!waiting.length) return <Text size="sm">None</Text>;
+  if (waiting === null) return <Text>Could not be checked</Text>;
+  if (!waiting.length) return <Text>None</Text>;
   return (
     <Stack gap={4}>
       {waiting.map((pull) => (
-        <Text key={pull.number} size="sm">
+        <Text key={pull.number}>
           <Anchor href={pull.url ?? undefined} target="_blank" rel="noreferrer">
             #{pull.number}
           </Anchor>{' '}
