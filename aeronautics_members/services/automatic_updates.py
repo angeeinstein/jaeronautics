@@ -27,6 +27,8 @@ ENABLED_KEY = "automatic_updates"
 LAST_RUN_KEY = "automatic_updates.last_run"
 # The version the last automatic update asked for.
 ATTEMPT_KEY = "automatic_updates.attempt"
+# When it was last switched on: a check missing is counted from there until the first.
+ENABLED_AT_KEY = "automatic_updates.enabled_at"
 AT = "03:30"
 
 # What a run can come to; the page says each in words.
@@ -67,9 +69,18 @@ def is_enabled():
 def set_enabled(enabled, actor=None):
     before = is_enabled()
     _set(ENABLED_KEY, "on" if enabled else "off")
+    if enabled and not before:
+        _set(ENABLED_AT_KEY, get_now_utc().isoformat())
     if before != bool(enabled):
         log_audit_event("system", "automatic_updates_switched", actor_user=actor, target_user=actor,
                         before={"enabled": before}, after={"enabled": bool(enabled)})
+
+
+def enabled_since():
+    """When automatic updates were switched on, or None."""
+    from .system_update import parse_time
+
+    return parse_time(_get(ENABLED_AT_KEY)) if is_enabled() else None
 
 
 def last_run():

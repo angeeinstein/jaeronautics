@@ -208,6 +208,24 @@ not unattended-upgrades', so that it too waits its turn: never in the middle of
 an update. Uninstall removes these files; the system then keeps installing its
 security updates at its own times.
 
+### Telling a person, when something is stuck
+
+System health has a panel *Staying current* (part 4,
+`services/staying_current.py`): automatic updates and when the night last
+checked, Dependabot's updates waiting for a person (with links), Ubuntu's
+release and support date, when its security updates were last installed, a
+restart pending, and the Node.js that builds the front end. Stuck -- and among
+the report's warnings -- is: an update waiting over 14 days; the newest version
+failed its checks; no nightly check for over a day while automatic updates are
+on; Ubuntu's updates not installed for over 3 days; a restart pending over 3
+days; Ubuntu's or Node.js's support ending within a year. Each is emailed once
+to whoever may install updates, from the email job (at most once an hour),
+forgotten when it resolves. Read without root, from files Ubuntu keeps for
+anybody (`/etc/os-release`, `/usr/share/distro-info/ubuntu.csv`,
+`/var/lib/apt/periodic/upgrade-stamp`, `/run/reboot-required`); Dependabot's
+pull requests from GitHub, at most hourly. The next Ubuntu release, step by
+step: `docs/new-release.md`.
+
 **A rollback restores the program only.** It does *not* restore the database.
 The schema is deliberately left where it is, because every migration here adds
 tables and columns that older code simply ignores, while undoing one would mean

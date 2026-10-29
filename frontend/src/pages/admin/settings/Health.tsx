@@ -4,10 +4,26 @@
  * background tasks that gave up sent once more, an email that could not be
  * delivered retried or dismissed. Data: GET /api/v1/admin/settings/health and
  * its actions (aeronautics_members/api/admin_system.py).
+ *
+ * *Staying current* (docs/automatic-updates-plan.md, part 4): the portal's
+ * automatic updates and the updates waiting for a person, Ubuntu's own updates
+ * and support, the Node.js that builds the front end. What is stuck is among
+ * the report's warnings, and emailed once to whoever may install updates.
  */
-import { Alert, Button, Code, Group, SimpleGrid, Stack, Table, Text, VisuallyHidden } from '@mantine/core';
+import {
+  Alert,
+  Anchor,
+  Button,
+  Code,
+  Group,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  VisuallyHidden,
+} from '@mantine/core';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { IconClock, IconId, IconMailOff, IconStethoscope } from '@tabler/icons-react';
+import { IconClock, IconId, IconMailOff, IconRefreshDot, IconStethoscope } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
 import { can, useMe } from '../../../api/session';
@@ -15,7 +31,7 @@ import { ConfirmButton } from '../../../components/ConfirmButton';
 import { type Detail, Details } from '../../../components/Details';
 import { Panel } from '../../../components/Panel';
 import { Pill } from '../../../components/Pill';
-import { formatDateTime, plural } from '../../../lib/format';
+import { formatDate, formatDateTime, plural } from '../../../lib/format';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
 import { SettingsPage } from './shared';
 
@@ -255,6 +271,87 @@ function Undelivered({ emails }: { emails: Schemas['UndeliveredOut'][] }) {
   );
 }
 
+function Waiting({ waiting }: { waiting: Schemas['CurrentOut']['waiting'] }) {
+  if (waiting === null) return <Text size="sm">Could not be checked</Text>;
+  if (!waiting.length) return <Text size="sm">None</Text>;
+  return (
+    <Stack gap={4}>
+      {waiting.map((pull) => (
+        <Text key={pull.number} size="sm">
+          <Anchor href={pull.url ?? undefined} target="_blank" rel="noreferrer">
+            #{pull.number}
+          </Anchor>{' '}
+          {pull.title} ({pull.days} {plural(pull.days, 'day', 'days')})
+        </Text>
+      ))}
+    </Stack>
+  );
+}
+
+function StayingCurrent({ current }: { current: Schemas['CurrentOut'] }) {
+  const { portal, ubuntu, node } = current;
+  const items: Detail[] = [
+    [
+      'Automatic updates',
+      portal.automatic
+        ? `On${portal.last_check_at ? `, last checked ${formatDateTime(portal.last_check_at)}` : ''}`
+        : 'Off',
+    ],
+    ...(portal.newest
+      ? [
+          [
+            'Newest version',
+            <Group key="newest" gap="xs">
+              <Code>{portal.newest}</Code>
+              {portal.newest_failed ? <Pill tone="failed">Checks failed</Pill> : null}
+            </Group>,
+          ] satisfies Detail,
+        ]
+      : []),
+    ['Waiting for a person', <Waiting key="waiting" waiting={current.waiting} />],
+  ];
+  if (ubuntu) {
+    items.push(
+      [
+        ubuntu.name,
+        ubuntu.supported_until ? `Supported until ${formatDate(ubuntu.supported_until)}` : 'Support unknown',
+      ],
+      [
+        'Security updates',
+        ubuntu.updates_installed_at
+          ? `Installed ${formatDateTime(ubuntu.updates_installed_at)}`
+          : 'Not set up',
+      ],
+      [
+        'Restart',
+        ubuntu.restart_pending_since
+          ? `Needed since ${formatDateTime(ubuntu.restart_pending_since)}${
+              ubuntu.restart_packages.length ? ` (${ubuntu.restart_packages.join(', ')})` : ''
+            }`
+          : 'Not needed',
+      ],
+    );
+  }
+  if (node) {
+    items.push([
+      'Node.js (builds the front end)',
+      node.supported_until ? `${node.major}, fixes until ${formatDate(node.supported_until)}` : node.major,
+    ]);
+  }
+  return (
+    <Panel icon={IconRefreshDot} title="Staying current">
+      <Stack gap="md">
+        <Details items={items} />
+        {current.guide_url ? (
+          <Anchor href={current.guide_url} target="_blank" rel="noreferrer" size="sm">
+            Moving to the next Ubuntu release, step by step
+          </Anchor>
+        ) : null}
+      </Stack>
+    </Panel>
+  );
+}
+
 export function Health() {
   return (
     <SettingsPage
@@ -269,6 +366,7 @@ export function Health() {
             <Membership health={health} />
             <BackgroundWork health={health} />
           </SimpleGrid>
+          <StayingCurrent current={health.current} />
           {health.undelivered.length ? <Undelivered emails={health.undelivered} /> : null}
         </Stack>
       )}

@@ -53,6 +53,20 @@ const healthy: Schemas['HealthOut'] = {
     emails_exhausted: 0,
   },
   undelivered: [],
+  current: {
+    portal: { newest: null, newest_failed: false, automatic: true, last_check_at: '2026-10-29T02:30:00Z' },
+    waiting: [],
+    ubuntu: {
+      name: 'Ubuntu 24.04.3 LTS',
+      supported_until: '2029-05-31',
+      updates_installed_at: '2026-10-29T02:40:00Z',
+      restart_pending_since: null,
+      restart_packages: [],
+    },
+    node: { major: '24', supported_until: '2028-04-30' },
+    stuck: [],
+    guide_url: 'https://github.com/o/r/blob/main/docs/new-release.md',
+  },
 };
 
 describe('system health', () => {
@@ -131,6 +145,38 @@ describe('system health', () => {
 
     await screen.findByRole('table', { name: 'Undelivered emails' });
     expect(screen.queryByRole('button', { name: 'Dismiss' })).not.toBeInTheDocument();
+  });
+});
+
+describe('staying current', () => {
+  it('the portal, Ubuntu and Node.js, and an update waiting for a person, linked', async () => {
+    show(<Health />, {
+      [HEALTH]: {
+        body: {
+          ...healthy,
+          warnings: ['An update has waited 15 days for a person: Bump typescript to 7.0.2.'],
+          current: {
+            ...healthy.current,
+            waiting: [
+              {
+                number: 51,
+                title: 'Bump typescript to 7.0.2',
+                url: 'https://github.com/o/r/pull/51',
+                days: 15,
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(await screen.findByText('Supported until 31.05.2029')).toBeInTheDocument();
+    expect(screen.getByText('24, fixes until 30.04.2028')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '#51' })).toHaveAttribute(
+      'href',
+      'https://github.com/o/r/pull/51',
+    );
+    expect(screen.getByRole('link', { name: /next Ubuntu release/ })).toBeInTheDocument();
   });
 });
 

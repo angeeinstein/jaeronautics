@@ -4628,6 +4628,77 @@
         "title": "CropQuery",
         "type": "object"
       },
+      "CurrentOut": {
+        "additionalProperties": false,
+        "description": "Staying current (docs/automatic-updates-plan.md, part 4): the portal, Ubuntu, Node.js.",
+        "properties": {
+          "guide_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guide Url"
+          },
+          "node": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "portal": {
+            "$ref": "#/components/schemas/PortalCurrentOut"
+          },
+          "stuck": {
+            "items": {
+              "$ref": "#/components/schemas/StuckOut"
+            },
+            "title": "Stuck",
+            "type": "array"
+          },
+          "ubuntu": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UbuntuOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "waiting": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/WaitingOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiting"
+          }
+        },
+        "required": [
+          "portal",
+          "waiting",
+          "ubuntu",
+          "node",
+          "stuck",
+          "guide_url"
+        ],
+        "title": "CurrentOut",
+        "type": "object"
+      },
       "DashboardOut": {
         "additionalProperties": false,
         "properties": {
@@ -8712,6 +8783,9 @@
       "HealthOut": {
         "additionalProperties": false,
         "properties": {
+          "current": {
+            "$ref": "#/components/schemas/CurrentOut"
+          },
           "database_schema": {
             "$ref": "#/components/schemas/SchemaOut"
           },
@@ -8765,7 +8839,8 @@
           "database_schema",
           "membership",
           "queues",
-          "undelivered"
+          "undelivered",
+          "current"
         ],
         "title": "HealthOut",
         "type": "object"
@@ -12205,6 +12280,33 @@
         "title": "NewsOut",
         "type": "object"
       },
+      "NodeOut": {
+        "additionalProperties": false,
+        "properties": {
+          "major": {
+            "title": "Major",
+            "type": "string"
+          },
+          "supported_until": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supported Until"
+          }
+        },
+        "required": [
+          "major",
+          "supported_until"
+        ],
+        "title": "NodeOut",
+        "type": "object"
+      },
       "NoteIn": {
         "additionalProperties": false,
         "properties": {
@@ -13567,6 +13669,49 @@
           "allowed_since"
         ],
         "title": "PictureReplacementOut",
+        "type": "object"
+      },
+      "PortalCurrentOut": {
+        "additionalProperties": false,
+        "properties": {
+          "automatic": {
+            "title": "Automatic",
+            "type": "boolean"
+          },
+          "last_check_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Check At"
+          },
+          "newest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newest"
+          },
+          "newest_failed": {
+            "title": "Newest Failed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "newest",
+          "newest_failed",
+          "automatic",
+          "last_check_at"
+        ],
+        "title": "PortalCurrentOut",
         "type": "object"
       },
       "PresenceIn": {
@@ -16036,6 +16181,32 @@
         "title": "StepOut",
         "type": "object"
       },
+      "StuckOut": {
+        "additionalProperties": false,
+        "properties": {
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "link"
+        ],
+        "title": "StuckOut",
+        "type": "object"
+      },
       "SwitchIn": {
         "additionalProperties": false,
         "properties": {
@@ -18290,6 +18461,65 @@
         "title": "TreasurerIn",
         "type": "object"
       },
+      "UbuntuOut": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "restart_packages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Restart Packages",
+            "type": "array"
+          },
+          "restart_pending_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Restart Pending Since"
+          },
+          "supported_until": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supported Until"
+          },
+          "updates_installed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updates Installed At"
+          }
+        },
+        "required": [
+          "name",
+          "supported_until",
+          "updates_installed_at",
+          "restart_pending_since",
+          "restart_packages"
+        ],
+        "title": "UbuntuOut",
+        "type": "object"
+      },
       "UndeliveredOut": {
         "additionalProperties": false,
         "properties": {
@@ -18696,6 +18926,42 @@
           "at"
         ],
         "title": "WaitingCountOut",
+        "type": "object"
+      },
+      "WaitingOut": {
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "number",
+          "title",
+          "url",
+          "days"
+        ],
+        "title": "WaitingOut",
         "type": "object"
       }
     }

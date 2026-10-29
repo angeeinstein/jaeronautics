@@ -9,6 +9,7 @@ services/maintenance.py. Drawn by frontend/src/pages/admin/settings/Health.tsx
 and Updates.tsx.
 """
 
+from datetime import date
 from typing import Literal
 
 from flask_login import current_user
@@ -79,6 +80,59 @@ class PagesOut(Model):
     note: str | None
 
 
+class StuckOut(Model):
+    text: str
+    #: Where it is about: the pull request, the checks, the guide; None.
+    link: str | None
+
+
+class PortalCurrentOut(Model):
+    #: The newest version, while it is not the one installed.
+    newest: str | None
+    #: The newest version did not pass its checks, so it is not installed.
+    newest_failed: bool
+    automatic: bool
+    last_check_at: UtcDateTime | None
+
+
+class WaitingOut(Model):
+    number: int
+    title: str
+    url: str | None
+    days: int
+
+
+class UbuntuOut(Model):
+    name: str
+    supported_until: date | None
+    #: When unattended-upgrades last ran; None: never, or not set up.
+    updates_installed_at: UtcDateTime | None
+    restart_pending_since: UtcDateTime | None
+    #: What the restart is for ("linux-image-...").
+    restart_packages: list[str]
+
+
+class NodeOut(Model):
+    major: str
+    supported_until: date | None
+
+
+class CurrentOut(Model):
+    """Staying current (docs/automatic-updates-plan.md, part 4): the portal, Ubuntu, Node.js."""
+
+    portal: PortalCurrentOut
+    #: Dependabot's updates waiting for a person (open over 14 days); None: GitHub could not be asked.
+    waiting: list[WaitingOut] | None
+    #: None: not Ubuntu.
+    ubuntu: UbuntuOut | None
+    #: The Node.js that builds the front end.
+    node: NodeOut | None
+    #: What needs a person; each is emailed once to whoever may install updates.
+    stuck: list[StuckOut]
+    #: The step-by-step guide to the next Ubuntu release.
+    guide_url: str | None
+
+
 class HealthOut(Model):
     healthy: bool
     problems: list[str]
@@ -91,6 +145,21 @@ class HealthOut(Model):
     undelivered: list[UndeliveredOut]
     #: None when the pages were not fetched (the test suite).
     pages: PagesOut | None = None
+    current: CurrentOut
+
+
+def _current(current):
+    site, system, build = current["portal"], current["ubuntu"], current["node"]
+    return CurrentOut(
+        portal=PortalCurrentOut(newest=site["newest"] if site["newer_version"] else None,
+                                newest_failed=site["newest_failed"], automatic=site["automatic"],
+                                last_check_at=site["last_check_at"]),
+        waiting=[WaitingOut(**pull) for pull in current["waiting"]] if current["waiting"] is not None else None,
+        ubuntu=UbuntuOut(**{key: system[key] for key in UbuntuOut.model_fields}) if system else None,
+        node=NodeOut(**build) if build else None,
+        stuck=[StuckOut(text=item["text"], link=item["link"]) for item in current["stuck"]],
+        guide_url=current["guide_url"],
+    )
 
 
 @endpoint("GET", "/admin/settings/health", response=HealthOut, permissions=SYSTEM, tag=TAG)
@@ -109,6 +178,7 @@ def admin_system_health():
             for job in list_undelivered_emails()
         ],
         pages=PagesOut(**{key: health["pages"][key] for key in PagesOut.model_fields}) if health["pages"] else None,
+        current=_current(health["current"]),
     )
 
 

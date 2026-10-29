@@ -4252,6 +4252,16 @@ def create_app(config_overrides=None):
         """Delivers queued admin and user notification emails."""
         if _stand_down_while_paused("notifications"):
             return
+        # Something about updates newly stuck: told once, with this run's emails
+        # (services/staying_current.py; at most once an hour).
+        from .services import staying_current
+
+        try:
+            staying_current.tell()
+            db.session.commit()
+        except Exception:  # noqa: BLE001 -- logged; asked again within the hour
+            db.session.rollback()
+            app.logger.exception("Checking whether updates are stuck failed.")
         email_summary = process_email_delivery_jobs(app)
         db.session.commit()
         summary = get_notification_service().deliver_pending_notifications()

@@ -5285,6 +5285,21 @@ export interface components {
              */
             zoom?: number;
         };
+        /**
+         * CurrentOut
+         * @description Staying current (docs/automatic-updates-plan.md, part 4): the portal, Ubuntu, Node.js.
+         */
+        CurrentOut: {
+            /** Guide Url */
+            guide_url: string | null;
+            node: components["schemas"]["NodeOut"] | null;
+            portal: components["schemas"]["PortalCurrentOut"];
+            /** Stuck */
+            stuck: components["schemas"]["StuckOut"][];
+            ubuntu: components["schemas"]["UbuntuOut"] | null;
+            /** Waiting */
+            waiting: components["schemas"]["WaitingOut"][] | null;
+        };
         /** DashboardOut */
         DashboardOut: {
             attention: components["schemas"]["Attention"];
@@ -6636,6 +6651,7 @@ export interface components {
         };
         /** HealthOut */
         HealthOut: {
+            current: components["schemas"]["CurrentOut"];
             database_schema: components["schemas"]["SchemaOut"];
             /** Healthy */
             healthy: boolean;
@@ -7780,6 +7796,13 @@ export interface components {
             /** Unsubscribed At */
             unsubscribed_at: string | null;
         };
+        /** NodeOut */
+        NodeOut: {
+            /** Major */
+            major: string;
+            /** Supported Until */
+            supported_until: string | null;
+        };
         /** NoteIn */
         NoteIn: {
             /**
@@ -8208,6 +8231,17 @@ export interface components {
         PictureReplacementOut: {
             /** Allowed Since */
             allowed_since: string | null;
+        };
+        /** PortalCurrentOut */
+        PortalCurrentOut: {
+            /** Automatic */
+            automatic: boolean;
+            /** Last Check At */
+            last_check_at: string | null;
+            /** Newest */
+            newest: string | null;
+            /** Newest Failed */
+            newest_failed: boolean;
         };
         /** PresenceIn */
         PresenceIn: {
@@ -9071,6 +9105,13 @@ export interface components {
              */
             state: "pending" | "running" | "done" | "failed";
         };
+        /** StuckOut */
+        StuckOut: {
+            /** Link */
+            link: string | null;
+            /** Text */
+            text: string;
+        };
         /** SwitchIn */
         SwitchIn: {
             /** Enabled */
@@ -9765,6 +9806,19 @@ export interface components {
             /** User Id */
             user_id: number;
         };
+        /** UbuntuOut */
+        UbuntuOut: {
+            /** Name */
+            name: string;
+            /** Restart Packages */
+            restart_packages: string[];
+            /** Restart Pending Since */
+            restart_pending_since: string | null;
+            /** Supported Until */
+            supported_until: string | null;
+            /** Updates Installed At */
+            updates_installed_at: string | null;
+        };
         /** UndeliveredOut */
         UndeliveredOut: {
             /** Error */
@@ -9891,6 +9945,17 @@ export interface components {
             count: number;
             /** Summary */
             summary: string | null;
+        };
+        /** WaitingOut */
+        WaitingOut: {
+            /** Days */
+            days: number;
+            /** Number */
+            number: number;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string | null;
         };
     };
     responses: never;

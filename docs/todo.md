@@ -33,23 +33,6 @@ owed off the dashboard).
 
 ## Open
 
-### Automatic updates: telling a person (part 4)
-
-- **Added:** 2026-10-28
-- **What:** part 4 of `docs/automatic-updates-plan.md`: System health shows
-  whether the automatic updates work (unattended-upgrades' last run, updates
-  waiting, a restart pending, what the nightly job last came to) and what is
-  stuck -- a security update waiting more than 14 days, an update CI failed,
-  a major version waiting for a person -- with an email only then, once,
-  never daily; and the support ends (Ubuntu 24.04, Node.js 24) a year ahead,
-  with a step-by-step guide for moving to the next release.
-- **Where:** `docs/automatic-updates-plan.md`, part 4.
-- **Why:** "isn't dependent on me, myself and my knowledge, and isn't
-  dependent on you as an agent being there."
-- **When:** after parts 2 and 3 (`claude/automatic-installs`) are merged and
-  automatic installs are switched on on the live server -- a few weeks after
-  part 1 (merged 2026-10-28) has run cleanly.
-
 ### Team leads answer their team's messages in the portal
 
 - **Added:** 2026-10-18

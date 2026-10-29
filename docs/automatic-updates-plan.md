@@ -97,7 +97,7 @@ changes between 02:00 and 03:00; 03:15 ends an attendance day
 (`docs/attendance-plan.md`); Stripe's changes around midnight have time to
 arrive (`CLAUDE.md`).
 
-## Part 4: telling a person, only when needed (not built)
+## Part 4: telling a person, only when needed (built 2026-10-29)
 
 System health shows whether all of the above works (unattended-upgrades' last
 run, updates waiting, a restart pending), and something stuck: a security
@@ -107,6 +107,19 @@ support until April 2029), Node.js 24 (April 2028), with a step-by-step guide
 for someone without IT knowledge to move to the next release -- a new server,
 `install.sh`, then the backup restored (`docs/maintenance.md`, "Rebuilding
 the Portal Somewhere Else").
+
+Built as decided on 2026-10-29: System health has a panel *Staying current*
+(the portal, Ubuntu, the Node.js that builds the front end), and what is stuck
+is among the report's warnings. Stuck: an update Dependabot proposed open for
+more than **14 days**; the newest version failed its checks; automatic updates
+on and no check for more than a day; Ubuntu's security updates not installed
+for more than **3 days**; a restart pending for more than **3 days**; Ubuntu's
+or Node.js's support ending within **a year**. Each is emailed **once**, to
+whoever may install updates -- the super admins, the only ones who see System
+health and Updates (the maintainer, 2026-10-29) --, forgotten when it resolves.
+Looked at at most once an hour with the email job, not only in the night: a
+night that does not run has to be noticed too. The guide for the next Ubuntu
+release: `docs/new-release.md`. Code: `services/staying_current.py`.
 
 ## Outside the code
 
