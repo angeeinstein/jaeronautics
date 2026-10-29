@@ -363,6 +363,23 @@ describe('updates', () => {
     expect(await put?.clone().json()).toEqual({ enabled: true });
   });
 
+  it('an update the check started says how it went', async () => {
+    const checked = (outcome: string) => ({
+      ...upToDate,
+      newer_version: false,
+      update_available: false,
+      installed: { ...upToDate.installed, short_revision: 'bbbb2222' },
+      automatic: {
+        enabled: true,
+        at: '03:30',
+        last_run: { at: '2026-10-29T02:30:00Z', outcome, revision: 'bbbb2222' },
+      },
+    });
+    show(<Updates />, { [UPDATES]: { body: checked('requested') } });
+
+    expect(await screen.findByText('Installed bbbb2222.')).toBeInTheDocument();
+  });
+
   it('without the runner nothing can be started', async () => {
     show(<Updates />, { [UPDATES]: { body: { ...upToDate, runner_installed: false } } });
 

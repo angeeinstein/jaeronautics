@@ -46,3 +46,7 @@ aeronautics_members/static/app.next/
 # machine). Generated, so not tracked -- and without this line every update
 # warned about "local git changes" that were only these files.
 cloudflare/
+
+# npm's cache in the home of the portal's user, which is the installation folder:
+# otherwise every update reports it as a local change.
+/.npm/

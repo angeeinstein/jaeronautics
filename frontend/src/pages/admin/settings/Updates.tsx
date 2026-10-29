@@ -339,11 +339,16 @@ function Install({
   );
 }
 
-// What the last night came to, in a few words.
-function nightSaid(run: Schemas['AutomaticRunOut']): string {
+// What the last check came to, in a few words -- an update it started, with how that went.
+function nightSaid(run: Schemas['AutomaticRunOut'], state: State): string {
   const version = run.revision ?? 'the newest version';
   switch (run.outcome) {
     case 'requested':
+      if (state.in_progress) return `Started the update to ${version}.`;
+      if (run.revision && state.installed.short_revision === run.revision) return `Installed ${version}.`;
+      if (state.last_run.state === 'failed') {
+        return `${version} did not install: it failed and undid itself. A newer version will be tried.`;
+      }
       return `Started the update to ${version}.`;
     case 'up_to_date':
       return 'Up to date.';
@@ -361,14 +366,15 @@ function nightSaid(run: Schemas['AutomaticRunOut']): string {
 }
 
 function Automatic({
-  automatic,
+  state,
   saving,
   onSwitch,
 }: {
-  automatic: State['automatic'];
+  state: State;
   saving: boolean;
   onSwitch: (enabled: boolean) => void;
 }) {
+  const automatic = state.automatic;
   const last = automatic.last_run;
   return (
     <Panel icon={IconClock} title="Automatic updates">
@@ -382,7 +388,9 @@ function Automatic({
             onSwitch(event.currentTarget.checked);
           }}
         />
-        {last?.at ? <Details items={[[`Last check, ${formatDateTime(last.at)}`, nightSaid(last)]]} /> : null}
+        {last?.at ? (
+          <Details items={[[`Last check, ${formatDateTime(last.at)}`, nightSaid(last, state)]]} />
+        ) : null}
         <Text size="sm" c="dimmed">
           Ubuntu installs its own security updates separately, at 03:40.
         </Text>
@@ -579,11 +587,7 @@ export function Updates() {
                         busy={start.isPending && start.variables === 'update'}
                         onStart={start.mutate}
                       />
-                      <Automatic
-                        automatic={state.automatic}
-                        saving={automatic.isPending}
-                        onSwitch={automatic.mutate}
-                      />
+                      <Automatic state={state} saving={automatic.isPending} onSwitch={automatic.mutate} />
                     </>
                   )}
                 </Stack>
