@@ -150,6 +150,76 @@ pause_background_jobs 2>&1
     assert "portal-billing-reconcile.service" in without
 
 
+def test_an_update_keeps_the_lock_it_runs_under(lib, stubs, tmp_path):  # noqa: F811
+    """The runner holds the lock while the installer renders it again: a new
+    file would be a new lock, and the next job would not wait."""
+    lock = tmp_path / "night.lock"
+    lock.touch()
+    inode = lock.stat().st_ino
+    holder = subprocess.Popen(["flock", str(lock), "sleep", "10"], start_new_session=True)
+    time.sleep(0.3)
+
+    result = run(lib, stubs, f'chown() {{ :; }}; NIGHT_LOCK="{lock}"; APP_GROUP=g; ensure_night_lock')
+
+    assert result.returncode == 0, result.stderr
+    assert lock.stat().st_ino == inode
+    assert subprocess.run(["flock", "-n", str(lock), "true"]).returncode != 0
+    os.killpg(holder.pid, signal.SIGKILL)
+    holder.wait()
+
+
+def _hold(lib, stubs, lock, wait_seconds, **env):  # noqa: F811
+    return run(lib, stubs, f'NIGHT_LOCK="{lock}"; NIGHT_WAIT_SECONDS={wait_seconds}; hold_night_lock 2>&1; '
+                           'echo "HELD=${NIGHT_LOCK_HELD:-0}"', **env)
+
+
+def test_an_update_started_in_a_shell_waits_its_turn_too(lib, stubs, tmp_path):  # noqa: F811
+    lock = tmp_path / "night.lock"
+    lock.touch()
+    job = subprocess.Popen(["flock", str(lock), "sleep", "2"])
+    time.sleep(0.3)
+    started = time.monotonic()
+
+    result = _hold(lib, stubs, lock, 30)
+
+    assert "Waiting for the night's other work" in result.stdout and "HELD=1" in result.stdout
+    assert time.monotonic() - started >= 1.5
+    job.wait()
+
+
+def test_one_started_in_a_shell_gives_up_before_changing_anything(lib, stubs, tmp_path):  # noqa: F811
+    lock = tmp_path / "night.lock"
+    lock.touch()
+    job = subprocess.Popen(["flock", str(lock), "sleep", "5"], start_new_session=True)
+    time.sleep(0.3)
+
+    result = _hold(lib, stubs, lock, 1)
+
+    assert result.returncode != 0 and "nothing was changed" in result.stdout and "HELD=" not in result.stdout
+    os.killpg(job.pid, signal.SIGKILL)
+    job.wait()
+
+
+def test_one_the_runner_started_does_not_wait_for_its_own_lock(lib, stubs, tmp_path):  # noqa: F811
+    lock = tmp_path / "night.lock"
+    lock.touch()
+    runner = subprocess.Popen(["flock", str(lock), "sleep", "5"], start_new_session=True)
+    time.sleep(0.3)
+
+    result = _hold(lib, stubs, lock, 1, NIGHT_LOCK_HELD="1")
+
+    assert result.returncode == 0 and "Waiting" not in result.stdout
+    os.killpg(runner.pid, signal.SIGKILL)
+    runner.wait()
+
+
+def test_every_mode_that_changes_the_installation_holds_the_lock():
+    body = _function("main")
+
+    assert body.index("hold_night_lock") < body.index('case "${MODE}" in')
+    assert '"${MODE}" != "uninstall"' in body
+
+
 # --- Ubuntu ------------------------------------------------------------------------------
 
 
@@ -176,11 +246,18 @@ configure_unattended_upgrades
     # Not unattended-upgrades' own restart, which could cut an update in half.
     assert 'Unattended-Upgrade::Automatic-Reboot "false";' in settings
     assert "OnCalendar=*-*-* 03:40 Europe/Vienna" in paths["timer.d/50.conf"].read_text()
-    assert "flock --wait 3600 /var/lib/x/night.lock /usr/lib/apt/apt.systemd.daily install" in (
-        paths["service.d/50.conf"].read_text())
+    upgrade = paths["service.d/50.conf"].read_text()
+    assert "flock --wait 3600 /var/lib/x/night.lock" in upgrade
+    # Its own fresh package lists, then Ubuntu's install step only.
+    assert "apt-get -q update || true; exec /usr/lib/apt/apt.systemd.daily install" in upgrade
     restart = paths["restart.service"].read_text()
     assert "flock --wait 3600 /var/lib/x/night.lock" in restart and "/run/reboot-required" in restart
     assert "OnCalendar=*-*-* 04:00 Europe/Vienna" in paths["restart.timer"].read_text()
+
+
+def test_an_update_leaves_ubuntu_its_package_lists():
+    # Deleted, the night's security updates would find nothing to install.
+    assert "apt/lists" not in _function("cleanup_package_caches")
 
 
 def test_left_to_the_system_where_it_is_not_apt(lib, stubs, tmp_path):  # noqa: F811

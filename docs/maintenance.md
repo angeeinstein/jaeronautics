@@ -185,8 +185,10 @@ themselves), not the server's clock, which is usually UTC:
 (`/var/lib/jaeronautics/update-runner/night.lock`) and one that finds it held
 waits -- up to an hour, then it gives up for the night. The times only set the
 order; a step that runs long makes the next one wait instead of overlapping.
-Updates started with the button queue the same way, and a nightly job that
-starts during an update waits and then runs on the new code. The lock is the
+Updates started with the button queue the same way, and so does `install.sh`
+started in a shell (any mode but uninstall: it says it is waiting, and gives
+up without changing anything after the hour); a nightly job that starts
+during an update waits and then runs on the new code. The lock is the
 kernel's, on an open file (`flock`): it goes with the process however that ends
 -- finished, crashed, stopped by its time limit, the power gone --, so nothing
 is ever left locked and there is nothing to clear by hand. Email delivery and
@@ -203,7 +205,8 @@ time to arrive.
 and on (`/etc/apt/apt.conf.d/52<service>-unattended-upgrades`, after Ubuntu's
 own files, so what is set there stays), and moves its run into the night with
 drop-ins for `apt-daily-upgrade` (its timer and its command, queued behind the
-lock). The restart is the portal's own step (`<service>-restart-if-needed`),
+lock; the command fetches the package lists first, so it never works from a
+day-old list). The restart is the portal's own step (`<service>-restart-if-needed`),
 not unattended-upgrades', so that it too waits its turn: never in the middle of
 an update. Uninstall removes these files; the system then keeps installing its
 security updates at its own times.

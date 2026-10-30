@@ -318,6 +318,40 @@ night_job() {
     return 1
 }
 
+# There before the night's jobs first run: they open it to read only (the
+# portal's services see the file system read-only), so cannot create it.
+# An existing one is kept, never replaced: a lock belongs to the file, and
+# whoever holds or waits for it -- this very update, run by the update
+# runner -- would hold the old one while the next job locked a new one.
+ensure_night_lock() {
+    if [[ -L "${NIGHT_LOCK}" || ( -e "${NIGHT_LOCK}" && ! -f "${NIGHT_LOCK}" ) ]]; then
+        rm -rf -- "${NIGHT_LOCK}"
+    fi
+    if [[ ! -f "${NIGHT_LOCK}" ]]; then
+        install -m 0640 -o root -g "${APP_GROUP}" /dev/null "${NIGHT_LOCK}"
+    else
+        chown root:"${APP_GROUP}" "${NIGHT_LOCK}"
+        chmod 0640 "${NIGHT_LOCK}"
+    fi
+}
+
+# An update started here, in a shell, is a step of the night as much as one
+# the update runner starts: the 04:00 restart must not cut it in half, nor
+# Ubuntu's updates run beside it. So it takes the night lock too -- waiting,
+# like the runner, for whatever holds it -- unless the runner holds it for it
+# already. The lock goes with this process however it ends.
+hold_night_lock() {
+    [[ "${NIGHT_LOCK_HELD:-0}" == "1" ]] && return 0
+    [[ -f "${NIGHT_LOCK}" && ! -L "${NIGHT_LOCK}" ]] || return 0
+    exec 8<"${NIGHT_LOCK}"
+    if ! flock -n 8; then
+        info "Waiting for the night's other work to finish first (up to $(( NIGHT_WAIT_SECONDS / 60 )) minutes)"
+        flock -w "${NIGHT_WAIT_SECONDS}" 8 \
+            || die "Still waiting after ${NIGHT_WAIT_SECONDS} seconds for the night's other work; nothing was changed. Try again later."
+    fi
+    export NIGHT_LOCK_HELD=1
+}
+
 pause_background_jobs() {
     # Between the new code arriving on disk and the restart, a job started by
     # its timer would run that code against packages and a database not yet
@@ -761,8 +795,10 @@ cleanup_package_caches() {
 
     case "${PACKAGE_MANAGER:-}" in
         apt)
+            # The downloaded packages only. The package lists stay: without
+            # them Ubuntu's security updates find nothing to install until
+            # its next refresh.
             apt-get clean || true
-            rm -rf /var/lib/apt/lists/* 2>/dev/null || true
             ;;
         dnf)
             dnf clean all || true
@@ -3171,7 +3207,9 @@ EOF
 # Written by the portal's installer: queued behind the night lock.
 [Service]
 ExecStart=
-ExecStart=/usr/bin/flock --wait ${NIGHT_WAIT_SECONDS} ${NIGHT_LOCK} /usr/lib/apt/apt.systemd.daily install
+# The package lists fetched first, here: Ubuntu's own refresh (apt-daily) runs
+# at a random time and at most once a day, so the lists could be a day old.
+ExecStart=/usr/bin/flock --wait ${NIGHT_WAIT_SECONDS} ${NIGHT_LOCK} /bin/sh -c '/usr/bin/apt-get -q update || true; exec /usr/lib/apt/apt.systemd.daily install'
 EOF
 
     cat > "${RESTART_IF_NEEDED_SERVICE_FILE}" <<EOF
@@ -3224,12 +3262,7 @@ render_update_runner() {
         rm -f -- "${UPDATE_RUNNER_DIR}"
     fi
     install -d -o root -g "${APP_GROUP}" -m 0750 "${UPDATE_RUNNER_DIR}"
-    # There before the night's jobs first run: they open it to read only (the
-    # portal's services see the file system read-only), so cannot create it.
-    if [[ -L "${NIGHT_LOCK}" || ( -e "${NIGHT_LOCK}" && ! -f "${NIGHT_LOCK}" ) ]]; then
-        rm -rf -- "${NIGHT_LOCK}"
-    fi
-    install -m 0640 -o root -g "${APP_GROUP}" /dev/null "${NIGHT_LOCK}"
+    ensure_night_lock
     install -d -m 0755 "$(dirname "${UPDATE_RUNNER_SCRIPT}")"
 
     # Write via a temporary file and rename: bash reads a script incrementally,
@@ -4278,6 +4311,10 @@ main() {
         else
             MODE="install"
         fi
+    fi
+
+    if [[ "${MODE}" != "uninstall" ]]; then
+        hold_night_lock
     fi
 
     case "${MODE}" in
