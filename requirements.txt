@@ -1346,9 +1346,9 @@ sqlalchemy==2.0.54 \
     # via
     #   alembic
     #   flask-sqlalchemy
-stripe==13.0.1 \
-    --hash=sha256:5869739430ff73bd9cd81275abfb79fd4089e97e9fd98d306a015f5defd39a0d \
-    --hash=sha256:7804cee14580ab37bbc1e5f6562e49dea0686ab3cb34384eb9386387ed8ebd0c
+stripe==16.0.0 \
+    --hash=sha256:5016068d54aebb43e61b3c377ef45bede4e0b4eb1817d7a12af81630c55a23d2 \
+    --hash=sha256:6a401baf2fc19c59ccb59005e674f8da8fa256e8db319ad8c50292f4cddf8c26
     # via -r requirements.in
 tinycss2==1.5.1 \
     --hash=sha256:3415ba0f5839c062696996998176c4a3751d18b7edaaeeb658c9ce21ec150661 \
