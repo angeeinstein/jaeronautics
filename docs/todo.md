@@ -33,6 +33,26 @@ owed off the dashboard).
 
 ## Open
 
+### Updates: warn of local changes only where the update discards them
+
+- **Added:** 2026-10-31
+- **What:** the installer warns "Local git changes were detected in … will
+  be discarded by update" whenever `git status --porcelain` lists anything --
+  files git does not track included. But the update only resets the
+  portal's own (tracked) files; untracked ones stay where they are. So count
+  tracked changes only (`--untracked-files=no`), and keep the wording true:
+  what is discarded is changes to the portal's own files.
+- **Where:** `install.sh`, the end of `ensure_repo_present` (the
+  `status --porcelain` check before the warning).
+- **Why:** on the live server, after the update of 2026-10-31, `git status`
+  listed only `.lesshst` -- `less`'s history, written when it ran with the
+  portal's folder as its home (the portal user's home is that folder) -- so
+  the next update would warn again with nothing to discard. The same
+  happened before with npm's cache (`.npm/`, now in `.gitignore`); ignoring
+  each such file one by one does not end it.
+- **Decided:** nothing yet beyond the above; a test in the installer tests
+  (an untracked file: no warning; a changed tracked file: the warning).
+
 ### Team leads answer their team's messages in the portal
 
 - **Added:** 2026-10-18
