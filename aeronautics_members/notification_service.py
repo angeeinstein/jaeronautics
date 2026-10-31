@@ -637,6 +637,26 @@ class NotificationService:
                     ],
                 },
             )
+        if event.event_type == "updates_need_a_person":
+            # To whoever may install updates (services/staying_current.py):
+            # something about staying current is stuck, told once.
+            items = [str(item) for item in payload.get("items") or []]
+            return (
+                _("Updates need a person"),
+                {
+                    "preview_text": items[0] if items else _("Something about updates is stuck."),
+                    "action_url": build_public_url("admin.admin_settings_section", section="health"),
+                    "action_label": _("Open System health"),
+                    "heading": _("Updates need a person"),
+                    "body_lines": [
+                        greeting,
+                        _("The portal keeps itself up to date, but this needs somebody:"),
+                        *items,
+                        _("System health shows what it is about. You are told once; when it is "
+                          "resolved and comes back, you are told again."),
+                    ],
+                },
+            )
         if event.event_type == "account_email_changed":
             # To the address that was replaced, changed by somebody signed in
             # to the account: the member, or whoever has their password.

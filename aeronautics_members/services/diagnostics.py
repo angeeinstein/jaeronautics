@@ -267,6 +267,11 @@ def collect_system_health(check_pages=True):
     pages = check_security_policy() if _checks_pages(check_pages) else None
     if pages and pages["warning"]:
         warnings.append(pages["warning"])
+    # Updates that need a person (services/staying_current.py): emailed once, shown here.
+    from . import staying_current
+
+    current = staying_current.report()
+    warnings.extend(item["text"] for item in current["stuck"])
 
     return {
         "healthy": not problems,
@@ -276,4 +281,5 @@ def collect_system_health(check_pages=True):
         "membership": membership,
         "queues": queues,
         "pages": pages,
+        "current": current,
     }

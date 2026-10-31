@@ -4252,6 +4252,16 @@ def create_app(config_overrides=None):
         """Delivers queued admin and user notification emails."""
         if _stand_down_while_paused("notifications"):
             return
+        # Something about updates newly stuck: told once, with this run's emails
+        # (services/staying_current.py; at most once an hour).
+        from .services import staying_current
+
+        try:
+            staying_current.tell()
+            db.session.commit()
+        except Exception:  # noqa: BLE001 -- logged; asked again within the hour
+            db.session.rollback()
+            app.logger.exception("Checking whether updates are stuck failed.")
         email_summary = process_email_delivery_jobs(app)
         db.session.commit()
         summary = get_notification_service().deliver_pending_notifications()
@@ -4453,6 +4463,30 @@ def create_app(config_overrides=None):
             click.echo("Items that exhausted their retries:")
             for item in stuck:
                 click.echo(f"  #{item.id} {item.kind} member_id={item.member_id}: {item.last_error}")
+
+    @app.cli.command("automatic-updates")
+    @click.argument("what", type=click.Choice(["run", "on", "off"]))
+    @with_appcontext
+    def automatic_updates_command(what):
+        """Installs the newest version at night when it is time to (run); or switches that on or off.
+
+        "run" is what the timer does at 03:30 (docs/automatic-updates-plan.md):
+        it asks for the newest version only when the switch is on, CI passed
+        for it and no update is running. "on" is what install.sh does for a
+        new installation.
+        """
+        from .services import automatic_updates
+
+        if what in ("on", "off"):
+            automatic_updates.set_enabled(what == "on")
+            db.session.commit()
+            click.echo(f"Automatic updates: {what}.")
+            return
+        if _stand_down_while_paused("automatic-updates"):
+            return
+        outcome = automatic_updates.run()
+        db.session.commit()
+        click.echo(f"Automatic updates: {outcome}.")
 
     @app.cli.command("cleanup-logs")
     @click.option("--audit-days", default=AUDIT_LOG_RETENTION_DAYS, show_default=True, type=int,

@@ -53,6 +53,20 @@ const healthy: Schemas['HealthOut'] = {
     emails_exhausted: 0,
   },
   undelivered: [],
+  current: {
+    portal: { newest: null, newest_failed: false, automatic: true, last_check_at: '2026-10-29T02:30:00Z' },
+    waiting: [],
+    ubuntu: {
+      name: 'Ubuntu 24.04.3 LTS',
+      supported_until: '2029-05-31',
+      updates_installed_at: '2026-10-29T02:40:00Z',
+      restart_pending_since: null,
+      restart_packages: [],
+    },
+    node: { major: '24', supported_until: '2028-04-30' },
+    stuck: [],
+    guide_url: 'https://github.com/o/r/blob/main/docs/new-release.md',
+  },
 };
 
 describe('system health', () => {
@@ -134,6 +148,38 @@ describe('system health', () => {
   });
 });
 
+describe('staying current', () => {
+  it('the portal, Ubuntu and Node.js, and an update waiting for a person, linked', async () => {
+    show(<Health />, {
+      [HEALTH]: {
+        body: {
+          ...healthy,
+          warnings: ['An update has waited 15 days for a person: Bump typescript to 7.0.2.'],
+          current: {
+            ...healthy.current,
+            waiting: [
+              {
+                number: 51,
+                title: 'Bump typescript to 7.0.2',
+                url: 'https://github.com/o/r/pull/51',
+                days: 15,
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(await screen.findByText('Supported until 31.05.2029')).toBeInTheDocument();
+    expect(screen.getByText('24, fixes until 30.04.2028')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '#51' })).toHaveAttribute(
+      'href',
+      'https://github.com/o/r/pull/51',
+    );
+    expect(screen.getByRole('link', { name: /next Ubuntu release/ })).toBeInTheDocument();
+  });
+});
+
 const UPDATES = '/api/v1/admin/settings/updates';
 
 const upToDate: Schemas['UpdatesOut'] = {
@@ -168,6 +214,7 @@ const upToDate: Schemas['UpdatesOut'] = {
     log_tail: null,
     interrupted: null,
   },
+  automatic: { enabled: false, at: '03:30', last_run: null },
 };
 
 const running: Schemas['UpdatesOut'] = {
@@ -334,6 +381,49 @@ describe('updates', () => {
 
     await userEvent.click(await screen.findByRole('tab', { name: 'History' }));
     expect(await screen.findByRole('button', { name: 'Roll back to cccc3333' })).toBeEnabled();
+  });
+
+  it('installing by itself at night, switched on at once; what the last night came to', async () => {
+    const switchedOn = {
+      ...upToDate,
+      automatic: {
+        enabled: true,
+        at: '03:30',
+        last_run: { at: '2026-10-28T03:30:00Z', outcome: 'ci_not_passed', revision: 'bbbb2222' },
+      },
+    };
+    const { calls } = show(<Updates />, {
+      [UPDATES]: { body: upToDate },
+      [`PUT ${UPDATES}/automatic`]: { body: switchedOn },
+    });
+
+    const toggle = await screen.findByRole('switch', { name: /^Install new versions automatically/ });
+    expect(toggle).not.toBeChecked();
+    await userEvent.click(toggle);
+
+    expect(
+      await screen.findByText('Not installed: bbbb2222 has not passed its checks yet.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: /^Install new versions automatically/ })).toBeChecked();
+    const put = calls.find((call) => call.method === 'PUT');
+    expect(await put?.clone().json()).toEqual({ enabled: true });
+  });
+
+  it('an update the check started says how it went', async () => {
+    const checked = (outcome: string) => ({
+      ...upToDate,
+      newer_version: false,
+      update_available: false,
+      installed: { ...upToDate.installed, short_revision: 'bbbb2222' },
+      automatic: {
+        enabled: true,
+        at: '03:30',
+        last_run: { at: '2026-10-29T02:30:00Z', outcome, revision: 'bbbb2222' },
+      },
+    });
+    show(<Updates />, { [UPDATES]: { body: checked('requested') } });
+
+    expect(await screen.findByText('Installed bbbb2222.')).toBeInTheDocument();
   });
 
   it('without the runner nothing can be started', async () => {

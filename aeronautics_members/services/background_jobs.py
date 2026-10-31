@@ -42,8 +42,9 @@ JOBS = (
     Job("external-work", "Forum and account queue", "every 2 minutes", timedelta(minutes=10), True),
     Job("notifications", "Email delivery and admin notifications", "every 15 minutes", timedelta(minutes=45), True),
     Job("billing-reconcile", "Nightly billing check with Stripe", "daily at 03:15", timedelta(hours=26), False),
-    Job("forum-drift", "Nightly forum check", "daily at 03:45", timedelta(hours=26), False),
-    Job("cleanup-logs", "Log cleanup", "monthly", timedelta(days=32), False),
+    Job("forum-drift", "Nightly forum check", "daily at 03:20", timedelta(hours=26), False),
+    Job("cleanup-logs", "Log cleanup", "monthly, the 1st at 03:25", timedelta(days=32), False),
+    Job("automatic-updates", "Automatic updates", "daily at 03:30", timedelta(hours=26), False),
 )
 JOBS_BY_NAME = {job.name: job for job in JOBS}
 

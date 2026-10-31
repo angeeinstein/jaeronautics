@@ -2242,6 +2242,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/settings/updates/automatic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Switch installing updates by themselves at night on or off. */
+        put: operations["admin_automatic_updates"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/settings/updates/log": {
         parameters: {
             query?: never;
@@ -4351,6 +4368,31 @@ export interface components {
              */
             teams?: number[];
         };
+        /** AutomaticRunOut */
+        AutomaticRunOut: {
+            /** At */
+            at: string | null;
+            /** Outcome */
+            outcome: string;
+            /** Revision */
+            revision: string | null;
+        };
+        /** AutomaticUpdatesIn */
+        AutomaticUpdatesIn: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /**
+         * AutomaticUpdatesOut
+         * @description Installing the newest version by itself, at night, once CI passed for it.
+         */
+        AutomaticUpdatesOut: {
+            /** At */
+            at: string;
+            /** Enabled */
+            enabled: boolean;
+            last_run: components["schemas"]["AutomaticRunOut"] | null;
+        };
         /** BackupDeletedOut */
         BackupDeletedOut: {
             /** Name */
@@ -5242,6 +5284,21 @@ export interface components {
              * @default 1
              */
             zoom?: number;
+        };
+        /**
+         * CurrentOut
+         * @description Staying current (docs/automatic-updates-plan.md, part 4): the portal, Ubuntu, Node.js.
+         */
+        CurrentOut: {
+            /** Guide Url */
+            guide_url: string | null;
+            node: components["schemas"]["NodeOut"] | null;
+            portal: components["schemas"]["PortalCurrentOut"];
+            /** Stuck */
+            stuck: components["schemas"]["StuckOut"][];
+            ubuntu: components["schemas"]["UbuntuOut"] | null;
+            /** Waiting */
+            waiting: components["schemas"]["WaitingOut"][] | null;
         };
         /** DashboardOut */
         DashboardOut: {
@@ -6594,6 +6651,7 @@ export interface components {
         };
         /** HealthOut */
         HealthOut: {
+            current: components["schemas"]["CurrentOut"];
             database_schema: components["schemas"]["SchemaOut"];
             /** Healthy */
             healthy: boolean;
@@ -7738,6 +7796,13 @@ export interface components {
             /** Unsubscribed At */
             unsubscribed_at: string | null;
         };
+        /** NodeOut */
+        NodeOut: {
+            /** Major */
+            major: string;
+            /** Supported Until */
+            supported_until: string | null;
+        };
         /** NoteIn */
         NoteIn: {
             /**
@@ -8166,6 +8231,17 @@ export interface components {
         PictureReplacementOut: {
             /** Allowed Since */
             allowed_since: string | null;
+        };
+        /** PortalCurrentOut */
+        PortalCurrentOut: {
+            /** Automatic */
+            automatic: boolean;
+            /** Last Check At */
+            last_check_at: string | null;
+            /** Newest */
+            newest: string | null;
+            /** Newest Failed */
+            newest_failed: boolean;
         };
         /** PresenceIn */
         PresenceIn: {
@@ -9029,6 +9105,13 @@ export interface components {
              */
             state: "pending" | "running" | "done" | "failed";
         };
+        /** StuckOut */
+        StuckOut: {
+            /** Link */
+            link: string | null;
+            /** Text */
+            text: string;
+        };
         /** SwitchIn */
         SwitchIn: {
             /** Enabled */
@@ -9723,6 +9806,19 @@ export interface components {
             /** User Id */
             user_id: number;
         };
+        /** UbuntuOut */
+        UbuntuOut: {
+            /** Name */
+            name: string;
+            /** Restart Packages */
+            restart_packages: string[];
+            /** Restart Pending Since */
+            restart_pending_since: string | null;
+            /** Supported Until */
+            supported_until: string | null;
+            /** Updates Installed At */
+            updates_installed_at: string | null;
+        };
         /** UndeliveredOut */
         UndeliveredOut: {
             /** Error */
@@ -9796,6 +9892,7 @@ export interface components {
         };
         /** UpdatesOut */
         UpdatesOut: {
+            automatic: components["schemas"]["AutomaticUpdatesOut"];
             /** In Progress */
             in_progress: boolean;
             installed: components["schemas"]["VersionOut"];
@@ -9848,6 +9945,17 @@ export interface components {
             count: number;
             /** Summary */
             summary: string | null;
+        };
+        /** WaitingOut */
+        WaitingOut: {
+            /** Days */
+            days: number;
+            /** Number */
+            number: number;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string | null;
         };
     };
     responses: never;
@@ -18242,6 +18350,66 @@ export interface operations {
         responses: {
             /** @description OK */
             202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdatesOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_automatic_updates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomaticUpdatesIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -46,22 +46,58 @@ the live server does on its own, and a few weeks of it show how often updates
 come and whether CI catches the ones that break -- the evidence to have
 before the live server installs updates unattended.
 
-## Part 2: installing automatically (not built)
+## Part 2: installing automatically (built 2026-10-28)
 
-A setting in Admin › Settings › Updates, *Install updates automatically*.
+A setting in Admin › Settings › Updates, *Install new versions automatically*.
 Once a night the server checks whether `main` has moved and CI passed there,
 and installs it -- everything on `main`, the maintainer's merges too. A failed
-update undoes itself already (code, packages, database). Proposed, not yet
-decided: on by default, at **04:30** (after the 03:15 jobs).
+update undoes itself already (code, packages, database). Decided
+2026-10-28: at night (now 03:30, "The night" below); **off** where the portal is
+running already -- the live server's is switched on by the maintainer once
+part 1 has run cleanly for a few weeks --, on for a new installation. Built
+now, tested on the test server with it switched on.
 
-## Part 3: Ubuntu (not built)
+On branch `claude/automatic-installs`; how it works is in
+`docs/maintenance.md`, "Automatic updates". The job asks for the update the
+way the button does (the same request file, no new privileges), only for a
+version CI passed -- strictly, not when GitHub cannot be asked -- and never
+twice for the same version: one that failed and undid itself, or that
+somebody went back from, waits for a newer one.
+
+Also with it: `@types/node` kept at the major version of the Node.js that
+builds the front end (an `ignore` in `.github/dependabot.yml`), so its new
+majors do not wait for a person forever; and CI's merge job tries again when
+another update merged a moment before ("Base branch was modified", seen on
+the first day with #47).
+
+## Part 3: Ubuntu (built 2026-10-28)
 
 unattended-upgrades installs Ubuntu's security updates already. The installer
 is to make sure it is switched on, and to let it restart the server at night
 when an update needs it (a kernel's) -- today nothing restarts the machine.
-Proposed: at **04:00**; about a minute offline.
+Decided 2026-10-28: at **04:00**; about a minute offline. Built with part 2;
+since 2026-10-29 the restart is a step of the night (below), not
+unattended-upgrades' own.
 
-## Part 4: telling a person, only when needed (not built)
+## The night (built 2026-10-29)
+
+Asked by the maintainer on 2026-10-29: rather than spreading the night's jobs
+over hours so they do not collide, a protection, "so that if something isn't
+finished yet, the other thing just waits" -- and "this flag that some action
+is running obviously has to go away again if the thing crashes". Built: one
+lock (`flock`, the kernel's: it goes with the process however that ends) that
+the nightly jobs, the update and Ubuntu's updates hold while they run, and the
+night packed together from 03:15, in the portal's time zone -- the timers had
+run on the server's clock, UTC. The restart moved from unattended-upgrades to a
+step of its own behind the lock, so it never cuts an update in half. Order and
+reasons: `docs/maintenance.md`, "The night".
+
+Why 03:15 (looked up 2026-10-29, the maintainer no longer sure why): the clock
+changes between 02:00 and 03:00; 03:15 ends an attendance day
+(`docs/attendance-plan.md`); Stripe's changes around midnight have time to
+arrive (`CLAUDE.md`).
+
+## Part 4: telling a person, only when needed (built 2026-10-29)
 
 System health shows whether all of the above works (unattended-upgrades' last
 run, updates waiting, a restart pending), and something stuck: a security
@@ -71,6 +107,19 @@ support until April 2029), Node.js 24 (April 2028), with a step-by-step guide
 for someone without IT knowledge to move to the next release -- a new server,
 `install.sh`, then the backup restored (`docs/maintenance.md`, "Rebuilding
 the Portal Somewhere Else").
+
+Built as decided on 2026-10-29: System health has a panel *Staying current*
+(the portal, Ubuntu, the Node.js that builds the front end), and what is stuck
+is among the report's warnings. Stuck: an update Dependabot proposed open for
+more than **14 days**; the newest version failed its checks; automatic updates
+on and no check for more than a day; Ubuntu's security updates not installed
+for more than **3 days**; a restart pending for more than **3 days**; Ubuntu's
+or Node.js's support ending within **a year**. Each is emailed **once**, to
+whoever may install updates -- the super admins, the only ones who see System
+health and Updates (the maintainer, 2026-10-29) --, forgotten when it resolves.
+Looked at at most once an hour with the email job, not only in the night: a
+night that does not run has to be noticed too. The guide for the next Ubuntu
+release: `docs/new-release.md`. Code: `services/staying_current.py`.
 
 ## Outside the code
 

@@ -523,9 +523,14 @@ class TestAnUpdateThatNeverFinishes:
 
     def test_systemd_gives_the_runner_time_to_record_a_timeout(self):
         timeout = int(re.search(r'UPDATE_TIMEOUT="\$\{UPDATE_TIMEOUT:-(\d+)\}"', self.RUNNER.read_text()).group(1))
-        unit_limit = int(re.search(r"ExecStart=\$\{UPDATE_RUNNER_SCRIPT\}\n(?:#.*\n)*TimeoutStartSec=(\d+)",
-                                   self.INSTALLER.read_text()).group(1))
-        assert unit_limit > timeout + 60  # the runner's own limit, plus its --kill-after
+        installer = self.INSTALLER.read_text()
+        unit_limit = int(re.search(
+            r"ExecStart=\$\{UPDATE_RUNNER_SCRIPT\}\n(?:#.*\n)*TimeoutStartSec=\$\(\( (\d+) \+ NIGHT_WAIT_SECONDS \)\)",
+            installer).group(1))
+        # The runner's own limit, plus its --kill-after; the wait for the
+        # night's other work (NIGHT_WAIT_SECONDS) comes on top of it.
+        assert unit_limit > timeout + 60
+        assert "Environment=NIGHT_WAIT_SECONDS=${NIGHT_WAIT_SECONDS}" in installer
 
     def test_a_normal_update_completes(self, tmp_path):
         state_dir = tmp_path / "updates"

@@ -39,6 +39,9 @@ LOG_TAIL_LINES="${LOG_TAIL_LINES:-40}"
 # new one while that is true. So the button would disable itself permanently
 # and only a shell could clear it. Bound the run and record a failure instead.
 UPDATE_TIMEOUT="${UPDATE_TIMEOUT:-2700}"
+# The night's lock (install.sh, NIGHT_LOCK), and how long to wait for it at most.
+NIGHT_LOCK="${NIGHT_LOCK:-}"
+NIGHT_WAIT_SECONDS="${NIGHT_WAIT_SECONDS:-3600}"
 # Group allowed to read the log, so the web application can show progress while
 # the update is still running. Falls back to root-only if unset.
 LOG_GROUP="${LOG_GROUP:-}"
@@ -250,6 +253,30 @@ main() {
         chmod 600 "${LOG_FILE}" 2>/dev/null || true
     fi
     write_status "running" 0 "${started_at}" "" "${revision_before}" "" "" 0 "${expected_steps}"
+
+    # One thing of the night at a time (NIGHT_LOCK, set by install.sh): a
+    # nightly job still at work is waited for, and one that starts meanwhile
+    # waits for this update -- and then runs on the new code. The lock is the
+    # kernel's, on this open file: it goes with this run however it ends.
+    if [[ -n "${NIGHT_LOCK}" && -f "${NIGHT_LOCK}" && ! -L "${NIGHT_LOCK}" ]]; then
+        exec 8<"${NIGHT_LOCK}"
+        if ! flock -n 8; then
+            printf "Waiting for the night's other work to finish first.\n" >>"${LOG_FILE}"
+            if ! flock -w "${NIGHT_WAIT_SECONDS}" 8; then
+                printf "\n[ERROR] Still waiting after %s seconds for the night's other work; not started.\n" \
+                    "${NIGHT_WAIT_SECONDS}" >>"${LOG_FILE}"
+                trap - TERM INT HUP
+                write_status "failed" 1 "${started_at}" "$(date --iso-8601=seconds)" "${revision_before}" \
+                    "$(current_revision)" "$(tail -n "${LOG_TAIL_LINES}" "${LOG_FILE}" 2>/dev/null || printf '')" 0 \
+                    "${expected_steps}"
+                rm -f "${CLAIM_FILE}"
+                exit 1
+            fi
+        fi
+        # Told to the installer: a nightly job running now is one queued behind
+        # this update, not one at work, and is not waited for.
+        export NIGHT_LOCK_HELD=1
+    fi
 
 
     # In the background and waited for, rather than in the foreground: bash
