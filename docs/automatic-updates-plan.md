@@ -121,6 +121,40 @@ Looked at at most once an hour with the email job, not only in the night: a
 night that does not run has to be noticed too. The guide for the next Ubuntu
 release: `docs/new-release.md`. Code: `services/staying_current.py`.
 
+## Part 5: cloudflared, and the forum's server (agreed 2026-11-02)
+
+Prompted by the security news of early November 2026 (the kernel's TCP flaw,
+Brotli): on the live server everything from Ubuntu's security archive was
+installed, but cloudflared -- from Cloudflare's own repository, which
+unattended-upgrades does not take -- was a release behind (2026.9.3, with
+2026.10.7 out). The forum runs on a server of its own (Ubuntu, Docker,
+cloudflared, Discourse), which nothing of this plan covered. Decided with the
+maintainer:
+
+- **cloudflared updates itself** at night with Ubuntu's security updates, on
+  the portal's server and on the forum's: its repository added to the
+  origins unattended-upgrades takes (the portal's own file,
+  `52<service>-unattended-upgrades`).
+- **The forum's server gets the portal's night for Ubuntu**: security updates
+  and cloudflared at night, a restart only when one needs it -- from a script
+  in this repository, run there once, next to `docs/discourse-setup.md`
+  (useful to anybody running the portal with a Discourse forum).
+- **Discourse and its Docker manager stay by hand**, from Discourse's
+  dashboard (Admin › Updates) -- the maintainer's choice: a rebuild takes the
+  forum offline, and one that fails does not undo itself. Docker itself
+  (`docker-ce`): an open question, below.
+- **System health shows the forum**: its version, whether a newer one is out,
+  whether Discourse marks it as a security update -- read through the admin
+  API the portal already uses for the forum. What the portal cannot see from
+  there is the forum server's Ubuntu (another machine); that one runs by
+  itself as above.
+
+Two layers of Discourse updates, for whoever reads this later: the dashboard's
+*Update* changes Discourse's code and plugins inside the running container;
+`./launcher rebuild app` on the shell also renews the container's base image
+(its Linux, Ruby, PostgreSQL, Redis, nginx). When the base image is too old,
+the dashboard says the rebuild is needed.
+
 ## Outside the code
 
 The repository belongs to the maintainer's personal GitHub account. For the

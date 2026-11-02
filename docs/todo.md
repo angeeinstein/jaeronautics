@@ -53,6 +53,63 @@ owed off the dashboard).
 - **Decided:** nothing yet beyond the above; a test in the installer tests
   (an untracked file: no warning; a changed tracked file: the warning).
 
+### cloudflared updated by itself, on the portal's server
+
+- **Added:** 2026-11-02
+- **What:** the installer adds Cloudflare's repository to the origins
+  unattended-upgrades takes, so cloudflared is updated in the night's 03:40
+  step with Ubuntu's security updates. Only where cloudflared comes from
+  Cloudflare's repository.
+- **Where:** `install.sh`, `configure_unattended_upgrades` (the file
+  `52<service>-unattended-upgrades`, `Unattended-Upgrade::Origins-Pattern`);
+  its test in `tests/test_install_automatic_updates.py`; `docs/maintenance.md`,
+  "The night".
+- **Why:** on 2026-11-02 the live server had every Ubuntu security update but
+  cloudflared 2026.9.3 with 2026.10.7 out -- nothing updated it. Background:
+  `docs/automatic-updates-plan.md`, part 5.
+- **Decided:** the tunnel restarting once after an update, a few seconds at
+  night, is fine.
+- **Open question:** the repository's `o=`/`a=` names, from
+  `apt-cache policy cloudflared` on the server (pkg.cloudflare.com could not
+  be reached from the development container). Whether the package restarts
+  the tunnel itself after an upgrade, or the step has to.
+
+### The forum's server: Ubuntu's and cloudflared's updates at night
+
+- **Added:** 2026-11-02
+- **What:** a script in this repository, run once on the server Discourse
+  runs on, that sets up what the portal's installer sets up for its own
+  server: unattended-upgrades on, security updates and cloudflared at night,
+  a restart only when an update needs one (`/run/reboot-required`), one after
+  another. Reversible (a `--remove`). How to use it in
+  `docs/discourse-setup.md`.
+- **Why:** the forum's server (its own Ubuntu, Docker, cloudflared) was
+  covered by nothing in the plan; its kernel is the containers' kernel too.
+  `docs/automatic-updates-plan.md`, part 5.
+- **Decided:** Discourse and its Docker manager are **not** automated -- the
+  maintainer updates them from Discourse's dashboard (Admin › Updates).
+- **Open questions:** Docker itself (`docker-ce`, from Docker's repository,
+  `Origin: Docker`): automatic too, or by hand -- updating it restarts the
+  containers, so the forum is down a minute. The times on that server (the
+  portal's night is 03:15-04:00). The cloudflared origin as in the item above.
+
+### System health: the forum's version
+
+- **Added:** 2026-11-02
+- **What:** *Staying current* gets the forum: Discourse's version, the newest,
+  how far behind, whether Discourse marks an update as a security one, with a
+  link to its Admin › Updates. Read through Discourse's admin API with the key
+  the portal already has, at most hourly like the rest.
+- **Where:** `services/staying_current.py`, `api/admin_system.py`
+  (`CurrentOut`), `Health.tsx`; only when a forum is set up.
+- **Why:** the maintainer updates Discourse by hand from its dashboard and
+  wants to see its state where the rest is.
+- **Open questions:** which endpoint (Discourse's version check, or the
+  Docker manager's list of repositories as on Admin › Updates). What counts as
+  stuck and is emailed once: Discourse's `latest` branch moves every day, so
+  "a newer version exists" must not -- proposed: a security update not
+  installed after 3 days, and the forum not answering.
+
 ### Stripe's Python package: from 13 to 16
 
 - **Added:** 2026-11-02
