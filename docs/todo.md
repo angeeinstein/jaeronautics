@@ -86,6 +86,10 @@ owed off the dashboard).
   `docs/discourse-setup.md`.
 - **Why:** the forum's server (its own Ubuntu, Docker, cloudflared) was
   covered by nothing in the plan; its kernel is the containers' kernel too.
+  What it has (2026-11-02): Ubuntu's default `20auto-upgrades` (lists and
+  unattended-upgrades daily, at Ubuntu's own times), no restart -- so a fixed
+  kernel is installed but not running until somebody restarts it -- and
+  cloudflared not updated (2026.9.3 with 2026.10.7 out).
   `docs/automatic-updates-plan.md`, part 5.
 - **Decided:** Discourse and its Docker manager are **not** automated -- the
   maintainer updates them from Discourse's dashboard (Admin › Updates).
