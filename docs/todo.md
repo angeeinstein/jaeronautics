@@ -53,6 +53,46 @@ owed off the dashboard).
 - **Decided:** nothing yet beyond the above; a test in the installer tests
   (an untracked file: no warning; a changed tracked file: the warning).
 
+### Stripe's Python package: from 13 to 16
+
+- **Added:** 2026-11-02
+- **What:** move `stripe` from 13.0.1 (API version `2025-09-30.clover`) to
+  16.x (`2026-09-30.endive`). Dependabot's #63 did only the version and was
+  closed: CI passed because the tests fake Stripe with plain dicts, but on
+  the server it would have broken payments.
+- **The changes that matter here** (stripe-python's `CHANGELOG.md`, 15.0.0
+  and 16.0.0):
+  - 15.0.0: `StripeObject` is no longer a `dict` -- no `.get()`, `.items()`;
+    `"key" in obj`, `getattr(obj, "key", None)` and `obj.to_dict()` (a plain
+    dict, recursively) remain. The portal calls `.get()` on Stripe objects
+    in hundreds of places (`services/billing.py`, `team_payments.py`,
+    `credit.py`, `payments.py`, `stripe_books.py`, `blueprints/webhook.py`,
+    …). Planned: turn objects into dicts where they come in -- the retrieve
+    and list calls and `Webhook.construct_event` -- with `to_dict()`, so the
+    code after that stays as it is.
+  - 15.0.0: `decimal_string` fields (`unit_amount_decimal`, `fx_rate`, …)
+    are `Decimal`, not `str` -- check whether the portal reads any.
+  - 16.0.0 (API `endive`): `payment_method_types` on Checkout Sessions and
+    Payment Intents is replaced by `allowed_payment_method_types` -- a
+    rename, the portal keeps choosing the methods (`billing.py`,
+    `team_payments.py` twice, `credit.py`: EPS only when switched on).
+  - The Stripe API's own changes from `clover` through `dahlia` to `endive`
+    (docs.stripe.com/changelog), checked against the fields the portal
+    reads: invoices and their payments, subscriptions, charges, refunds,
+    balance transactions, prices. The webhook's events are not affected by
+    the package: they follow the API version set on the webhook endpoint in
+    Stripe's dashboard.
+- **Also:** the tests' Stripe fakes become real `StripeObject`s
+  (`StripeObject.construct_from`), so CI notices the next change of this
+  kind instead of passing.
+- **How it is tried:** Stripe's test mode on the test server -- a
+  membership checkout with card and SEPA, a team payment, credit with EPS,
+  a refund, the nightly billing check, the books (`stripe_books.py`).
+- **Why it waits:** nothing breaks while it does -- Stripe keeps answering
+  `clover` as before; package 13 only gets no more fixes or features.
+- **Open question:** with the next batch, or on its own branch when the
+  maintainer asks (it is more than a small change).
+
 ### Team leads answer their team's messages in the portal
 
 - **Added:** 2026-10-18
