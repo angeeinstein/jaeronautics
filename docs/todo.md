@@ -69,10 +69,11 @@ owed off the dashboard).
   `docs/automatic-updates-plan.md`, part 5.
 - **Decided:** the tunnel restarting once after an update, a few seconds at
   night, is fine.
-- **Open question:** the repository's `o=`/`a=` names, from
-  `apt-cache policy cloudflared` on the server (pkg.cloudflare.com could not
-  be reached from the development container). Whether the package restarts
-  the tunnel itself after an upgrade, or the step has to.
+- **The repository** (`apt-cache policy cloudflared`, both servers,
+  2026-11-02): `https://pkg.cloudflare.com/cloudflared any/main`. Matched by
+  host, `"site=pkg.cloudflare.com";`, which needs no origin name.
+- **Open question:** whether the package restarts the tunnel itself after an
+  upgrade, or the step has to (try on the test server).
 
 ### The forum's server: Ubuntu's and cloudflared's updates at night
 
@@ -88,10 +89,13 @@ owed off the dashboard).
   `docs/automatic-updates-plan.md`, part 5.
 - **Decided:** Discourse and its Docker manager are **not** automated -- the
   maintainer updates them from Discourse's dashboard (Admin › Updates).
-- **Open questions:** Docker itself (`docker-ce`, from Docker's repository,
-  `Origin: Docker`): automatic too, or by hand -- updating it restarts the
-  containers, so the forum is down a minute. The times on that server (the
-  portal's night is 03:15-04:00). The cloudflared origin as in the item above.
+  Docker itself (`docker-ce`, `containerd.io`, from Docker's repository) is
+  not either: "if something gets stuck there, I'd rather notice it
+  immediately" (2026-11-02) -- it is updated by hand, with Discourse's
+  updates (`sudo apt upgrade` before a rebuild). The forum offline for a
+  minute at night (a restart) is fine.
+- **Open question:** the times on that server (the portal's night is
+  03:15-04:00; the forum's server is another machine, so it may share them).
 
 ### System health: the forum's version
 

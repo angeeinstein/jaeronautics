@@ -142,7 +142,8 @@ maintainer:
 - **Discourse and its Docker manager stay by hand**, from Discourse's
   dashboard (Admin › Updates) -- the maintainer's choice: a rebuild takes the
   forum offline, and one that fails does not undo itself. Docker itself
-  (`docker-ce`): an open question, below.
+  (`docker-ce`) too, with Discourse's updates: "if something gets stuck
+  there, I'd rather notice it immediately".
 - **System health shows the forum**: its version, whether a newer one is out,
   whether Discourse marks it as a security update -- read through the admin
   API the portal already uses for the forum. What the portal cannot see from
