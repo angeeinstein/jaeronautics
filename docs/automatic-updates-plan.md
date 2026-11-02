@@ -121,7 +121,7 @@ Looked at at most once an hour with the email job, not only in the night: a
 night that does not run has to be noticed too. The guide for the next Ubuntu
 release: `docs/new-release.md`. Code: `services/staying_current.py`.
 
-## Part 5: cloudflared, and the forum's server (agreed 2026-11-02)
+## Part 5: cloudflared, and the forum's server (agreed and built 2026-11-02)
 
 Prompted by the security news of early November 2026 (the kernel's TCP flaw,
 Brotli): on the live server everything from Ubuntu's security archive was
@@ -149,6 +149,18 @@ maintainer:
   API the portal already uses for the forum. What the portal cannot see from
   there is the forum server's Ubuntu (another machine); that one runs by
   itself as above.
+
+Built on `claude/update-follow-ups`; how it works is in `docs/maintenance.md`,
+"The night" and "Telling a person", and `docs/discourse-setup.md`, "The
+forum's server". The script is `deploy/server-night.sh`; the installer runs it
+for the portal's server, and System health shows the command for the forum's
+-- with the same times, 03:40 and 04:00 in the portal's time zone. What is
+emailed about the forum, decided while building: it not answering for an
+hour, and a newer release not installed after 14 days. The "security update"
+of the agreement could not be: Discourse's version check no longer marks
+security releases (`critical_updates` is gone from `lib/discourse_updates.rb`).
+With it, asked for on 2026-11-02: *Shell access* on System health, the
+PowerShell lines that open a shell on both servers.
 
 Two layers of Discourse updates, for whoever reads this later: the dashboard's
 *Update* changes Discourse's code and plugins inside the running container;

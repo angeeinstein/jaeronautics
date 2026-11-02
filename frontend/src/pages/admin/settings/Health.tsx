@@ -5,25 +5,40 @@
  * delivered retried or dismissed. Data: GET /api/v1/admin/settings/health and
  * its actions (aeronautics_members/api/admin_system.py).
  *
- * *Staying current* (docs/automatic-updates-plan.md, part 4): the portal's
- * automatic updates and the updates waiting for a person, Ubuntu's own updates
- * and support, the Node.js that builds the front end. What is stuck is among
- * the report's warnings, and emailed once to whoever may install updates.
+ * *Staying current* (docs/automatic-updates-plan.md, parts 4 and 5): the
+ * portal's automatic updates and the updates waiting for a person, Ubuntu's own
+ * updates and support, the Node.js that builds the front end, the forum's
+ * Discourse with the command that sets up its server's night. What is stuck is
+ * among the report's warnings, and emailed once to whoever may install updates.
+ *
+ * *Shell access*: the commands that open a shell on the servers, from the
+ * login and addresses entered here (the portal's found by itself). The key
+ * stays with the person.
  */
 import {
   Alert,
   Anchor,
   Button,
   Code,
+  CopyButton,
   Group,
   SimpleGrid,
   Stack,
   Table,
   Text,
+  TextInput,
   VisuallyHidden,
 } from '@mantine/core';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { IconClock, IconId, IconMailOff, IconRefreshDot, IconStethoscope } from '@tabler/icons-react';
+import { useState } from 'react';
+import {
+  IconClock,
+  IconId,
+  IconMailOff,
+  IconRefreshDot,
+  IconStethoscope,
+  IconTerminal2,
+} from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
 import { can, useMe } from '../../../api/session';
@@ -33,7 +48,7 @@ import { Panel } from '../../../components/Panel';
 import { Pill } from '../../../components/Pill';
 import { formatDate, formatDateTime, plural } from '../../../lib/format';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
-import { SettingsPage } from './shared';
+import { SaveBar, SettingsPage, useSectionSave } from './shared';
 
 type Health = Schemas['HealthOut'];
 
@@ -288,6 +303,49 @@ function Waiting({ waiting }: { waiting: Schemas['CurrentOut']['waiting'] }) {
   );
 }
 
+/** A command to paste into a shell, with a button that copies it. */
+function Command({ value, label }: { value: string; label: string }) {
+  return (
+    <Stack gap={6}>
+      <Code block style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+        {value}
+      </Code>
+      <Group>
+        <CopyButton value={value}>
+          {({ copied, copy }) => (
+            <Button size="xs" variant="default" onClick={copy} aria-label={`Copy ${label}`}>
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
+          )}
+        </CopyButton>
+      </Group>
+    </Stack>
+  );
+}
+
+function Forum({ forum }: { forum: Schemas['ForumCurrentOut'] }) {
+  if (!forum.reachable)
+    return (
+      <Group gap="xs">
+        <Pill tone="failed">Not answering</Pill>
+        {forum.down_since ? <Text size="sm">since {formatDateTime(forum.down_since)}</Text> : null}
+      </Group>
+    );
+  return (
+    <Group gap="xs">
+      <Code>{forum.installed ?? 'unknown'}</Code>
+      {forum.behind && forum.latest ? (
+        <Pill tone="pending">{`${forum.latest} is out`}</Pill>
+      ) : (
+        <Pill tone="active">Up to date</Pill>
+      )}
+      <Anchor href={forum.update_url} target="_blank" rel="noreferrer" size="sm">
+        Its updates
+      </Anchor>
+    </Group>
+  );
+}
+
 function StayingCurrent({ current }: { current: Schemas['CurrentOut'] }) {
   const { portal, ubuntu, node } = current;
   const items: Detail[] = [
@@ -338,15 +396,116 @@ function StayingCurrent({ current }: { current: Schemas['CurrentOut'] }) {
       node.supported_until ? `${node.major}, fixes until ${formatDate(node.supported_until)}` : node.major,
     ]);
   }
+  if (current.forum) items.push(['Forum (Discourse)', <Forum key="forum" forum={current.forum} />]);
   return (
     <Panel icon={IconRefreshDot} title="Staying current">
       <Stack gap="md">
         <Details items={items} />
+        {current.forum_server_command ? (
+          <Stack gap="xs">
+            <Text size="sm" c="dimmed">
+              The forum&apos;s server: security updates and cloudflared at night, a restart only when one
+              needs it. Run this once there; again to bring it up to date.
+            </Text>
+            <Command value={current.forum_server_command} label="the forum server's setup command" />
+          </Stack>
+        ) : null}
         {current.guide_url ? (
           <Anchor href={current.guide_url} target="_blank" rel="noreferrer" size="sm">
             Moving to the next Ubuntu release, step by step
           </Anchor>
         ) : null}
+      </Stack>
+    </Panel>
+  );
+}
+
+const KEY_PROMPT = `$key = (Read-Host 'Full path to the VM SSH .pem file').Trim('"')`;
+
+function ShellAccess({ shell }: { shell: Schemas['ShellOut'] }) {
+  const portal = shell.servers.find((server) => server.name === 'Portal');
+  const forum = shell.servers.find((server) => server.name === 'Forum');
+  const [user, setUser] = useState(shell.user ?? '');
+  const [portalAddress, setPortalAddress] = useState(portal?.address ?? '');
+  const [forumAddress, setForumAddress] = useState(forum?.address ?? '');
+  const { save, errors, clear } = useSectionSave(healthQuery.queryKey, (body: Schemas['ShellIn']) =>
+    call(api.PUT('/api/v1/admin/settings/health/shell', { body })),
+  );
+  const moved = portal?.address && portal.detected && portal.address !== portal.detected;
+  return (
+    <Panel icon={IconTerminal2} title="Shell access">
+      <Stack gap="md">
+        <Text size="sm" c="dimmed">
+          In PowerShell. The key file stays with you, in a password manager.
+        </Text>
+        {moved ? (
+          <Alert color="amber" variant="light">
+            {`The portal's server reaches the internet from ${portal.detected ?? ''}, not ${
+              portal.address ?? ''
+            }: its address may have changed.`}
+          </Alert>
+        ) : null}
+        {shell.servers.map((server) => {
+          const address = server.address ?? server.detected;
+          return (
+            <Stack key={server.name} gap={6}>
+              <Text fw={600} size="sm">
+                {server.name}
+              </Text>
+              {shell.user && address ? (
+                <Command
+                  value={`${KEY_PROMPT}\nssh -i "$key" ${shell.user}@${address}`}
+                  label={`the command for the ${server.name.toLowerCase()} server`}
+                />
+              ) : (
+                <Text size="sm" c="dimmed">
+                  Enter the login and its address below.
+                </Text>
+              )}
+            </Stack>
+          );
+        })}
+        <SimpleGrid cols={{ base: 1, sm: forum ? 3 : 2 }}>
+          <TextInput
+            label="Login"
+            placeholder="azureuser"
+            value={user}
+            error={errors.user}
+            onChange={(event) => {
+              setUser(event.currentTarget.value);
+              clear('user');
+            }}
+          />
+          <TextInput
+            label="Portal's server"
+            placeholder={portal?.detected ?? 'IP address or host name'}
+            description={portal?.detected ? 'Empty: the address it finds itself.' : undefined}
+            value={portalAddress}
+            error={errors.portal_address}
+            onChange={(event) => {
+              setPortalAddress(event.currentTarget.value);
+              clear('portal_address');
+            }}
+          />
+          {forum ? (
+            <TextInput
+              label="Forum's server"
+              placeholder="IP address or host name"
+              value={forumAddress}
+              error={errors.forum_address}
+              onChange={(event) => {
+                setForumAddress(event.currentTarget.value);
+                clear('forum_address');
+              }}
+            />
+          ) : null}
+        </SimpleGrid>
+        <SaveBar
+          busy={save.isPending}
+          onSave={() => {
+            save.mutate({ user, portal_address: portalAddress, forum_address: forumAddress });
+          }}
+        />
       </Stack>
     </Panel>
   );
@@ -367,6 +526,7 @@ export function Health() {
             <BackgroundWork health={health} />
           </SimpleGrid>
           <StayingCurrent current={health.current} />
+          <ShellAccess shell={health.shell} />
           {health.undelivered.length ? <Undelivered emails={health.undelivered} /> : null}
         </Stack>
       )}

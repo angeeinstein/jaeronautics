@@ -201,15 +201,27 @@ is where an attendance day ends, which the billing step closes
 (`services/attendance.py`); it also leaves Stripe's changes around midnight
 time to arrive.
 
-**Ubuntu** (part 3): the installer makes sure unattended-upgrades is installed
-and on (`/etc/apt/apt.conf.d/52<service>-unattended-upgrades`, after Ubuntu's
-own files, so what is set there stays), and moves its run into the night with
-drop-ins for `apt-daily-upgrade` (its timer and its command, queued behind the
-lock; the command fetches the package lists first, so it never works from a
-day-old list). The restart is the portal's own step (`<service>-restart-if-needed`),
-not unattended-upgrades', so that it too waits its turn: never in the middle of
-an update. Uninstall removes these files; the system then keeps installing its
-security updates at its own times.
+**Ubuntu** (parts 3 and 5): `deploy/server-night.sh`, which the installer runs,
+makes sure unattended-upgrades is installed and on
+(`/etc/apt/apt.conf.d/52<service>-unattended-upgrades`, after Ubuntu's own
+files, so what is set there stays), adds Cloudflare's repository to what it
+takes (`site=pkg.cloudflare.com`: cloudflared is updated with the security
+updates, and its tunnel restarted when it was), and moves the run into the
+night with drop-ins for `apt-daily-upgrade` (its timer and its command, queued
+behind the lock; the command fetches the package lists first, so it never
+works from a day-old list). Only the security updates: Ubuntu's ordinary ones
+(`noble-updates`) wait for `sudo apt upgrade`. The restart is a step of its own
+(`<service>-restart-if-needed`), not unattended-upgrades', so that it too
+waits its turn: never in the middle of an update. The script keeps a copy of
+itself in `/usr/local/lib/<service>/`, where only root may write, for the
+timers. Uninstall removes all of it (`server-night.sh remove`); the system then
+keeps installing its security updates at its own times.
+
+**The forum's server** gets the same night from the same script, run there
+once: System health shows the command (*Staying current*, with the forum),
+fetched from this repository and branch, in the portal's time zone. Discourse
+itself and Docker stay by hand, from Discourse's dashboard
+(`docs/discourse-setup.md`, "The forum's server").
 
 ### Telling a person, when something is stuck
 
@@ -217,17 +229,29 @@ System health has a panel *Staying current* (part 4,
 `services/staying_current.py`): automatic updates and when the night last
 checked, Dependabot's updates waiting for a person (with links), Ubuntu's
 release and support date, when its security updates were last installed, a
-restart pending, and the Node.js that builds the front end. Stuck -- and among
-the report's warnings -- is: an update waiting over 14 days; the newest version
-failed its checks; no nightly check for over a day while automatic updates are
-on; Ubuntu's updates not installed for over 3 days; a restart pending over 3
-days; Ubuntu's or Node.js's support ending within a year. Each is emailed once
+restart pending, the Node.js that builds the front end, and the forum's
+Discourse (its version and the newest release, through its admin API,
+`/admin/version_check.json`). Stuck -- and among the report's warnings -- is:
+an update waiting over 14 days; the newest version failed its checks; no
+nightly check for over a day while automatic updates are on; Ubuntu's updates
+not installed for over 3 days; a restart pending over 3 days; Ubuntu's or
+Node.js's support ending within a year; the forum not answering for over an
+hour; a newer Discourse release not installed after 14 days (Discourse
+publishes one a month and no longer marks security releases, so the age is
+what counts). Each is emailed once
 to whoever may install updates, from the email job (at most once an hour),
 forgotten when it resolves. Read without root, from files Ubuntu keeps for
 anybody (`/etc/os-release`, `/usr/share/distro-info/ubuntu.csv`,
 `/var/lib/apt/periodic/upgrade-stamp`, `/run/reboot-required`); Dependabot's
 pull requests from GitHub, at most hourly. The next Ubuntu release, step by
 step: `docs/new-release.md`.
+
+**Shell access**, on System health: the PowerShell lines that open a shell on
+the portal's server and the forum's -- the login and addresses entered there
+once (`services/shell_access.py`); the portal's own address found by itself
+when none is entered (the one it reaches the internet from, as Cloudflare
+sees it), and a warning when the two differ. The key file stays with the
+person.
 
 **A rollback restores the program only.** It does *not* restore the database.
 The schema is deliberately left where it is, because every migration here adds

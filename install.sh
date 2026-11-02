@@ -73,11 +73,6 @@ EXTERNAL_WORK_SERVICE_FILE=""
 EXTERNAL_WORK_TIMER_FILE=""
 AUTOMATIC_UPDATES_SERVICE_FILE=""
 AUTOMATIC_UPDATES_TIMER_FILE=""
-UNATTENDED_UPGRADES_FILE=""
-RESTART_IF_NEEDED_SERVICE_FILE=""
-RESTART_IF_NEEDED_TIMER_FILE=""
-APT_UPGRADE_TIMER_DROPIN=""
-APT_UPGRADE_SERVICE_DROPIN=""
 UPDATE_RUNNER_SERVICE_FILE=""
 UPDATE_RUNNER_TIMER_FILE=""
 UPDATE_RUNNER_PATH_FILE=""
@@ -684,11 +679,6 @@ resolve_paths() {
     EXTERNAL_WORK_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-external-work.timer"
     AUTOMATIC_UPDATES_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-automatic-updates.service"
     AUTOMATIC_UPDATES_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-automatic-updates.timer"
-    UNATTENDED_UPGRADES_FILE="/etc/apt/apt.conf.d/52${SERVICE_NAME}-unattended-upgrades"
-    RESTART_IF_NEEDED_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-restart-if-needed.service"
-    RESTART_IF_NEEDED_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-restart-if-needed.timer"
-    APT_UPGRADE_TIMER_DROPIN="/etc/systemd/system/apt-daily-upgrade.timer.d/50-${SERVICE_NAME}.conf"
-    APT_UPGRADE_SERVICE_DROPIN="/etc/systemd/system/apt-daily-upgrade.service.d/50-${SERVICE_NAME}.conf"
     UPDATE_RUNNER_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.service"
     UPDATE_RUNNER_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.timer"
     UPDATE_RUNNER_PATH_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.path"
@@ -1327,8 +1317,11 @@ warn_local_repo_changes() {
 
     cleanup_legacy_repo_backups "${target_dir}"
 
-    if [[ -n "$(git_in_dir "${target_dir}" status --porcelain)" ]]; then
-        warn "Local git changes were detected in ${target_dir}. Repo changes are no longer auto-backed up by the installer and will be discarded by update. Runtime configuration and the local database are backed up separately."
+    # Only the portal's own files: the update resets those, and leaves files
+    # git does not track where they are -- a pager's history, a tool's cache in
+    # the portal user's home (this folder) -- so they are nothing to warn of.
+    if [[ -n "$(git_in_dir "${target_dir}" status --porcelain --untracked-files=no)" ]]; then
+        warn "The portal's own files were changed in ${target_dir}. The update puts them back as they are in the repository; those changes are not backed up. Runtime configuration and the local database are backed up separately."
     fi
 }
 
@@ -3167,80 +3160,22 @@ switch_on_automatic_updates() {
         || warn "Could not switch automatic updates on; do it under Settings > Updates."
 }
 
-# Ubuntu's own security updates (docs/automatic-updates-plan.md, part 3):
-# unattended-upgrades installs them; here it is made sure it is there and
-# switched on, and they become a step of the night: at 03:40, queued behind
-# the night lock (Ubuntu's own time is a random one in the morning), and at
-# 04:00 the server restarts if one of them needs that -- a new kernel, say.
-# The restart is the portal's own step, not unattended-upgrades', so that it
-# too waits for whatever still runs: never in the middle of an update.
-# A file of the portal's own, after Ubuntu's (20auto-upgrades,
-# 50unattended-upgrades), so what is set there stays and only this is added.
+# Ubuntu's own security updates (docs/automatic-updates-plan.md, parts 3 and
+# 5) as a step of the night: deploy/server-night.sh makes sure
+# unattended-upgrades is there and on, and moves it to 03:40 behind the night
+# lock -- cloudflared with it, from Cloudflare's repository --, and at 04:00
+# the server restarts if one of them needs that: a new kernel, say. The
+# restart is a step of the night too, so it waits for whatever still runs:
+# never in the middle of an update. The same script sets up the forum's server
+# (System health shows the command).
 configure_unattended_upgrades() {
     if [[ "${PACKAGE_MANAGER}" != "apt" ]]; then
         info "Automatic system updates are set up for apt only; on this system, set them up yourself (dnf-automatic)."
         return 0
     fi
     step "Switching on automatic security updates of the system"
-    install_packages unattended-upgrades
-    cat > "${UNATTENDED_UPGRADES_FILE}" <<EOF
-// Written by the portal's installer (docs/automatic-updates-plan.md, part 3);
-// removed again by its uninstall. Ubuntu's security updates every day, and a
-// restart at 04:00 when one needs it.
-APT::Periodic::Update-Package-Lists "1";
-APT::Periodic::Unattended-Upgrade "1";
-// The restart is the portal's (${SERVICE_NAME}-restart-if-needed): after the
-// night's other steps, never in the middle of one.
-Unattended-Upgrade::Automatic-Reboot "false";
-EOF
-    chmod 644 "${UNATTENDED_UPGRADES_FILE}"
-
-    install -d -m 0755 "$(dirname "${APT_UPGRADE_TIMER_DROPIN}")" "$(dirname "${APT_UPGRADE_SERVICE_DROPIN}")"
-    cat > "${APT_UPGRADE_TIMER_DROPIN}" <<EOF
-# Written by the portal's installer: Ubuntu's updates as a step of the night.
-[Timer]
-OnCalendar=
-OnCalendar=$(night_at 03:40)
-RandomizedDelaySec=0
-EOF
-    cat > "${APT_UPGRADE_SERVICE_DROPIN}" <<EOF
-# Written by the portal's installer: queued behind the night lock.
-[Service]
-ExecStart=
-# The package lists fetched first, here: Ubuntu's own refresh (apt-daily) runs
-# at a random time and at most once a day, so the lists could be a day old.
-ExecStart=/usr/bin/flock --wait ${NIGHT_WAIT_SECONDS} ${NIGHT_LOCK} /bin/sh -c '/usr/bin/apt-get -q update || true; exec /usr/lib/apt/apt.systemd.daily install'
-EOF
-
-    cat > "${RESTART_IF_NEEDED_SERVICE_FILE}" <<EOF
-[Unit]
-Description=Joanneum Aeronautics: restart the server if an update needs it
-
-[Service]
-Type=oneshot
-# Root: it restarts the machine. Only when Ubuntu says an update needs that,
-# and only once nothing else of the night runs.
-ExecStart=/usr/bin/flock --wait ${NIGHT_WAIT_SECONDS} ${NIGHT_LOCK} /bin/sh -c 'if [ -f /run/reboot-required ]; then echo "An update needs a restart: restarting."; systemctl reboot; else echo "No restart needed."; fi'
-TimeoutStartSec=$(( NIGHT_WAIT_SECONDS + 120 ))
-EOF
-    cat > "${RESTART_IF_NEEDED_TIMER_FILE}" <<EOF
-[Unit]
-Description=Joanneum Aeronautics: restart the server if an update needs it (timer)
-
-[Timer]
-OnCalendar=$(night_at 04:00)
-Persistent=false
-Unit=${SERVICE_NAME}-restart-if-needed.service
-
-[Install]
-WantedBy=timers.target
-EOF
-    chmod 644 "${APT_UPGRADE_TIMER_DROPIN}" "${APT_UPGRADE_SERVICE_DROPIN}" \
-        "${RESTART_IF_NEEDED_SERVICE_FILE}" "${RESTART_IF_NEEDED_TIMER_FILE}"
-    systemctl daemon-reload
-    systemctl enable --now unattended-upgrades 2>/dev/null || true
-    systemctl enable "${SERVICE_NAME}-restart-if-needed.timer"
-    systemctl restart "${SERVICE_NAME}-restart-if-needed.timer" apt-daily-upgrade.timer 2>/dev/null || true
+    bash "${INSTALL_DIR}/deploy/server-night.sh" install --name "${SERVICE_NAME}" \
+        --timezone "$(night_timezone)" --lock "${NIGHT_LOCK}" --wait "${NIGHT_WAIT_SECONDS}"
 }
 
 render_update_runner() {
@@ -4204,12 +4139,9 @@ uninstall_everything() {
     fi
     # The system keeps its own security updates, at its own times again; only
     # what the portal set goes with it.
-    rm -f "${UNATTENDED_UPGRADES_FILE}" "${APT_UPGRADE_TIMER_DROPIN}" "${APT_UPGRADE_SERVICE_DROPIN}"
-    if [[ -f "${RESTART_IF_NEEDED_TIMER_FILE}" ]]; then
-        systemctl disable --now "${SERVICE_NAME}-restart-if-needed.timer" || true
-        rm -f "${RESTART_IF_NEEDED_TIMER_FILE}"
+    if [[ -f "${INSTALL_DIR}/deploy/server-night.sh" ]]; then
+        bash "${INSTALL_DIR}/deploy/server-night.sh" remove --name "${SERVICE_NAME}" --lock "${NIGHT_LOCK}" || true
     fi
-    rm -f "${RESTART_IF_NEEDED_SERVICE_FILE}"
     if [[ -f "${UPDATE_RUNNER_PATH_FILE}" ]]; then
         systemctl disable --now "${SERVICE_NAME}-update-runner.path" || true
         rm -f "${UPDATE_RUNNER_PATH_FILE}"

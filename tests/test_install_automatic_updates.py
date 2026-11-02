@@ -52,7 +52,8 @@ def test_the_order_of_the_night():
     assert at == {"render_billing_reconcile_timer_files": "03:15", "render_forum_drift_timer_files": "03:20",
                   "render_automatic_updates_timer_files": automatic_updates.AT}
     assert "OnCalendar=*-*-01 03:25:00 $(night_timezone)" in text
-    assert "OnCalendar=$(night_at 03:40)" in text and "OnCalendar=$(night_at 04:00)" in text
+    night = (INSTALLER.parent / "deploy" / "server-night.sh").read_text(encoding="utf-8")
+    assert "OnCalendar=$(at 03:40)" in night and "OnCalendar=$(at 04:00)" in night
 
 
 # --- One at a time -----------------------------------------------------------------------
@@ -223,36 +224,24 @@ def test_every_mode_that_changes_the_installation_holds_the_lock():
 # --- Ubuntu ------------------------------------------------------------------------------
 
 
-def test_ubuntus_updates_join_the_night_and_the_restart_waits_its_turn(lib, stubs, tmp_path):  # noqa: F811
-    paths = {name: tmp_path / name for name in ("unattended", "timer.d/50.conf", "service.d/50.conf",
-                                                 "restart.service", "restart.timer")}
+def test_ubuntus_updates_are_the_shared_scripts(lib, stubs, tmp_path):  # noqa: F811
+    """The steps themselves are deploy/server-night.sh's (tests/test_server_night.py);
+    the installer hands it the portal's name, time zone and night lock."""
+    deploy = tmp_path / "deploy"
+    deploy.mkdir()
+    (deploy / "server-night.sh").write_text('echo "night $*"\n')
+
     result = run(lib, stubs, f"""
-install_packages() {{ echo "installed $*"; }}
 PACKAGE_MANAGER=apt
 SERVICE_NAME=portal
+INSTALL_DIR="{tmp_path}"
 NIGHT_LOCK=/var/lib/x/night.lock
-UNATTENDED_UPGRADES_FILE="{paths['unattended']}"
-APT_UPGRADE_TIMER_DROPIN="{paths['timer.d/50.conf']}"
-APT_UPGRADE_SERVICE_DROPIN="{paths['service.d/50.conf']}"
-RESTART_IF_NEEDED_SERVICE_FILE="{paths['restart.service']}"
-RESTART_IF_NEEDED_TIMER_FILE="{paths['restart.timer']}"
 configure_unattended_upgrades
 """, MEMBERSHIP_TIMEZONE="Europe/Vienna")
 
     assert result.returncode == 0, result.stderr
-    assert "installed unattended-upgrades" in result.stdout
-    settings = paths["unattended"].read_text()
-    assert 'APT::Periodic::Unattended-Upgrade "1";' in settings
-    # Not unattended-upgrades' own restart, which could cut an update in half.
-    assert 'Unattended-Upgrade::Automatic-Reboot "false";' in settings
-    assert "OnCalendar=*-*-* 03:40 Europe/Vienna" in paths["timer.d/50.conf"].read_text()
-    upgrade = paths["service.d/50.conf"].read_text()
-    assert "flock --wait 3600 /var/lib/x/night.lock" in upgrade
-    # Its own fresh package lists, then Ubuntu's install step only.
-    assert "apt-get -q update || true; exec /usr/lib/apt/apt.systemd.daily install" in upgrade
-    restart = paths["restart.service"].read_text()
-    assert "flock --wait 3600 /var/lib/x/night.lock" in restart and "/run/reboot-required" in restart
-    assert "OnCalendar=*-*-* 04:00 Europe/Vienna" in paths["restart.timer"].read_text()
+    assert "night install --name portal --timezone Europe/Vienna --lock /var/lib/x/night.lock --wait 3600" in (
+        result.stdout)
 
 
 def test_an_update_leaves_ubuntu_its_package_lists():
@@ -265,11 +254,11 @@ def test_left_to_the_system_where_it_is_not_apt(lib, stubs, tmp_path):  # noqa: 
 
     result = run(lib, stubs, f"""
 PACKAGE_MANAGER=dnf
-UNATTENDED_UPGRADES_FILE="{config}"
+INSTALL_DIR="{config}"
 configure_unattended_upgrades
 """)
 
-    assert result.returncode == 0 and not config.exists()
+    assert result.returncode == 0 and "server-night" not in result.stdout and not config.exists()
 
 
 # --- Switched on, taken away ---------------------------------------------------------------
@@ -295,5 +284,5 @@ def test_switched_on_for_a_new_installation_only():
 def test_uninstall_takes_it_all_away():
     body = _function("uninstall_everything")
 
-    assert "automatic-updates.timer" in body and "restart-if-needed.timer" in body
-    assert '"${UNATTENDED_UPGRADES_FILE}" "${APT_UPGRADE_TIMER_DROPIN}" "${APT_UPGRADE_SERVICE_DROPIN}"' in body
+    assert "automatic-updates.timer" in body
+    assert 'server-night.sh" remove --name "${SERVICE_NAME}" --lock "${NIGHT_LOCK}"' in body

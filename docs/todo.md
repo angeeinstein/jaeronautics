@@ -29,94 +29,12 @@ live portal); the rest of the security review (`claude/audit-fixes`, merged
 2026-10-19); and the batch of 2026-10-20 (an answer's email quotes the whole
 conversation and a reply is shown without its quote, the side menu's groups
 set apart, deleted price-list items folded into one row, what the teams are
-owed off the dashboard).
+owed off the dashboard); and the batch of 2026-11-02
+(`claude/update-follow-ups`: cloudflared and the forum's server in the night,
+`deploy/server-night.sh`; the forum and *Shell access* on System health; the
+update's warning of local changes only for the portal's own files).
 
 ## Open
-
-### Updates: warn of local changes only where the update discards them
-
-- **Added:** 2026-10-31
-- **What:** the installer warns "Local git changes were detected in … will
-  be discarded by update" whenever `git status --porcelain` lists anything --
-  files git does not track included. But the update only resets the
-  portal's own (tracked) files; untracked ones stay where they are. So count
-  tracked changes only (`--untracked-files=no`), and keep the wording true:
-  what is discarded is changes to the portal's own files.
-- **Where:** `install.sh`, the end of `ensure_repo_present` (the
-  `status --porcelain` check before the warning).
-- **Why:** on the live server, after the update of 2026-10-31, `git status`
-  listed only `.lesshst` -- `less`'s history, written when it ran with the
-  portal's folder as its home (the portal user's home is that folder) -- so
-  the next update would warn again with nothing to discard. The same
-  happened before with npm's cache (`.npm/`, now in `.gitignore`); ignoring
-  each such file one by one does not end it.
-- **Decided:** nothing yet beyond the above; a test in the installer tests
-  (an untracked file: no warning; a changed tracked file: the warning).
-
-### cloudflared updated by itself, on the portal's server
-
-- **Added:** 2026-11-02
-- **What:** the installer adds Cloudflare's repository to the origins
-  unattended-upgrades takes, so cloudflared is updated in the night's 03:40
-  step with Ubuntu's security updates. Only where cloudflared comes from
-  Cloudflare's repository.
-- **Where:** `install.sh`, `configure_unattended_upgrades` (the file
-  `52<service>-unattended-upgrades`, `Unattended-Upgrade::Origins-Pattern`);
-  its test in `tests/test_install_automatic_updates.py`; `docs/maintenance.md`,
-  "The night".
-- **Why:** on 2026-11-02 the live server had every Ubuntu security update but
-  cloudflared 2026.9.3 with 2026.10.7 out -- nothing updated it. Background:
-  `docs/automatic-updates-plan.md`, part 5.
-- **Decided:** the tunnel restarting once after an update, a few seconds at
-  night, is fine.
-- **The repository** (`apt-cache policy cloudflared`, both servers,
-  2026-11-02): `https://pkg.cloudflare.com/cloudflared any/main`. Matched by
-  host, `"site=pkg.cloudflare.com";`, which needs no origin name.
-- **Open question:** whether the package restarts the tunnel itself after an
-  upgrade, or the step has to (try on the test server).
-
-### The forum's server: Ubuntu's and cloudflared's updates at night
-
-- **Added:** 2026-11-02
-- **What:** a script in this repository, run once on the server Discourse
-  runs on, that sets up what the portal's installer sets up for its own
-  server: unattended-upgrades on, security updates and cloudflared at night,
-  a restart only when an update needs one (`/run/reboot-required`), one after
-  another. Reversible (a `--remove`). How to use it in
-  `docs/discourse-setup.md`.
-- **Why:** the forum's server (its own Ubuntu, Docker, cloudflared) was
-  covered by nothing in the plan; its kernel is the containers' kernel too.
-  What it has (2026-11-02): Ubuntu's default `20auto-upgrades` (lists and
-  unattended-upgrades daily, at Ubuntu's own times), no restart -- so a fixed
-  kernel is installed but not running until somebody restarts it -- and
-  cloudflared not updated (2026.9.3 with 2026.10.7 out).
-  `docs/automatic-updates-plan.md`, part 5.
-- **Decided:** Discourse and its Docker manager are **not** automated -- the
-  maintainer updates them from Discourse's dashboard (Admin › Updates).
-  Docker itself (`docker-ce`, `containerd.io`, from Docker's repository) is
-  not either: "if something gets stuck there, I'd rather notice it
-  immediately" (2026-11-02) -- it is updated by hand, with Discourse's
-  updates (`sudo apt upgrade` before a rebuild). The forum offline for a
-  minute at night (a restart) is fine.
-- **Open question:** the times on that server (the portal's night is
-  03:15-04:00; the forum's server is another machine, so it may share them).
-
-### System health: the forum's version
-
-- **Added:** 2026-11-02
-- **What:** *Staying current* gets the forum: Discourse's version, the newest,
-  how far behind, whether Discourse marks an update as a security one, with a
-  link to its Admin › Updates. Read through Discourse's admin API with the key
-  the portal already has, at most hourly like the rest.
-- **Where:** `services/staying_current.py`, `api/admin_system.py`
-  (`CurrentOut`), `Health.tsx`; only when a forum is set up.
-- **Why:** the maintainer updates Discourse by hand from its dashboard and
-  wants to see its state where the rest is.
-- **Open questions:** which endpoint (Discourse's version check, or the
-  Docker manager's list of repositories as on Admin › Updates). What counts as
-  stuck and is emailed once: Discourse's `latest` branch moves every day, so
-  "a newer version exists" must not -- proposed: a security update not
-  installed after 3 days, and the forum not answering.
 
 ### Stripe's Python package: from 13 to 16
 
@@ -155,8 +73,8 @@ owed off the dashboard).
   a refund, the nightly billing check, the books (`stripe_books.py`).
 - **Why it waits:** nothing breaks while it does -- Stripe keeps answering
   `clover` as before; package 13 only gets no more fixes or features.
-- **Open question:** with the next batch, or on its own branch when the
-  maintainer asks (it is more than a small change).
+- **Put off (2026-11-02):** "Let's keep Stripe for later" -- not with the
+  batch of that day; its own branch when the maintainer asks.
 
 ### Team leads answer their team's messages in the portal
 

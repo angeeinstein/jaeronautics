@@ -1983,6 +1983,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/settings/health/shell": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** The login and the servers' addresses for the shell commands. Never the key: that stays with the person. */
+        put: operations["admin_shell_access"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/settings/health/undelivered/{job_id}/dismiss": {
         parameters: {
             query?: never;
@@ -5287,9 +5304,16 @@ export interface components {
         };
         /**
          * CurrentOut
-         * @description Staying current (docs/automatic-updates-plan.md, part 4): the portal, Ubuntu, Node.js.
+         * @description Staying current (docs/automatic-updates-plan.md, parts 4 and 5): the portal, Ubuntu, Node.js, the forum.
          */
         CurrentOut: {
+            /** @default null */
+            forum?: components["schemas"]["ForumCurrentOut"] | null;
+            /**
+             * Forum Server Command
+             * @default null
+             */
+            forum_server_command?: string | null;
             /** Guide Url */
             guide_url: string | null;
             node: components["schemas"]["NodeOut"] | null;
@@ -6443,6 +6467,28 @@ export interface components {
             failed: boolean;
         };
         /**
+         * ForumCurrentOut
+         * @description The forum's Discourse (part 5), updated by hand from its own dashboard.
+         */
+        ForumCurrentOut: {
+            /** Behind */
+            behind: number;
+            /** Behind Since */
+            behind_since: string | null;
+            /** Down Since */
+            down_since: string | null;
+            /** Installed */
+            installed: string | null;
+            /** Latest */
+            latest: string | null;
+            /** Reachable */
+            reachable: boolean;
+            /** Update Url */
+            update_url: string;
+            /** Url */
+            url: string;
+        };
+        /**
          * ForumEndpoints
          * @description The portal's addresses the forum is set up with.
          */
@@ -6661,6 +6707,7 @@ export interface components {
             /** Problems */
             problems: string[];
             queues: components["schemas"]["QueuesOut"];
+            shell: components["schemas"]["ShellOut"];
             /** Undelivered */
             undelivered: components["schemas"]["UndeliveredOut"][];
             /** Warnings */
@@ -8893,6 +8940,48 @@ export interface components {
         SettingsSavedOut: {
             /** Changed */
             changed: string[];
+        };
+        /** ShellIn */
+        ShellIn: {
+            /**
+             * Forum Address
+             * @default
+             */
+            forum_address?: string;
+            /**
+             * Portal Address
+             * @default
+             */
+            portal_address?: string;
+            /**
+             * User
+             * @default
+             */
+            user?: string;
+        };
+        /**
+         * ShellOut
+         * @description Shell access (services/shell_access.py): the login and each server's address.
+         */
+        ShellOut: {
+            /** Servers */
+            servers: components["schemas"]["ShellServerOut"][];
+            /** User */
+            user: string | null;
+        };
+        /** ShellSavedOut */
+        ShellSavedOut: {
+            /** Changed */
+            changed: string[];
+        };
+        /** ShellServerOut */
+        ShellServerOut: {
+            /** Address */
+            address: string | null;
+            /** Detected */
+            detected: string | null;
+            /** Name */
+            name: string;
         };
         /** SignInIn */
         SignInIn: {
@@ -17343,6 +17432,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RetriedOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_shell_access: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShellIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShellSavedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
             /** @description Not signed in. */

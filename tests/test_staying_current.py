@@ -27,6 +27,7 @@ def _parts(**changes):
                    "restart_packages": []},
         "node": {"major": "24", "supported_until": date(2028, 4, 30)},
         "waiting": [],
+        "forum": None,
     }
     for name, value in changes.items():
         parts[name] = {**parts[name], **value} if isinstance(value, dict) and parts[name] else value
@@ -125,7 +126,7 @@ def stuck_now(app, monkeypatch):
     class Stuck:
         items = [{"key": "restart", "text": "An update has waited 4 days for the server to restart.", "link": None}]
 
-    monkeypatch.setattr(staying_current, "stuck", lambda now=None, parts=None: Stuck.items)
+    monkeypatch.setattr(staying_current, "stuck", lambda now=None, **_: Stuck.items)
     return Stuck
 
 
@@ -189,3 +190,102 @@ def test_switching_on_is_remembered_for_the_missing_check(app):
     assert automatic_updates.enabled_since() is not None
     automatic_updates.set_enabled(False)
     assert automatic_updates.enabled_since() is None
+
+
+# --- The forum (docs/automatic-updates-plan.md, part 5) -------------------------------------
+
+
+class _Forum:
+    """A forum that answers as Discourse's /admin/version_check.json does, or not at all."""
+
+    def __init__(self, answer):
+        self.answer = answer
+        self.settings = {"forum_base_url": "https://forum.example.org/"}
+        self.provider = self
+
+    def is_ready(self):
+        return True
+
+    def version_check(self):
+        from aeronautics_members.forum_service import ForumProviderError
+
+        if self.answer is None:
+            raise ForumProviderError("Could not reach Discourse")
+        return self.answer
+
+
+BEHIND = {"installed_version": "2026.10.0-latest", "installed_describe": "v2026.10.0-latest +248",
+          "latest_version": "2026.11.0-latest", "missing_versions_count": 1, "updated_at": "2026-11-02T08:00:00Z"}
+
+
+@pytest.fixture
+def board(app, monkeypatch):
+    from aeronautics_members.services import forum as forum_module
+
+    forum = _Forum(BEHIND)
+    monkeypatch.setattr(forum_module, "get_forum_service", lambda: forum)
+    # Only the forum: the rest left out, as its fixed times would age over the weeks.
+    monkeypatch.setattr(staying_current, "_parts", lambda now, board=None: _parts(
+        forum=board, portal={"automatic": False}, ubuntu=None, node=None))
+    staying_current._forum_cache.update(at=None, value=None)
+    return forum
+
+
+def _tell_at(forum, answer, hours):
+    forum.answer = answer
+    staying_current._forum_cache.update(at=None, value=None)
+    staying_current.tell(NOW + timedelta(hours=hours))
+    db.session.commit()
+
+
+class TestTheForum:
+    def test_what_system_health_shows(self, board):
+        shown = staying_current.forum(NOW)
+
+        assert shown["installed"] == "v2026.10.0-latest +248" and shown["latest"] == "2026.11.0-latest"
+        assert shown["behind"] == 1 and shown["reachable"] and shown["update_url"] == (
+            "https://forum.example.org/admin/update")
+
+    def test_none_without_a_forum(self, app):
+        assert staying_current.forum(NOW) is None
+
+    def test_a_newer_release_is_told_after_two_weeks_once(self, board):
+        _verified("boss@example.org", "superadmin")
+        _tell_at(board, BEHIND, 0)
+        _tell_at(board, BEHIND, 24 * 13)
+        assert _emails() == []
+
+        _tell_at(board, BEHIND, 24 * 15)
+        _tell_at(board, BEHIND, 24 * 16)
+
+        [email] = _emails()
+        assert "2026.11.0-latest" in email.payload["items"][0] and "15 days" in email.payload["items"][0]
+
+    def test_installing_it_forgets_it(self, board):
+        _tell_at(board, BEHIND, 0)
+        _tell_at(board, {**BEHIND, "missing_versions_count": 0}, 2)
+
+        assert staying_current._stored(staying_current.FORUM_RELEASE_KEY) is None
+
+    def test_not_answering_is_told_after_an_hour(self, board):
+        _verified("boss@example.org", "superadmin")
+        _tell_at(board, None, 0)
+        # A rebuild takes some minutes: not yet.
+        assert [item["key"] for item in staying_current.stuck(
+            NOW + timedelta(minutes=50), board=staying_current.forum(NOW + timedelta(minutes=50)))] == []
+
+        _tell_at(board, None, 2)
+
+        [email] = _emails()
+        assert "has not answered for 2 hours" in email.payload["items"][0]
+
+    def test_the_command_that_sets_up_its_server(self, app, monkeypatch):
+        from aeronautics_members.services import system_update
+
+        monkeypatch.setattr(system_update, "github_slug", lambda: "o/r")
+        monkeypatch.setattr(system_update, "tracked_branch", lambda: "main")
+
+        command = staying_current.forum_server_command()
+
+        assert command.startswith("curl -fsSL https://raw.githubusercontent.com/o/r/main/deploy/server-night.sh ")
+        assert "sudo bash /tmp/server-night.sh install --name forum --timezone Europe/Vienna" in command

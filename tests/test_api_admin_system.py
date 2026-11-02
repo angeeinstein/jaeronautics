@@ -47,6 +47,51 @@ class TestHealth:
         assert db.session.query(AuditLog).filter_by(event_type="forum_tasks_retried").count() == 0
 
 
+class TestShellAccess:
+    def test_nothing_entered_and_no_forum(self, boss):
+        shell = boss.get(HEALTH).get_json()["shell"]
+
+        # The test suite does not ask Cloudflare for the server's address.
+        assert shell == {"user": None, "servers": [{"name": "Portal", "address": None, "detected": None}]}
+
+    def test_entered_once_kept_and_logged(self, boss):
+        response = send(boss, "PUT", f"{HEALTH}/shell", json={
+            "user": "azureuser", "portal_address": " 203.0.113.7 ", "forum_address": "forum.example.org"})
+
+        assert response.status_code == 200, response.get_json()
+        assert response.get_json()["changed"] == ["user", "portal_address", "forum_address"]
+        assert boss.get(HEALTH).get_json()["shell"]["servers"][0]["address"] == "203.0.113.7"
+        assert db.session.query(AuditLog).filter_by(event_type="shell_access_changed").count() == 1
+
+    @pytest.mark.parametrize("field, value", [("user", "Azure User"), ("portal_address", "203.0.113.7; rm -rf /"),
+                                              ("forum_address", "-oProxyCommand=x")])
+    def test_what_would_not_make_a_command_is_refused(self, boss, field, value):
+        response = send(boss, "PUT", f"{HEALTH}/shell", json={field: value})
+
+        assert response.status_code == 400 and field in response.get_json()["error"]["fields"]
+
+    def test_the_address_the_server_finds_for_itself(self, boss, app, monkeypatch):
+        from aeronautics_members.services import shell_access
+
+        app.config["SHELL_ADDRESS_CHECK"] = True
+        shell_access._detected.update(at=None, value=None)
+
+        class Answer:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def read(self, _size):
+                return b"fl=1\nh=1.1.1.1\nip=198.51.100.4\nts=1\n"
+
+        monkeypatch.setattr(shell_access.urllib.request, "urlopen", lambda *_args, **_kwargs: Answer())
+
+        assert boss.get(HEALTH).get_json()["shell"]["servers"][0]["detected"] == "198.51.100.4"
+        shell_access._detected.update(at=None, value=None)
+
+
 def _ran(state_dir, state, log, action="update"):
     """A run of the update runner, as its files say: its status and its output."""
     (state_dir / system_update.STATUS_FILENAME).write_text(json.dumps(

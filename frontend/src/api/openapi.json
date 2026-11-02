@@ -4630,8 +4630,31 @@
       },
       "CurrentOut": {
         "additionalProperties": false,
-        "description": "Staying current (docs/automatic-updates-plan.md, part 4): the portal, Ubuntu, Node.js.",
+        "description": "Staying current (docs/automatic-updates-plan.md, parts 4 and 5): the portal, Ubuntu, Node.js, the forum.",
         "properties": {
+          "forum": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ForumCurrentOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "forum_server_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Forum Server Command"
+          },
           "guide_url": {
             "anyOf": [
               {
@@ -8212,6 +8235,84 @@
         "title": "ForumCleanup",
         "type": "object"
       },
+      "ForumCurrentOut": {
+        "additionalProperties": false,
+        "description": "The forum's Discourse (part 5), updated by hand from its own dashboard.",
+        "properties": {
+          "behind": {
+            "title": "Behind",
+            "type": "integer"
+          },
+          "behind_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Behind Since"
+          },
+          "down_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Down Since"
+          },
+          "installed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installed"
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest"
+          },
+          "reachable": {
+            "title": "Reachable",
+            "type": "boolean"
+          },
+          "update_url": {
+            "title": "Update Url",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "update_url",
+          "reachable",
+          "installed",
+          "latest",
+          "behind",
+          "down_since",
+          "behind_since"
+        ],
+        "title": "ForumCurrentOut",
+        "type": "object"
+      },
       "ForumEndpoints": {
         "additionalProperties": false,
         "description": "The portal's addresses the forum is set up with.",
@@ -8817,6 +8918,9 @@
           "queues": {
             "$ref": "#/components/schemas/QueuesOut"
           },
+          "shell": {
+            "$ref": "#/components/schemas/ShellOut"
+          },
           "undelivered": {
             "items": {
               "$ref": "#/components/schemas/UndeliveredOut"
@@ -8840,7 +8944,8 @@
           "membership",
           "queues",
           "undelivered",
-          "current"
+          "current",
+          "shell"
         ],
         "title": "HealthOut",
         "type": "object"
@@ -15589,6 +15694,116 @@
           "changed"
         ],
         "title": "SettingsSavedOut",
+        "type": "object"
+      },
+      "ShellIn": {
+        "additionalProperties": false,
+        "properties": {
+          "forum_address": {
+            "default": "",
+            "maxLength": 253,
+            "title": "Forum Address",
+            "type": "string"
+          },
+          "portal_address": {
+            "default": "",
+            "maxLength": 253,
+            "title": "Portal Address",
+            "type": "string"
+          },
+          "user": {
+            "default": "",
+            "maxLength": 32,
+            "title": "User",
+            "type": "string"
+          }
+        },
+        "title": "ShellIn",
+        "type": "object"
+      },
+      "ShellOut": {
+        "additionalProperties": false,
+        "description": "Shell access (services/shell_access.py): the login and each server's address.",
+        "properties": {
+          "servers": {
+            "items": {
+              "$ref": "#/components/schemas/ShellServerOut"
+            },
+            "title": "Servers",
+            "type": "array"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User"
+          }
+        },
+        "required": [
+          "user",
+          "servers"
+        ],
+        "title": "ShellOut",
+        "type": "object"
+      },
+      "ShellSavedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "changed"
+        ],
+        "title": "ShellSavedOut",
+        "type": "object"
+      },
+      "ShellServerOut": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "detected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detected"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "address",
+          "detected"
+        ],
+        "title": "ShellServerOut",
         "type": "object"
       },
       "SignInIn": {
@@ -28559,6 +28774,80 @@
           }
         },
         "summary": "Send the background tasks that gave up once more -- once the forum is reachable again.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "system.update"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/health/shell": {
+      "put": {
+        "operationId": "admin_shell_access",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShellIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShellSavedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "The login and the servers' addresses for the shell commands. Never the key: that stays with the person.",
         "tags": [
           "Admin"
         ],
