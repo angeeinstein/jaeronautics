@@ -420,6 +420,9 @@ function StayingCurrent({ current }: { current: Schemas['CurrentOut'] }) {
   );
 }
 
+// A field's note under it, so the fields of a row line up whether they have one or not.
+const BELOW = ['label', 'input', 'description', 'error'] as ('label' | 'input' | 'description' | 'error')[];
+
 const KEY_PROMPT = `$key = (Read-Host 'Full path to the VM SSH .pem file').Trim('"')`;
 
 function ShellAccess({ shell }: { shell: Schemas['ShellOut'] }) {
@@ -468,6 +471,7 @@ function ShellAccess({ shell }: { shell: Schemas['ShellOut'] }) {
         <SimpleGrid cols={{ base: 1, sm: forum ? 3 : 2 }}>
           <TextInput
             label="Login"
+            inputWrapperOrder={BELOW}
             placeholder="azureuser"
             value={user}
             error={errors.user}
@@ -478,6 +482,7 @@ function ShellAccess({ shell }: { shell: Schemas['ShellOut'] }) {
           />
           <TextInput
             label="Portal's server"
+            inputWrapperOrder={BELOW}
             placeholder={portal?.detected ?? 'IP address or host name'}
             description={portal?.detected ? 'Empty: the address it finds itself.' : undefined}
             value={portalAddress}
@@ -490,6 +495,7 @@ function ShellAccess({ shell }: { shell: Schemas['ShellOut'] }) {
           {forum ? (
             <TextInput
               label="Forum's server"
+              inputWrapperOrder={BELOW}
               placeholder="IP address or host name"
               value={forumAddress}
               error={errors.forum_address}
