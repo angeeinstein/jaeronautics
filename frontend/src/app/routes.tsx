@@ -249,6 +249,10 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/teams/manage/Rules')).Rules }),
           },
           {
+            path: 'manage/rules/drafts/:recordId',
+            lazy: async () => ({ Component: (await import('../pages/legal/Editor')).Editor }),
+          },
+          {
             path: 'manage/attendance',
             lazy: async () => ({
               Component: (await import('../pages/teams/manage/Attendance')).Attendance,
@@ -380,6 +384,10 @@ export const routes: RouteObject[] = [
           {
             path: 'legal',
             lazy: async () => ({ Component: (await import('../pages/admin/LegalTexts')).LegalTexts }),
+          },
+          {
+            path: 'legal/drafts/:recordId',
+            lazy: async () => ({ Component: (await import('../pages/legal/Editor')).Editor }),
           },
           {
             path: 'logs',

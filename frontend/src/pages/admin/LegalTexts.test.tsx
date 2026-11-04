@@ -46,6 +46,8 @@ function legal(overrides: Partial<LegalOut> = {}): LegalOut {
     problems: [],
     preview_max_kb: 1024,
     template_url: '/admin/legal/template',
+    may_publish: true,
+    texts: [{ document: 'statutes', team: null, name: 'Statuten', has_in_force: true }],
     ...overrides,
   };
 }
@@ -221,9 +223,54 @@ describe('a version uploaded here', () => {
     show({ [API]: { body: legal({ in_force: correctable }) } });
     const inForce = await screen.findByRole('region', { name: 'In force' });
 
-    await userEvent.click(within(inForce).getByRole('button', { name: 'Correct' }));
+    expect(within(inForce).getByRole('button', { name: 'Correct' })).toBeInTheDocument();
+    await userEvent.click(within(inForce).getByRole('button', { name: 'With a file' }));
 
     expect(await screen.findByRole('dialog')).toHaveTextContent('the earlier wording is kept in the log');
+  });
+});
+
+describe('the editor', () => {
+  it('a new version is written from the version in force', async () => {
+    const { calls } = show({
+      [`POST /api/v1/legal/drafts`]: { body: { record_id: 9, editor_url: '/admin/legal/drafts/9' } },
+    });
+
+    // One text only: chosen already.
+    const panel = await screen.findByRole('region', { name: 'Write a new version' });
+    await userEvent.click(within(panel).getByRole('button', { name: 'Write' }));
+
+    await waitFor(() => {
+      expect(calls.some((call) => new URL(call.url).pathname === '/api/v1/legal/drafts')).toBe(true);
+    });
+    const sent = calls.find((call) => new URL(call.url).pathname === '/api/v1/legal/drafts');
+    expect(await sent?.clone().json()).toEqual({ document: 'statutes', team: null, start: 'in_force' });
+  });
+
+  it('a draft file in legal/ is copied into the portal to be edited', async () => {
+    const { calls } = show({
+      [API]: {
+        body: legal({
+          waiting: [
+            { ...DRAFT, record_id: null, document: 'privacy-policy', team: null, version: '2026-10-08' },
+          ],
+        }),
+      },
+      [`POST /api/v1/legal/imports`]: { body: { record_id: 11, editor_url: '/admin/legal/drafts/11' } },
+    });
+    const waiting = await screen.findByRole('region', { name: 'Not in force yet' });
+
+    await userEvent.click(within(waiting).getByRole('button', { name: 'Edit' }));
+
+    await waitFor(() => {
+      expect(calls.some((call) => new URL(call.url).pathname === '/api/v1/legal/imports')).toBe(true);
+    });
+    const sent = calls.find((call) => new URL(call.url).pathname === '/api/v1/legal/imports');
+    expect(await sent?.clone().json()).toEqual({
+      document: 'privacy-policy',
+      team: null,
+      version: '2026-10-08',
+    });
   });
 });
 

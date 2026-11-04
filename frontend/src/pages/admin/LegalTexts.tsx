@@ -22,6 +22,7 @@ import {
 } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { IconClock, IconFileTypePdf, IconFolder, IconScale, IconUpload } from '@tabler/icons-react';
 
 import { api, ApiError, call, type Schemas } from '../../api/client';
@@ -44,6 +45,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../components/States';
 import { fileNameOf, openFile } from '../../lib/files';
 import { formatDate, formatDateTime, viennaParts } from '../../lib/format';
 import { notifyDone, notifyFailed } from '../../lib/notify';
+import { useEditDraft, WriteNew } from '../legal/Starting';
 import classes from './LegalTexts.module.css';
 
 type LegalOut = Schemas['LegalOut'];
@@ -105,7 +107,7 @@ function NewVersion({ data }: { data: LegalOut }) {
   });
 
   return (
-    <Panel icon={IconUpload} title="New version">
+    <Panel icon={IconUpload} title="Upload a file">
       <Stack gap="md">
         <Text size="sm" c="dimmed">
           The Markdown file of a new version -- the association&apos;s or a team&apos;s rules -- and its
@@ -217,6 +219,7 @@ function Correct({ text, onClose }: { text: InForceText; onClose: () => void }) 
 }
 
 function InForce({ data }: { data: LegalOut }) {
+  const navigate = useNavigate();
   const [correcting, setCorrecting] = useState<InForceText | null>(null);
   return (
     <Panel icon={IconScale} title="In force" flush>
@@ -233,16 +236,27 @@ function InForce({ data }: { data: LegalOut }) {
               </Text>
             </Stack>
             <Group gap="sm">
-              {text.correctable ? (
-                <Button
-                  size="xs"
-                  variant="default"
-                  onClick={() => {
-                    setCorrecting(text);
-                  }}
-                >
-                  Correct
-                </Button>
+              {text.correctable && data.may_publish && text.record_id != null ? (
+                <>
+                  <Button
+                    size="xs"
+                    variant="default"
+                    onClick={() => {
+                      void navigate(`/admin/legal/drafts/${String(text.record_id)}`);
+                    }}
+                  >
+                    Correct
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    onClick={() => {
+                      setCorrecting(text);
+                    }}
+                  >
+                    With a file
+                  </Button>
+                </>
               ) : null}
               <PdfLink href={text.pdf_url}>PDF</PdfLink>
             </Group>
@@ -259,7 +273,7 @@ function InForce({ data }: { data: LegalOut }) {
           </li>
         ))}
       </ul>
-      {data.in_force.some((text) => text.correctable) ? (
+      {data.may_publish && data.in_force.some((text) => text.correctable) ? (
         <Text size="sm" c="dimmed" className={classes.note}>
           A version published here can be corrected for 24 hours, while nobody has accepted it.
         </Text>
@@ -279,7 +293,18 @@ function InForce({ data }: { data: LegalOut }) {
 const APPROVERS = ['Vorstand', 'Generalversammlung'];
 
 /** Publishing a draft: the day it applies from, and who approved it and when. Not to be undone. */
-function Publish({ text, onClose }: { text: Waiting; onClose: () => void }) {
+type Publishable = Pick<Waiting, 'title' | 'record_id' | 'effective_from' | 'approved_by' | 'approved_on'>;
+
+export function Publish({
+  text,
+  onClose,
+  onPublished,
+}: {
+  text: Publishable;
+  onClose: () => void;
+  /** After publishing: the editor goes back to the list. */
+  onPublished?: () => void;
+}) {
   const refresh = useRefresh();
   const first = today();
   const [effectiveFrom, setEffectiveFrom] = useState(
@@ -290,6 +315,7 @@ function Publish({ text, onClose }: { text: Waiting; onClose: () => void }) {
   const [other, setOther] = useState(APPROVERS.includes(named) ? '' : named);
   const [approvedOn, setApprovedOn] = useState(text.approved_on ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [problems, setProblems] = useState<string[]>([]);
   const approvedBy = approver === 'none' ? null : approver === 'other' ? other.trim() || null : approver;
   const publish = useMutation({
     mutationFn: () =>
@@ -306,10 +332,13 @@ function Publish({ text, onClose }: { text: Waiting; onClose: () => void }) {
     onSuccess: async () => {
       notifyDone('Published.');
       onClose();
+      onPublished?.();
       await refresh();
     },
     onError: (error) => {
-      if (error instanceof ApiError && Object.keys(error.fields).length) setErrors(error.fields);
+      const listed = problemsOf(error);
+      if (listed) setProblems(listed);
+      else if (error instanceof ApiError && Object.keys(error.fields).length) setErrors(error.fields);
       else notifyFailed(error);
     },
   });
@@ -320,6 +349,7 @@ function Publish({ text, onClose }: { text: Waiting; onClose: () => void }) {
           Published, it is a version for good: from the day it applies, applicants accept it and members see
           that it changed. For 24 hours, while nobody has accepted it, its wording can still be corrected.
         </Text>
+        <Problems problems={problems} title="Not published, because of:" />
         <DayInput
           label="Applies from"
           required
@@ -395,6 +425,7 @@ function Publish({ text, onClose }: { text: Waiting; onClose: () => void }) {
 
 function NotInForce({ data }: { data: LegalOut }) {
   const refresh = useRefresh();
+  const edit = useEditDraft((recordId) => `/admin/legal/drafts/${String(recordId)}`);
   const [publishing, setPublishing] = useState<Waiting | null>(null);
   const remove = useMutation({
     mutationFn: (recordId: number) =>
@@ -436,16 +467,30 @@ function NotInForce({ data }: { data: LegalOut }) {
                     </Group>
                   </Stack>
                   <Group gap="sm">
+                    {text.status === 'draft' ? (
+                      <Button
+                        size="xs"
+                        variant="default"
+                        loading={edit.isPending && edit.variables.version === text.version}
+                        onClick={() => {
+                          edit.mutate(text);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                    ) : null}
                     {draftId !== null ? (
                       <>
-                        <Button
-                          size="xs"
-                          onClick={() => {
-                            setPublishing(text);
-                          }}
-                        >
-                          Publish
-                        </Button>
+                        {data.may_publish ? (
+                          <Button
+                            size="xs"
+                            onClick={() => {
+                              setPublishing(text);
+                            }}
+                          >
+                            Publish
+                          </Button>
+                        ) : null}
                         <ConfirmButton
                           size="xs"
                           confirmLabel="Yes, delete"
@@ -466,8 +511,8 @@ function NotInForce({ data }: { data: LegalOut }) {
           </ul>
           <Text size="sm" c="dimmed" className={classes.note}>
             Drafts are shown nowhere else; published versions with a later start day switch over by themselves
-            on that day. The preview is marked ENTWURF or VORSCHAU on every page. A draft in legal/ is
-            published in the repository.
+            on that day. The preview is marked ENTWURF or VORSCHAU on every page. A draft from legal/ is
+            copied into the portal when it is first edited.
           </Text>
         </>
       ) : (
@@ -596,6 +641,10 @@ export function LegalTexts() {
         <ErrorState error={legal.error} onRetry={() => void legal.refetch()} />
       ) : (
         <Stack gap="lg">
+          <WriteNew
+            texts={legal.data.texts ?? []}
+            intro="In the editor, with the page beside it as it will be. Saved as a draft as you write; nobody else sees it until it is published."
+          />
           <NewVersion data={legal.data} />
           <InForce data={legal.data} />
           <NotInForce data={legal.data} />

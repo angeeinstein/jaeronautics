@@ -28,6 +28,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../../components/States
 import { formatDate, formatDateTime } from '../../../lib/format';
 import { notifyDone, notifyFailed } from '../../../lib/notify';
 import classes from '../../admin/LegalTexts.module.css';
+import { useEditDraft, WriteNew } from '../../legal/Starting';
 import { ManageHeader, useSlug } from './shared';
 
 type RulesOut = Schemas['TeamRulesOut'];
@@ -59,7 +60,7 @@ function Upload({ slug, data }: { slug: string; data: RulesOut }) {
     },
   });
   return (
-    <Panel icon={IconUpload} title="New version">
+    <Panel icon={IconUpload} title="Upload a file">
       <Stack gap="md">
         <Text size="sm" c="dimmed">
           The Markdown file of your new rules, and its English translation if there is one. It is kept as a
@@ -98,6 +99,7 @@ function Upload({ slug, data }: { slug: string; data: RulesOut }) {
 
 function Waiting({ slug, data }: { slug: string; data: RulesOut }) {
   const client = useQueryClient();
+  const edit = useEditDraft((recordId) => `/teams/${slug}/manage/rules/drafts/${String(recordId)}`);
   const remove = useMutation({
     mutationFn: (recordId: number) =>
       call(
@@ -136,6 +138,18 @@ function Waiting({ slug, data }: { slug: string; data: RulesOut }) {
                   </Group>
                 </Stack>
                 <Group gap="sm">
+                  {text.status === 'draft' ? (
+                    <Button
+                      size="xs"
+                      variant="default"
+                      loading={edit.isPending && edit.variables.version === text.version}
+                      onClick={() => {
+                        edit.mutate({ ...text, document: 'team-rules', team: slug });
+                      }}
+                    >
+                      Edit
+                    </Button>
+                  ) : null}
                   {draftId !== null ? (
                     <ConfirmButton
                       size="xs"
@@ -196,6 +210,17 @@ export function Rules() {
               <Text c="dimmed">None yet.</Text>
             )}
           </Panel>
+          <WriteNew
+            texts={[
+              {
+                document: 'team-rules',
+                team: slug,
+                name: 'Teamordnung',
+                has_in_force: Boolean(rules.data.in_force),
+              },
+            ]}
+            intro="In the editor, with the page beside it as it will be. Saved as a draft as you write; the association publishes it, and you are told when it does."
+          />
           <Upload slug={slug} data={rules.data} />
           <Waiting slug={slug} data={rules.data} />
         </Stack>

@@ -1,0 +1,19 @@
+.text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.added {
+  color: var(--ja-success-text);
+  background: color-mix(in srgb, var(--ja-success) 15%, transparent);
+  text-decoration: underline;
+}
+
+.removed {
+  color: var(--ja-danger);
+  background: color-mix(in srgb, var(--ja-danger) 12%, transparent);
+  text-decoration: line-through;
+}
