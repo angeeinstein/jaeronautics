@@ -36,6 +36,29 @@ update's warning of local changes only for the portal's own files).
 
 ## Open
 
+### TDT's rules 2026.2: publish once the board approves (waiting)
+
+- **Added:** 2026-11-04
+- **What:** Team Drone Tech's new rules, agreed with the team's lead on
+  2026-11-04, are in the repository as a draft:
+  `legal/teams/tdt/team-rules/de/2026-11-04.md` (`status: "draft"`, pull
+  request "TDT's rules, version 2026.2, as a draft"). When the association's
+  board has approved them (their § 19): `status: "published"`, `version` and
+  `effective_from` the day they apply, the file renamed to that day. From then
+  on applicants accept them; current members see on the team page that the
+  rules changed (TDT tells them itself, § 19 ii).
+- **Why the text differs from what TDT submitted:** fitted to how the portal
+  works -- debits on 01.10. and 01.04. (01.01./01.04. cannot be set for a
+  subscription), applying and accepting through the portal, the first payment
+  and the 14 days an approval waits, a failed debit ending the membership and
+  rejoining by paying, exclusion at once and no refunds; and, as agreed with
+  the lead, no außerordentliche Mitglieder. Otherwise TDT's wording, slips
+  included. The comparison PDF that went to TDT was made outside the
+  repository.
+- **Also settled by it:** the new rules drop the passive status, so the open
+  proposal in `docs/team-passive-members.md` is not needed for TDT.
+- **Waiting for:** the association's board.
+
 ### Stripe's Python package: from 13 to 16
 
 - **Added:** 2026-11-02
