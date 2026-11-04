@@ -39,7 +39,7 @@ its other content lives: in the database, managed under Admin › Legal Texts.
   needs no new version). Whether somebody has: the association's texts, from
   the acceptances kept at signup; a team's rules, from the memberships'
   `terms_version`. Every correction is in the audit log with the earlier
-  wording. *Proposed, open:* also at most **24 hours** after publishing --
+  wording. And at most **24 hours** after publishing (decided 2026-11-04):
   some texts are accepted by nobody (the legal notice, the webshop terms) and
   could otherwise be changed silently for ever.
 - **Who:** a new permission, **Legal texts** (`Permission.LEGAL_TEXTS`), in
@@ -49,7 +49,9 @@ its other content lives: in the database, managed under Admin › Legal Texts.
   the maintainer wants later.
 - **Team rules:** a team's leads upload drafts of their own team's rules; the
   association's admins (the permission above) are told and publish. Today the
-  leads send the text to the association, which goes through GitHub.
+  leads send the text to the association, which goes through GitHub. The
+  leads see the draft they uploaded with its PDF, to pass round in the team,
+  and are told when it is published (decided 2026-11-04).
 - **Upload only.** An editor in the browser, with a live preview, may come
   later (the maintainer: "uploading only is enough").
 - **Kept:** in the database and so in the backups; the PDFs made as now
@@ -64,8 +66,7 @@ its other content lives: in the database, managed under Admin › Legal Texts.
 
 ## Open
 
-- The 24 hours above.
-- Whether a draft that a team's leads uploaded can be seen by the leads
-  themselves with its PDF (to pass round in the team), and whether they are
-  told when it is published.
-- Optionally, when publishing, "approved by the board on …" as a record.
+- Optionally, when publishing, a date "approved by the board on …", kept
+  with the version (its history, the audit log) as a record that it was
+  approved -- not checked by the portal, and may stay empty. Asked on
+  2026-11-04; the maintainer was not sure what it meant, explained since.
