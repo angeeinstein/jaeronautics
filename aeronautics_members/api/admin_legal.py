@@ -1,10 +1,14 @@
 """Legal texts, the admins' part: the texts in force, the teams' rules, the
 versions waiting for their day, what is wrong with the files on this server --
-and a new text's PDF from uploaded files, made as it will be and not kept.
+a new text's PDF from uploaded files, made as it will be and not kept -- and
+the versions uploaded in the portal: uploading a draft, publishing it,
+correcting it while that is still allowed, deleting a draft
+(docs/legal-texts-in-portal-plan.md).
 
-The texts themselves are Markdown files in legal/ in the repository
-(services/legal_texts.py); their PDFs are made and kept by legal_pdf.py.
-Drawn by frontend/src/pages/admin/LegalTexts.tsx.
+The texts are Markdown, in legal/ in the repository or uploaded here
+(services/legal_texts.py reads both, services/legal_uploads.py keeps the
+uploaded ones); their PDFs are made and kept by legal_pdf.py. Drawn by
+frontend/src/pages/admin/LegalTexts.tsx.
 """
 
 import io
@@ -15,16 +19,17 @@ from flask import current_app, send_file, url_for
 from flask_login import current_user
 
 from .. import legal_pdf
-from ..db_models import db
+from ..db_models import LegalTextVersion, db
 from ..permissions import Permission
 from ..services import NotFoundError, ServiceError, ValidationError
 from ..services import legal_texts as legal
+from ..services import legal_uploads
 from ..services import teams as teams_service
 from ..services.audit import log_audit_event
-from ._core import Model, endpoint
+from ._core import Model, UtcDateTime, endpoint
 
 TAG = "Admin"
-PERMISSIONS = [Permission.SETTINGS_GENERAL]
+PERMISSIONS = [Permission.LEGAL_TEXTS]
 
 
 class InForce(Model):
@@ -34,9 +39,15 @@ class InForce(Model):
     version: date
     revision: str | None
     effective_from: date
+    #: The line under its title ("Gültig ab … · genehmigt vom Vorstand am …").
+    validity: str
     page_url: str
     #: Made on first request: open it with ``?prepare=1`` first.
     pdf_url: str
+    #: Uploaded in the portal (rather than a file in legal/): its id.
+    record_id: int | None = None
+    #: May still be corrected: uploaded here, published under 24 hours ago, accepted by nobody.
+    correctable: bool = False
 
 
 class UpcomingVersionOut(Model):
@@ -51,6 +62,14 @@ class UpcomingVersionOut(Model):
     has_english: bool
     #: Marked ENTWURF or VORSCHAU on every page; open it with ``?prepare=1`` first.
     pdf_url: str
+    #: Uploaded in the portal: its id, for publishing or deleting it. None: a file in legal/.
+    record_id: int | None = None
+    uploaded_at: UtcDateTime | None = None
+    #: Who uploaded it; a team's lead for a team's rules.
+    uploaded_by: str | None = None
+    #: The approval written into the file, offered when publishing.
+    approved_by: str | None = None
+    approved_on: date | None = None
 
 
 class PdfJob(Model):
@@ -78,15 +97,33 @@ def _team_names():
     return {team.slug: team.name for team in teams_service.all_teams(include_archived=True)}
 
 
+def _person(user):
+    if user is None:
+        return None
+    member = getattr(user, "member", None)
+    name = " ".join(part for part in (getattr(member, "first_name", None), getattr(member, "last_name", None))
+                    if part)
+    return name or user.email
+
+
+def _correcting(version):
+    """``record_id`` and ``correctable`` of a version in force."""
+    if version.record_id is None:
+        return {}
+    record = db.session.get(LegalTextVersion, version.record_id)
+    return {"record_id": version.record_id,
+            "correctable": legal_uploads.why_not_correctable(record) is None}
+
+
 @endpoint("GET", "/admin/legal", response=LegalOut, permissions=PERMISSIONS, tag=TAG)
 def admin_legal():
     """The texts in force, the versions waiting, the PDFs, and what is wrong with the files."""
     names = _team_names()
     in_force = [
         InForce(title=version.title, team_name=None, version=version.version, revision=version.revision,
-                effective_from=version.effective_from,
+                effective_from=version.effective_from, validity=legal.validity(version),
                 page_url=url_for("public.legal_text", slug=text.slug),
-                pdf_url=url_for("public.legal_text_pdf", slug=text.slug))
+                pdf_url=url_for("public.legal_text_pdf", slug=text.slug), **_correcting(version))
         for text, version in legal.available()
     ]
     without_rules = []
@@ -98,22 +135,28 @@ def admin_legal():
         version = rules.version
         in_force.append(InForce(
             title=version.title, team_name=team.name, version=version.version, revision=version.revision,
-            effective_from=version.effective_from, page_url=url_for("teams.team_rules_text", slug=team.slug),
-            pdf_url=url_for("teams.team_rules_pdf", slug=team.slug)))
+            effective_from=version.effective_from, validity=legal.validity(version),
+            page_url=url_for("teams.team_rules_text", slug=team.slug),
+            pdf_url=url_for("teams.team_rules_pdf", slug=team.slug), **_correcting(version)))
 
     waiting = []
     for slug, team in [(text.slug, None) for text in legal.LEGAL_TEXTS] + [
         (text.slug, team_slug) for team_slug in legal.teams_with_texts() for text in legal.TEAM_TEXTS
     ]:
         for version in legal.waiting(slug, team=team):
+            record = db.session.get(LegalTextVersion, version.record_id) if version.record_id else None
             waiting.append(UpcomingVersionOut(
                 title=version.title, team_name=names.get(team, team) if team else None,
                 version=version.version, revision=version.revision,
                 status="draft" if version.status == "draft" else "scheduled",
                 effective_from=version.effective_from,
-                has_english=legal.find_any(slug, "en", version.version, team) is not None,
+                has_english=legal.translation_any(version) is not None,
                 pdf_url=url_for("admin.admin_legal_waiting_pdf", document=slug,
-                                version=version.version.isoformat(), team=team)))
+                                version=version.version.isoformat(), team=team, record=version.record_id),
+                record_id=version.record_id,
+                uploaded_at=record.uploaded_at if record else None,
+                uploaded_by=_person(record.uploaded_by) if record else None,
+                approved_by=version.approved_by, approved_on=version.approved_on))
 
     orphans = [f"legal/teams/{slug}/: no team has this short name, so these rules are shown nowhere."
                for slug in legal.teams_with_texts() if slug not in names]
@@ -194,3 +237,68 @@ def admin_legal_make_pdf(body):
                                http_status=422) from exc
         return MadeOut(size_kb=max(1, size // 1024))
     raise NotFoundError("No longer in legal/.")
+
+
+# --- Versions uploaded in the portal -----------------------------------------------------
+
+
+class UploadedOut(Model):
+    record_id: int
+
+
+def _uploads(files):
+    uploads = [(files["german"].read(legal_pdf.PREVIEW_MAX_BYTES + 1), files["german"].filename)]
+    if files.get("english") is not None:
+        uploads.append((files["english"].read(legal_pdf.PREVIEW_MAX_BYTES + 1), files["english"].filename))
+    return uploads
+
+
+@endpoint("POST", "/admin/legal/drafts", response=UploadedOut, permissions=PERMISSIONS, tag=TAG,
+          uploads={"german": True, "english": False})
+def admin_legal_upload(files):
+    """Keep a new version as a draft: its Markdown file, and its English translation if there is one.
+    Checked as the preview checks it; what is wrong is a 400 with ``details.problems``."""
+    record = legal_uploads.upload_draft(current_user, *_uploads(files))
+    db.session.commit()
+    return UploadedOut(record_id=record.id)
+
+
+class PublishIn(Model):
+    #: The day it applies from: today or later.
+    effective_from: date
+    #: Who approved it ("Vorstand", "Generalversammlung", ...); empty: no approval to name.
+    approved_by: str | None = None
+    approved_on: date | None = None
+
+
+@endpoint("POST", "/admin/legal/drafts/<int:record_id>/publish", response=UploadedOut, body=PublishIn,
+          permissions=PERMISSIONS, tag=TAG)
+def admin_legal_publish(record_id, body):
+    """Publish a draft. Its day is today's; it applies from ``effective_from``. Not to be undone:
+    a published version is only ever corrected, within 24 hours, while nobody has accepted it."""
+    record = legal_uploads.publish(current_user, record_id, effective_from=body.effective_from,
+                                   approved_by=body.approved_by, approved_on=body.approved_on)
+    db.session.commit()
+    return UploadedOut(record_id=record.id)
+
+
+@endpoint("POST", "/admin/legal/versions/<int:record_id>/correct", response=UploadedOut, permissions=PERMISSIONS,
+          tag=TAG, uploads={"german": True, "english": False})
+def admin_legal_correct(record_id, files):
+    """Replace a published version's text -- within 24 hours of publishing, while nobody has
+    accepted it. The earlier wording is kept in the log."""
+    record = legal_uploads.correct(current_user, record_id, *_uploads(files))
+    db.session.commit()
+    return UploadedOut(record_id=record.id)
+
+
+class DeletedOut(Model):
+    deleted: bool
+
+
+@endpoint("DELETE", "/admin/legal/drafts/<int:record_id>", response=DeletedOut, permissions=PERMISSIONS, tag=TAG)
+def admin_legal_delete_draft(record_id):
+    """Delete a draft, with its translation. A published version is never deleted."""
+    legal_uploads.delete_draft(current_user, record_id)
+    db.session.commit()
+    return DeletedOut(deleted=True)

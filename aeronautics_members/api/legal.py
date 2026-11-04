@@ -42,6 +42,9 @@ class LegalTextOut(Model):
     effective_from: date
     #: The day of the version in force -- this one, or a later one.
     in_force: date
+    #: The line under the title, in the text's language: its revision, the day it
+    #: applies from, who approved it and when ("Gültig ab 01.12.2026 · genehmigt …").
+    validity: str
     #: The text itself, as HTML.
     html: str
     #: Its parts and sections, to jump to.
@@ -81,7 +84,7 @@ def legal_text(slug, language, version, *, page, pdf, team=None):
     return LegalTextOut(
         title=shown.title, language=shown.language, is_translation=shown.is_translation,
         version=shown.version, revision=shown.revision, effective_from=shown.effective_from,
-        in_force=in_force.version, html=str(rendered["html"]),
+        in_force=in_force.version, validity=legal.validity(shown), html=str(rendered["html"]),
         contents=[SectionOut(anchor=anchor, label=label, level=level) for anchor, label, level in rendered["contents"]],
         german_url=address(german), english_url=address(english) if english is not None else None,
         english_elsewhere=english is None and legal.has_language(slug, "en", team=team),

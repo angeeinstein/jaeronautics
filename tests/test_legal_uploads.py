@@ -4,10 +4,12 @@ and approval, read like a file in legal/ from then on; corrected only while
 nobody has accepted it and within 24 hours; a draft deleted, a published
 version never; a team's leads uploading their own rules, and who is told.
 """
+import io
 from datetime import timedelta
 
 import pytest
 
+from api_helpers import send
 from conftest import db
 from aeronautics_members.db_models import AuditLog, LegalTextVersion, NotificationEvent, TeamMembership
 from aeronautics_members.permissions import ROLE_PERMISSIONS, Permission
@@ -15,8 +17,9 @@ from aeronautics_members.services import ConflictError, ValidationError
 from aeronautics_members.services import legal_texts as legal
 from aeronautics_members.services import legal_uploads, teams
 from aeronautics_members.services.clock import get_membership_today, get_now_utc
-from test_admin_reviews import _staff
+from test_admin_reviews import _login, _staff
 from test_legal_texts import legal_dir, texts  # noqa: F401 -- fixtures
+from test_teams_flow import switched_on  # noqa: F401 -- fixture
 from test_teams_foundation import _association_member, _in_team, _team
 
 
@@ -225,6 +228,109 @@ class TestATeamsRules:
         db.session.commit()
 
         assert legal_uploads.why_not_correctable(record) is not None
+
+
+def _upload(client, path, german, english=None):
+    data = {"german": (io.BytesIO(german[0]), german[1])}
+    if english is not None:
+        data["english"] = (io.BytesIO(english[0]), english[1])
+    return client.post(path, data=data, content_type="multipart/form-data")
+
+
+class TestTheAdminsPage:
+    def test_upload_publish_and_it_is_in_force(self, client, boss):
+        _login(client, boss.id)
+
+        uploaded = _upload(client, "/api/v1/admin/legal/drafts", _file(), _file(language="en", title="Statutes"))
+        record_id = uploaded.get_json()["record_id"]
+        [waiting] = [item for item in client.get("/api/v1/admin/legal").get_json()["waiting"]
+                     if item["record_id"] == record_id]
+        assert waiting["status"] == "draft" and waiting["has_english"] and f"record={record_id}" in waiting["pdf_url"]
+
+        published = send(client, "POST", f"/api/v1/admin/legal/drafts/{record_id}/publish", {
+            "effective_from": get_membership_today().isoformat(), "approved_by": "Generalversammlung",
+            "approved_on": (get_membership_today() - timedelta(days=1)).isoformat()})
+        assert published.status_code == 200
+
+        [in_force] = [item for item in client.get("/api/v1/admin/legal").get_json()["in_force"]
+                      if item["record_id"] == record_id]
+        assert in_force["correctable"] and "genehmigt von der Generalversammlung am" in in_force["validity"]
+
+    def test_a_draft_s_pdf(self, client, boss, monkeypatch):
+        from aeronautics_members import legal_pdf
+
+        monkeypatch.setattr(legal_pdf, "build", lambda german, team=None, versions=None, watermark=None:
+                            b"%PDF-1.7 " + watermark.encode())
+        record = legal_uploads.upload_draft(boss, _file())
+        db.session.commit()
+        _login(client, boss.id)
+
+        response = client.get(f"/admin/legal/waiting.pdf?document=statutes&record={record.id}")
+
+        assert response.status_code == 200 and response.data == b"%PDF-1.7 ENTWURF"
+
+    def test_what_is_wrong_with_the_file_is_listed(self, client, boss):
+        _login(client, boss.id)
+
+        response = _upload(client, "/api/v1/admin/legal/drafts", (b"no front matter", "x.md"))
+
+        assert response.status_code == 400
+        assert response.get_json()["error"]["details"]["problems"]
+
+    def test_deleting_a_draft(self, client, boss):
+        record = legal_uploads.upload_draft(boss, _file())
+        db.session.commit()
+        _login(client, boss.id)
+
+        assert send(client, "DELETE", f"/api/v1/admin/legal/drafts/{record.id}").status_code == 200
+        assert db.session.query(LegalTextVersion).count() == 0
+
+    def test_not_for_somebody_without_the_permission(self, client, boss):
+        _login(client, _staff("treasurer@example.org", "treasurer").id)
+
+        assert client.get("/api/v1/admin/legal").status_code == 403
+        assert _upload(client, "/api/v1/admin/legal/drafts", _file()).status_code == 403
+
+
+class TestTheLeadsPage:
+    def test_upload_see_and_delete_their_draft(self, client, rocket, switched_on):  # noqa: F811
+        team, lead = rocket
+        _login(client, lead.id)
+
+        uploaded = _upload(client, "/api/v1/teams/rocket/manage/rules/drafts",
+                           _file("team-rules", "Teamordnung", team="rocket"))
+        assert uploaded.status_code == 200
+        [draft] = uploaded.get_json()["waiting"]
+        assert draft["deletable"] and draft["pdf_url"].startswith("/teams/rocket/manage/rules/waiting.pdf")
+
+        left = send(client, "DELETE", f"/api/v1/teams/rocket/manage/rules/drafts/{draft['record_id']}")
+        assert left.status_code == 200 and left.get_json()["waiting"] == []
+
+    def test_its_template(self, client, rocket, switched_on):  # noqa: F811
+        _team_, lead = rocket
+        _login(client, lead.id)
+
+        template = client.get("/teams/rocket/manage/rules/template").get_data(as_text=True)
+
+        assert 'document: "team-rules"' in template and 'team: "rocket"' in template
+
+    def test_not_for_a_member(self, client, rocket, switched_on):  # noqa: F811
+        team, _lead = rocket
+        member = _association_member("member@example.org")
+        _in_team(member, team)
+        db.session.commit()
+        _login(client, member.id)
+
+        assert client.get("/api/v1/teams/rocket/manage/rules").status_code == 403
+
+
+def test_the_template_as_it_is_is_uploaded(boss, rocket):
+    from flask import render_template
+
+    team, lead = rocket
+    for actor, team_given in ((boss, None), (lead, team)):
+        text = render_template("legal/template.md", day=get_membership_today().isoformat(), team=team_given)
+        legal_uploads.upload_draft(actor, (text.encode(), "template.md"), team=team_given)
 
 
 def test_admins_and_super_admins_may_manage_the_legal_texts():

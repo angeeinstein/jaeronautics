@@ -28,7 +28,7 @@ def with_translation(texts):  # noqa: F811
 
 def _html(app, german):
     return render_template(legal_pdf.TEMPLATE, sections=legal_pdf._sections(german), german=german,
-                           association=legal_pdf.ASSOCIATION)
+                           association=legal_pdf.ASSOCIATION, validity=legal.validity)
 
 
 class TestWhatIsInIt:

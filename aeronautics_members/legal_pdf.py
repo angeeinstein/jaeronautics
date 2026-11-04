@@ -145,6 +145,7 @@ def build(german, team=None, versions=None, watermark=None):
     logo = _team_logo(team)
     html = render_template(
         TEMPLATE, sections=_sections(german, versions), german=german, association=ASSOCIATION,
+        validity=legal.validity,
         team=team, team_logo=logo.as_uri() if logo is not None else None, watermark=watermark,
     )
     # The PDF's title, author and language come from the HTML's <title>, <meta name=author> and lang.

@@ -6,7 +6,7 @@ files, and the update's progress for the admin page.
 """
 
 
-from flask import Blueprint, current_app, jsonify
+from flask import Blueprint, jsonify
 
 from ..permissions import (
     Permission,
@@ -33,7 +33,6 @@ from flask import (
     abort,
     flash,
     redirect,
-    render_template,
     request,
     send_file,
     url_for,
@@ -275,7 +274,7 @@ def admin_settings_device(device_id):
 
 @admin_bp.route("/admin/legal", methods=["GET"])
 @login_required
-@requires(Permission.SETTINGS_GENERAL)
+@requires(Permission.LEGAL_TEXTS)
 def admin_legal():
     """Legal texts: drawn by the new front end (frontend/src/pages/admin/LegalTexts.tsx)."""
     return app_shell()
@@ -283,14 +282,11 @@ def admin_legal():
 
 @admin_bp.route("/admin/legal/waiting.pdf", methods=["GET"])
 @login_required
-@requires(Permission.SETTINGS_GENERAL)
+@requires(Permission.LEGAL_TEXTS)
 def admin_legal_waiting_pdf():
-    """A version in legal/ not shown yet -- a draft, or one whose day has not
-    come -- as its PDF, marked ENTWURF or VORSCHAU on every page."""
-    import io
-    from datetime import date
-
-    from .. import legal_pdf
+    """A version not shown yet -- a draft, or one whose day has not come -- as
+    its PDF, marked ENTWURF or VORSCHAU on every page: a file in legal/, or one
+    uploaded in the portal (``record``)."""
     from ..services import NotFoundError
     from ..services import legal_texts as legal
     from ..services import teams as teams_service
@@ -299,11 +295,7 @@ def admin_legal_waiting_pdf():
     team_slug = request.args.get("team") or None
     if document not in (legal.TEAM_BY_SLUG if team_slug else legal.BY_SLUG):
         abort(404)
-    try:
-        german = legal.find_any(document, legal.AUTHORITATIVE, date.fromisoformat(request.args.get("version", "")),
-                                team=team_slug)
-    except ValueError:
-        abort(404)
+    german = legal_pages.waiting_version(document, team_slug)
     if german is None:
         abort(404)
     team = None
@@ -312,33 +304,16 @@ def admin_legal_waiting_pdf():
             team = teams_service.get_team(team_slug)
         except NotFoundError:
             team = None
-    try:
-        path, digest, name = legal_pdf.waiting_ready(german, team)
-        data = None if legal_pages.preparing() else path.read_bytes()
-    except Exception:  # noqa: BLE001
-        current_app.logger.exception("Could not make the PDF of the waiting version %s", german.label)
-        if legal_pages.preparing():
-            return legal_pages.not_prepared()
-        abort(500)
-    if data is None:
-        return legal_pages.prepared(digest)
-    return send_file(io.BytesIO(data), mimetype="application/pdf", download_name=name)
+    return legal_pages.waiting_pdf(german, team)
 
 
 @admin_bp.route("/admin/legal/template", methods=["GET"])
 @login_required
-@requires(Permission.SETTINGS_GENERAL)
+@requires(Permission.LEGAL_TEXTS)
 def admin_legal_template():
     """A Markdown file showing what a legal text needs and everything it can do,
     dated today and a draft -- so it previews as it is."""
-    from ..services.clock import get_membership_today
-
-    day = get_membership_today().isoformat()
-    response = current_app.response_class(
-        render_template("legal/template.md", day=day), mimetype="text/markdown",
-    )
-    response.headers["Content-Disposition"] = f'attachment; filename="{day}.md"'
-    return response
+    return legal_pages.template()
 
 
 @admin_bp.route("/admin/logs", methods=["GET"])

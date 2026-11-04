@@ -21,9 +21,8 @@ export type LegalTextData = Schemas['LegalTextOut'];
 function Facts({ text }: { text: LegalTextData }) {
   return (
     <Text size="sm" c="dimmed" lang="en">
-      {`Version of ${formatDate(text.version)}`}
-      {text.revision ? ` (${text.revision})` : ''}
-      {text.effective_from !== text.version ? `, in force from ${formatDate(text.effective_from)}` : ''}
+      {/* In the text's own language, as on its PDF: the day it applies from, and who approved it. */}
+      <span lang={text.language}>{text.validity}</span>
       {text.version !== text.in_force ? (
         <>
           {' · '}

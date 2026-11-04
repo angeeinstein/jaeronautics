@@ -513,3 +513,33 @@ def render(version):
     }
     _rendered[key] = rendered
     return rendered
+
+
+#: Who approved a text, as the line under its title says it; anybody else is named in brackets.
+APPROVED_BY_PHRASES = {
+    "de": {"Vorstand": "vom Vorstand", "Generalversammlung": "von der Generalversammlung"},
+    "en": {"Vorstand": "by the board", "Generalversammlung": "by the general assembly"},
+}
+
+
+def validity(version):
+    """The line under a text's title, in its language: its revision, the day it applies from,
+    and who approved it and when -- "Version 2026.2 · Gültig ab 01.12.2026 · genehmigt vom
+    Vorstand am 10.11.2026". The version's own day stays in the footer of its PDF."""
+    from .membership import format_date_display
+
+    german = version.language == AUTHORITATIVE
+    parts = [version.revision] if version.revision else []
+    parts.append(("Gültig ab " if german else "In force from ") + format_date_display(version.effective_from))
+    if version.approved_by or version.approved_on:
+        phrases = APPROVED_BY_PHRASES["de" if german else "en"]
+        by = phrases.get(version.approved_by) if version.approved_by else None
+        approved = "genehmigt" if german else "approved"
+        if by:
+            approved += f" {by}"
+        if version.approved_on:
+            approved += (" am " if german else " on ") + format_date_display(version.approved_on)
+        if version.approved_by and not by:
+            approved += f" ({version.approved_by})"
+        parts.append(approved)
+    return " · ".join(parts)
