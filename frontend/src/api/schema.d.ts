@@ -5432,6 +5432,11 @@ export interface components {
             /** Confirm */
             confirm: boolean;
         };
+        /** DeletedOut */
+        DeletedOut: {
+            /** Cleared Senders */
+            cleared_senders: string[];
+        };
         /**
          * DeletionOut
          * @description What deleting does to this account, said before the button.
@@ -6158,6 +6163,11 @@ export interface components {
             /** Message */
             message: string;
             team: components["schemas"]["TeamPageOut"];
+        };
+        /** DraftDeletedOut */
+        DraftDeletedOut: {
+            /** Deleted */
+            deleted: boolean;
         };
         /** DraftIn */
         DraftIn: {
@@ -10205,16 +10215,6 @@ export interface components {
             title: string;
             /** Url */
             url: string | null;
-        };
-        /** DeletedOut */
-        aeronautics_members__api__admin_legal__DeletedOut: {
-            /** Deleted */
-            deleted: boolean;
-        };
-        /** DeletedOut */
-        aeronautics_members__api__admin_mail__DeletedOut: {
-            /** Cleared Senders */
-            cleared_senders: string[];
         };
     };
     responses: never;
@@ -15342,7 +15342,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["aeronautics_members__api__admin_legal__DeletedOut"];
+                    "application/json": components["schemas"]["DraftDeletedOut"];
                 };
             };
             /** @description Not signed in. */
@@ -18205,7 +18205,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["aeronautics_members__api__admin_mail__DeletedOut"];
+                    "application/json": components["schemas"]["DeletedOut"];
                 };
             };
             /** @description Not signed in. */

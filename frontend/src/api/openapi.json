@@ -4749,6 +4749,23 @@
         "title": "DeleteIn",
         "type": "object"
       },
+      "DeletedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "cleared_senders": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cleared Senders",
+            "type": "array"
+          }
+        },
+        "required": [
+          "cleared_senders"
+        ],
+        "title": "DeletedOut",
+        "type": "object"
+      },
       "DeletionOut": {
         "additionalProperties": false,
         "description": "What deleting does to this account, said before the button.",
@@ -6912,6 +6929,20 @@
           "team"
         ],
         "title": "DoneOut",
+        "type": "object"
+      },
+      "DraftDeletedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "DraftDeletedOut",
         "type": "object"
       },
       "DraftIn": {
@@ -19277,37 +19308,6 @@
         ],
         "title": "WaitingOut",
         "type": "object"
-      },
-      "aeronautics_members__api__admin_legal__DeletedOut": {
-        "additionalProperties": false,
-        "properties": {
-          "deleted": {
-            "title": "Deleted",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "deleted"
-        ],
-        "title": "DeletedOut",
-        "type": "object"
-      },
-      "aeronautics_members__api__admin_mail__DeletedOut": {
-        "additionalProperties": false,
-        "properties": {
-          "cleared_senders": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Cleared Senders",
-            "type": "array"
-          }
-        },
-        "required": [
-          "cleared_senders"
-        ],
-        "title": "DeletedOut",
-        "type": "object"
       }
     }
   },
@@ -25969,7 +25969,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/aeronautics_members__api__admin_legal__DeletedOut"
+                  "$ref": "#/components/schemas/DraftDeletedOut"
                 }
               }
             },
@@ -29558,7 +29558,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/aeronautics_members__api__admin_mail__DeletedOut"
+                  "$ref": "#/components/schemas/DeletedOut"
                 }
               }
             },

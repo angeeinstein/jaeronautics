@@ -292,13 +292,13 @@ def admin_legal_correct(record_id, files):
     return UploadedOut(record_id=record.id)
 
 
-class DeletedOut(Model):
+class DraftDeletedOut(Model):
     deleted: bool
 
 
-@endpoint("DELETE", "/admin/legal/drafts/<int:record_id>", response=DeletedOut, permissions=PERMISSIONS, tag=TAG)
+@endpoint("DELETE", "/admin/legal/drafts/<int:record_id>", response=DraftDeletedOut, permissions=PERMISSIONS, tag=TAG)
 def admin_legal_delete_draft(record_id):
     """Delete a draft, with its translation. A published version is never deleted."""
     legal_uploads.delete_draft(current_user, record_id)
     db.session.commit()
-    return DeletedOut(deleted=True)
+    return DraftDeletedOut(deleted=True)
