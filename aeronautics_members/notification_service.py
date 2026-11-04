@@ -657,6 +657,54 @@ class NotificationService:
                     ],
                 },
             )
+        if event.event_type == "legal_text_draft_uploaded":
+            # To whoever may publish legal texts (services/legal_uploads.py):
+            # a team's leads uploaded new rules.
+            team, title = payload.get("team") or _("A team"), payload.get("title") or _("Team rules")
+            return (
+                _("New rules of %(team)s to publish", team=team),
+                {
+                    "preview_text": _("The leads of %(team)s uploaded new rules.", team=team),
+                    "action_url": build_public_url("admin.admin_legal"),
+                    "action_label": _("Open Legal texts"),
+                    "heading": _("New rules of %(team)s", team=team),
+                    "body_lines": [
+                        greeting,
+                        _("The leads of %(team)s uploaded a draft of their rules: %(title)s.", team=team,
+                          title=title),
+                        _("Under Legal texts you can read it as a PDF and publish it, once it has been "
+                          "approved."),
+                    ],
+                },
+            )
+        if event.event_type == "team_rules_published":
+            # To a team's leads: the rules they uploaded are published.
+            team, title = payload.get("team") or _("your team"), payload.get("title") or _("Team rules")
+            day = payload.get("effective_from")
+            try:
+                from .services.membership import format_date_display
+
+                applies = format_date_display(date.fromisoformat(day)) if day else None
+            except ValueError:
+                applies = None
+            return (
+                _("The rules of %(team)s are published", team=team),
+                {
+                    "preview_text": _("%(title)s is published.", title=title),
+                    "action_url": (build_public_url("teams.team_rules_text", slug=payload["slug"])
+                                   if payload.get("slug") else None),
+                    "action_label": _("Read the rules") if payload.get("slug") else None,
+                    "heading": _("The rules of %(team)s are published", team=team),
+                    "body_lines": [
+                        greeting,
+                        (_("%(title)s is published and applies from %(day)s. Whoever applies from then on "
+                           "accepts it; the team's members see on the team's page that the rules have "
+                           "changed.", title=title, day=applies) if applies else
+                         _("%(title)s is published.", title=title)),
+                        _("Tell the team's members yourselves, as your rules ask."),
+                    ],
+                },
+            )
         if event.event_type == "account_email_changed":
             # To the address that was replaced, changed by somebody signed in
             # to the account: the member, or whoever has their password.

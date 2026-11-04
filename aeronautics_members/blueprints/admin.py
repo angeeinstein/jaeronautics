@@ -316,7 +316,7 @@ def admin_legal_waiting_pdf():
         path, digest, name = legal_pdf.waiting_ready(german, team)
         data = None if legal_pages.preparing() else path.read_bytes()
     except Exception:  # noqa: BLE001
-        current_app.logger.exception("Could not make the PDF of the waiting version %s", german.path)
+        current_app.logger.exception("Could not make the PDF of the waiting version %s", german.label)
         if legal_pages.preparing():
             return legal_pages.not_prepared()
         abort(500)

@@ -189,7 +189,7 @@ def admin_legal_make_pdf(body):
         try:
             size = legal_pdf.remake(version, team)
         except Exception as exc:  # noqa: BLE001 -- said for its line; the others go on
-            current_app.logger.exception("Could not make the PDF of %s", version.path)
+            current_app.logger.exception("Could not make the PDF of %s", version.label)
             raise ServiceError(str(exc) or exc.__class__.__name__, code="legal_pdf_failed",
                                http_status=422) from exc
         return MadeOut(size_kb=max(1, size // 1024))

@@ -1,4 +1,5 @@
-"""The legal texts as PDFs, made from the same Markdown files as the pages.
+"""The legal texts as PDFs, made from the same Markdown as the pages -- a file in
+legal/, or a version uploaded in the portal.
 
 One PDF per version: the German text, which is the one that applies, and --
 where there is one -- the English translation of that same version after it,
@@ -125,7 +126,7 @@ def _source_hash(german, team=None, versions=None, watermark=None):
         logo = _team_logo(team)
         digest.update(logo.read_bytes() if logo is not None else b"no logo")
     for version in versions or parts(german):
-        digest.update(version.path.read_bytes())
+        digest.update(legal.source_bytes(version))
     digest.update((watermark or "").encode())
     source, _name, _uptodate = current_app.jinja_loader.get_source(current_app.jinja_env, TEMPLATE)
     digest.update(source.encode())
@@ -153,6 +154,9 @@ def build(german, team=None, versions=None, watermark=None):
 
 def _stem(german, watermark=None):
     stem = f"{german.slug}_{german.version.isoformat()}"
+    if german.record_id is not None:
+        # Uploaded in the portal: two drafts may share a day.
+        stem = f"{stem}_r{german.record_id}"
     if german.team:
         stem = f"team-{german.team}_{stem}"
     return f"{watermark.lower()}_{stem}" if watermark else stem
@@ -357,7 +361,10 @@ def _uploaded(folder, data, name, role):
         return None, None, None, None, [f'{role}: team "{team}" is not a short name (a-z, 0-9, -).']
     where = Path(folder) / (f"{legal.TEAMS_FOLDER}/{team}/" if team else "") / slug / language
     where.mkdir(parents=True, exist_ok=True)
-    path = where / (Path(name or "").name or "upload.md")
+    # Named after its version, as it would be in legal/: what the file was
+    # called on somebody's computer does not matter.
+    day = legal._as_date(meta.get("version")) if meta.get("version") not in (None, "") else None
+    path = where / (f"{day.isoformat()}.md" if day else (Path(name or "").name or "upload.md"))
     path.write_text(text, encoding="utf-8")
     return path, slug, language, team, []
 
@@ -409,7 +416,7 @@ def preview(german_upload, english_upload=None):
 
 
 def _waiting_parts(german):
-    english = legal.find_any(german.slug, "en", german.version, german.team)
+    english = legal.translation_any(german)
     return [german] + ([english] if english is not None else []), (
         "ENTWURF" if german.status == "draft" else "VORSCHAU")
 
