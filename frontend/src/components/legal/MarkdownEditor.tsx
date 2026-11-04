@@ -22,12 +22,13 @@ import {
 import { tags } from '@lezer/highlight';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 
+import { cspNonce } from '../../app/Providers';
 import classes from './MarkdownEditor.module.css';
 
 const highlighting = HighlightStyle.define([
-  { tag: tags.heading1, fontWeight: '700', color: 'var(--ja-accent-text)' },
-  { tag: tags.heading2, fontWeight: '700', color: 'var(--ja-accent-text)' },
-  { tag: tags.heading3, fontWeight: '600', color: 'var(--ja-accent-text)' },
+  { tag: tags.heading1, fontWeight: '700', color: 'var(--ja-link)' },
+  { tag: tags.heading2, fontWeight: '700', color: 'var(--ja-link)' },
+  { tag: tags.heading3, fontWeight: '600', color: 'var(--ja-link)' },
   { tag: tags.strong, fontWeight: '700' },
   { tag: tags.emphasis, fontStyle: 'italic' },
   { tag: tags.link, color: 'var(--ja-link)' },
@@ -105,6 +106,8 @@ export function MarkdownEditor({
           EditorState.readOnly.of(readOnly),
           EditorView.contentAttributes.of({ 'aria-label': label, lang, spellcheck: 'true' }),
           theme,
+          // Its styles go into a <style> tag: the security policy allows it with the page's nonce.
+          EditorView.cspNonce.of(cspNonce() ?? ''),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) changed.current(update.state.doc.toString());
           }),
