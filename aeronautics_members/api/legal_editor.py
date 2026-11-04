@@ -14,7 +14,7 @@ a team's Rules page.
 from datetime import date
 from typing import Literal
 
-from flask import url_for
+from flask import render_template, url_for
 from flask_login import current_user
 
 from ..db_models import db
@@ -22,6 +22,7 @@ from ..permissions import Permission
 from ..services import NotFoundError
 from ..services import legal_editor as editor
 from ..services import legal_texts as legal
+from ..services.clock import get_membership_today
 from ._core import Model, UtcDateTime, endpoint
 from .admin_legal import _person
 from .legal import SectionOut
@@ -58,7 +59,9 @@ def _editor_url(record):
 @endpoint("POST", "/legal/drafts", response=StartedOut, body=StartIn, tag=TAG)
 def legal_draft_start(body):
     """Start a new draft of a text: a copy of the version in force, or the template."""
-    record = editor.start_draft(current_user, body.document, body.team, body.start)
+    template = render_template("legal/template.md", day=get_membership_today().isoformat(),
+                               team=editor._team(body.team) if body.team else None)
+    record = editor.start_draft(current_user, body.document, body.team, body.start, template)
     db.session.commit()
     return StartedOut(record_id=record.id, editor_url=_editor_url(record))
 

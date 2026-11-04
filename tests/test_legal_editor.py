@@ -22,6 +22,12 @@ from test_teams_flow import switched_on  # noqa: F401 -- fixture
 from test_teams_foundation import _association_member
 
 
+def _template(team=None):
+    from flask import render_template
+
+    return render_template("legal/template.md", day=get_membership_today().isoformat(), team=team)
+
+
 def _content(body="§ 1 Name.", title="Statuten", english=None):
     return {"title": title, "revision": None, "body": body}, english
 
@@ -38,7 +44,7 @@ class TestStarting:
         assert editor.content(record)["english"]["body"].strip() == "§ 1 Old."
 
     def test_from_the_template_when_nothing_is_in_force(self, boss):  # noqa: F811
-        record = editor.start_draft(boss, "statutes")
+        record = editor.start_draft(boss, "statutes", template=_template())
 
         assert record.title == "Statuten" and "## § 1" in record.body and "---" not in record.body[:5]
 
@@ -144,7 +150,7 @@ class TestCorrecting:
 class TestWho:
     def test_a_lead_writes_their_teams_rules_and_the_publishers_are_told(self, boss, rocket):  # noqa: F811
         team, lead = rocket
-        record = editor.start_draft(lead, legal.TEAM_RULES, team.slug, "template")
+        record = editor.start_draft(lead, legal.TEAM_RULES, team.slug, "template", _template(team))
         db.session.commit()
 
         assert editor.editable(lead, record.id).id == record.id
@@ -153,14 +159,14 @@ class TestWho:
 
     def test_a_lead_edits_a_draft_an_admin_started(self, boss, rocket):  # noqa: F811
         team, lead = rocket
-        record = editor.start_draft(boss, legal.TEAM_RULES, team.slug, "template")
+        record = editor.start_draft(boss, legal.TEAM_RULES, team.slug, "template", _template(team))
         db.session.commit()
 
         assert editor.editable(lead, record.id).id == record.id
 
     def test_somebody_else_does_not(self, boss, rocket):  # noqa: F811
         team, _lead = rocket
-        record = editor.start_draft(boss, legal.TEAM_RULES, team.slug, "template")
+        record = editor.start_draft(boss, legal.TEAM_RULES, team.slug, "template", _template(team))
         outsider = _association_member("outsider@example.org")
         db.session.commit()
 
@@ -169,7 +175,7 @@ class TestWho:
 
     def test_only_a_publisher_corrects(self, boss, rocket):  # noqa: F811
         team, lead = rocket
-        record = editor.start_draft(lead, legal.TEAM_RULES, team.slug, "template")
+        record = editor.start_draft(lead, legal.TEAM_RULES, team.slug, "template", _template(team))
         editor.save(lead, record, {"title": "Teamordnung", "revision": None, "body": "§ 1 Regeln."}, None, 0)
         db.session.commit()
         _publish(boss, record)

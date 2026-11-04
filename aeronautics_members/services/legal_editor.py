@@ -22,8 +22,6 @@ import json
 import re
 import tempfile
 
-from flask import render_template
-
 from .. import legal_pdf
 from ..db_models import LegalTextSnapshot, LegalTextVersion, db
 from ..permissions import Permission
@@ -122,8 +120,8 @@ def _clean(part, role):
 # --- Starting a draft --------------------------------------------------------------------
 
 
-def _template_body(team):
-    text = render_template("legal/template.md", day=get_membership_today().isoformat(), team=team)
+def _template_body(text):
+    """The template's text without its front matter: the fields are the editor's."""
     match = legal.FRONT_MATTER.match(text)
     return text[match.end():].lstrip("\n") if match else text
 
@@ -154,9 +152,9 @@ def _new_record(actor, document, team_slug, german, english, imported_from=(None
     return record
 
 
-def start_draft(actor, document, team_slug=None, start="in_force"):
+def start_draft(actor, document, team_slug=None, start="in_force", template=""):
     """A new draft of a text: a copy of the version in force (the usual case: a change to it),
-    or the template. Returns its German record."""
+    or ``template`` -- the template file's text, rendered by the caller. Returns its German record."""
     _require_write(actor, document, team_slug)
     text = _known(document, team_slug)
     if start not in STARTS:
@@ -169,7 +167,7 @@ def start_draft(actor, document, team_slug=None, start="in_force"):
             "title": translated.title, "revision": translated.revision, "body": legal.body(translated)}
     else:
         german = {"title": text.title, "revision": None,
-                  "body": _template_body(_team(team_slug) if team_slug else None)}
+                  "body": _template_body(template)}
         english = None
     record = _new_record(actor, document, team_slug, german, english)
     log_audit_event("legal", "legal_text_started", actor_user=actor, target_user=actor,
