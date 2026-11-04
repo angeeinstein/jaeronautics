@@ -280,6 +280,14 @@ def admin_legal():
     return app_shell()
 
 
+@admin_bp.route("/admin/legal/drafts/<int:record_id>", methods=["GET"])
+@login_required
+@requires(Permission.LEGAL_TEXTS)
+def admin_legal_editor(record_id):
+    """A draft in the editor: drawn by the new front end (frontend/src/pages/legal/Editor.tsx)."""
+    return app_shell()
+
+
 @admin_bp.route("/admin/legal/waiting.pdf", methods=["GET"])
 @login_required
 @requires(Permission.LEGAL_TEXTS)

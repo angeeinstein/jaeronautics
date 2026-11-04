@@ -323,13 +323,33 @@ def has_language(slug, language, today=None, team=None):
     return bool(versions(slug, language, today, team))
 
 
+def relative(path):
+    """A file's place in legal/: "privacy-policy/de/2026-10-08.md"."""
+    return path.relative_to(texts_dir()).as_posix()
+
+
+def _imported():
+    """The draft files in legal/ copied into the portal for the editor: no longer listed."""
+    from ..db_models import LegalTextVersion, db
+
+    return set(db.session.execute(db.select(LegalTextVersion.imported_from).where(
+        LegalTextVersion.imported_from.is_not(None))).scalars())
+
+
 def _all_versions(slug, language, team=None):
-    """Every version with nothing wrong with it, whatever its status and day."""
+    """Every version with nothing wrong with it, whatever its status and day -- but a draft file
+    copied into the portal (its copy is the draft now)."""
     found = []
+    imported = None
     for path in _files(slug, language, team):
         version, _problems = _check(path, slug, language, team)
-        if version is not None:
-            found.append(version)
+        if version is None:
+            continue
+        if version.status == "draft":
+            imported = _imported() if imported is None else imported
+            if relative(path) in imported:
+                continue
+        found.append(version)
     if _known(slug, language, team):
         found += _records(slug, language, team)
     return found

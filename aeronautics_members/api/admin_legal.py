@@ -30,6 +30,8 @@ from ._core import Model, UtcDateTime, endpoint
 
 TAG = "Admin"
 PERMISSIONS = [Permission.LEGAL_TEXTS]
+#: Publishing and correcting: a permission of its own.
+PUBLISHING = [Permission.LEGAL_TEXTS, Permission.LEGAL_PUBLISH]
 
 
 class InForce(Model):
@@ -70,6 +72,9 @@ class UpcomingVersionOut(Model):
     #: The approval written into the file, offered when publishing.
     approved_by: str | None = None
     approved_on: date | None = None
+    #: Which text, for *Edit* on a draft file in legal/ (copied into the portal first).
+    document: str = ""
+    team: str | None = None
 
 
 class PdfJob(Model):
@@ -79,6 +84,15 @@ class PdfJob(Model):
     title: str
     team_name: str | None
     version: date
+
+
+class WritableText(Model):
+    document: str
+    team: str | None
+    #: "Statuten", "Teamordnung · Rocket Team".
+    name: str
+    #: There is a version in force to start from.
+    has_in_force: bool
 
 
 class LegalOut(Model):
@@ -91,6 +105,10 @@ class LegalOut(Model):
     problems: list[str]
     preview_max_kb: int
     template_url: str
+    #: Whether this person may publish and correct (``legal.publish``), not only write.
+    may_publish: bool = False
+    #: Every text a new draft can be written of, for *Write a new version*.
+    texts: list[WritableText] = []
 
 
 def _team_names():
@@ -156,11 +174,19 @@ def admin_legal():
                 record_id=version.record_id,
                 uploaded_at=record.uploaded_at if record else None,
                 uploaded_by=_person(record.uploaded_by) if record else None,
-                approved_by=version.approved_by, approved_on=version.approved_on))
+                approved_by=version.approved_by, approved_on=version.approved_on,
+                document=slug, team=team))
 
     orphans = [f"legal/teams/{slug}/: no team has this short name, so these rules are shown nowhere."
                for slug in legal.teams_with_texts() if slug not in names]
+    texts = [WritableText(document=text.slug, team=None, name=text.title,
+                          has_in_force=legal.current_version(text.slug) is not None) for text in legal.LEGAL_TEXTS]
+    texts += [WritableText(document=legal.TEAM_RULES, team=team.slug, name=f"Teamordnung · {team.name}",
+                           has_in_force=teams_service.team_rules(team) is not None)
+              for team in teams_service.all_teams(include_archived=False)]
     return LegalOut(
+        texts=texts,
+        may_publish=current_user.can(Permission.LEGAL_PUBLISH),
         in_force=in_force,
         teams_without_rules=without_rules,
         waiting=waiting,
@@ -272,7 +298,7 @@ class PublishIn(Model):
 
 
 @endpoint("POST", "/admin/legal/drafts/<int:record_id>/publish", response=UploadedOut, body=PublishIn,
-          permissions=PERMISSIONS, tag=TAG)
+          permissions=PUBLISHING, tag=TAG)
 def admin_legal_publish(record_id, body):
     """Publish a draft. Its day is today's; it applies from ``effective_from``. Not to be undone:
     a published version is only ever corrected, within 24 hours, while nobody has accepted it."""
@@ -282,7 +308,7 @@ def admin_legal_publish(record_id, body):
     return UploadedOut(record_id=record.id)
 
 
-@endpoint("POST", "/admin/legal/versions/<int:record_id>/correct", response=UploadedOut, permissions=PERMISSIONS,
+@endpoint("POST", "/admin/legal/versions/<int:record_id>/correct", response=UploadedOut, permissions=PUBLISHING,
           tag=TAG, uploads={"german": True, "english": False})
 def admin_legal_correct(record_id, files):
     """Replace a published version's text -- within 24 hours of publishing, while nobody has

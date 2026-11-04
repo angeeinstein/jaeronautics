@@ -80,10 +80,12 @@ class Permission:
     # Devices (docs/devices-plan.md). Technical, so admins only.
     DEVICES_MANAGE = "devices.manage"
     CARDS_MANAGE = "cards.manage"
-    # The legal texts and the teams' rules: uploading versions, publishing
-    # and correcting them (docs/legal-texts-in-portal-plan.md). A team's leads
-    # upload drafts of their own rules without it (services/teams.py).
+    # The legal texts and the teams' rules (docs/legal-texts-in-portal-plan.md):
+    # writing them -- uploading, editing and deleting drafts -- and,
+    # separately, publishing and correcting them. A team's leads write drafts
+    # of their own rules without either (services/teams.py, TeamPermission.RULES).
     LEGAL_TEXTS = "legal.texts"
+    LEGAL_PUBLISH = "legal.publish"
 
 
 # Roles, and what each one may do. This is the whole access model.
@@ -111,6 +113,7 @@ ROLE_PERMISSIONS = {
         Permission.DEVICES_MANAGE,
         Permission.CARDS_MANAGE,
         Permission.LEGAL_TEXTS,
+        Permission.LEGAL_PUBLISH,
         # Somebody trusted to administer the members here is trusted to keep
         # order on the forum -- decided 2026-09-26. Nobody is made an admin
         # here who would not be trusted with that.
@@ -139,6 +142,7 @@ ROLE_PERMISSIONS = {
         Permission.DEVICES_MANAGE,
         Permission.CARDS_MANAGE,
         Permission.LEGAL_TEXTS,
+        Permission.LEGAL_PUBLISH,
         Permission.FORUM_MODERATOR,
         # Everything on the forum as well. A Discourse admin can change any
         # site setting and make API keys, which is the forum's equivalent of
@@ -220,7 +224,8 @@ PERMISSION_LABELS = {
     Permission.ANNOUNCEMENTS_SEND: "Send announcements to the members",
     Permission.DEVICES_MANAGE: "Add card readers and other devices, and manage their keys",
     Permission.CARDS_MANAGE: "Link, block and remove anybody's cards",
-    Permission.LEGAL_TEXTS: "Upload, publish and correct the legal texts and the teams' rules",
+    Permission.LEGAL_TEXTS: "Write the legal texts and the teams' rules: upload, edit and delete drafts",
+    Permission.LEGAL_PUBLISH: "Publish the legal texts and the teams' rules, and correct them",
 }
 
 

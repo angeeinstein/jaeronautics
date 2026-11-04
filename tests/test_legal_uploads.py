@@ -333,6 +333,6 @@ def test_the_template_as_it_is_is_uploaded(boss, rocket):
         legal_uploads.upload_draft(actor, (text.encode(), "template.md"), team=team_given)
 
 
-def test_admins_and_super_admins_may_manage_the_legal_texts():
-    assert Permission.LEGAL_TEXTS in ROLE_PERMISSIONS["admin"]
-    assert Permission.LEGAL_TEXTS in ROLE_PERMISSIONS["superadmin"]
+def test_admins_and_super_admins_may_write_and_publish_the_legal_texts():
+    for role in ("admin", "superadmin"):
+        assert {Permission.LEGAL_TEXTS, Permission.LEGAL_PUBLISH} <= ROLE_PERMISSIONS[role]

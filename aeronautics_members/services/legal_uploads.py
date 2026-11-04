@@ -4,7 +4,8 @@ A version of one of the association's texts, or of a team's rules, is
 uploaded as a Markdown file -- the same file the preview takes, checked the
 same way -- and kept as a draft (``LegalTextVersion``). Whoever may manage the
 legal texts (``Permission.LEGAL_TEXTS``) uploads any; a team's leads upload
-drafts of their own team's rules, and the association is told. Publishing
+drafts of their own team's rules, and whoever may publish them
+(``Permission.LEGAL_PUBLISH``) is told. Publishing
 gives it its day -- the day it is published, by which acceptances are kept --,
 the day it applies from, and, if there was one, who approved it and when.
 From then on it is a version like the files in legal/ (services/legal_texts.py
@@ -154,6 +155,11 @@ def publish(actor, record_id, *, effective_from, approved_by=None, approved_on=N
     if approved_on is not None and approved_on > today:
         raise ValidationError("An approval cannot be in the future.", details={"fields": {
             "approved_on": "Today or earlier."}})
+    from .legal_editor import problems_of
+
+    problems = problems_of(record)
+    if problems:
+        _invalid(problems, action="published")
     others = _published_versions(record)
     if any(v.version == today for v in others):
         raise ConflictError("A version of this text was published today already. Correct that one instead, "
@@ -284,8 +290,8 @@ def team_drafts(team):
 # --- Telling people -----------------------------------------------------------------------
 
 
-def _holders_of_legal_texts():
-    slugs = roles_with(Permission.LEGAL_TEXTS)
+def _publishers():
+    slugs = roles_with(Permission.LEGAL_PUBLISH)
     if not slugs:
         return []
     return db.session.execute(
@@ -298,7 +304,7 @@ def _tell_the_association(team, record):
     """A team's leads uploaded new rules: whoever publishes them is told."""
     from .notifications import queue_user_status_notification
 
-    for email in _holders_of_legal_texts():
+    for email in _publishers():
         queue_user_status_notification(DRAFT_UPLOADED, f"New rules of {team.name} to publish", email,
                                        payload={"team": team.name, "title": record.title})
 

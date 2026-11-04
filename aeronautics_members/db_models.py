@@ -1901,6 +1901,14 @@ class LegalTextVersion(db.Model):
     published_at = db.Column(db.DateTime, nullable=True)
     published_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     corrected_at = db.Column(db.DateTime, nullable=True)
+    #: Last saved in the editor.
+    edited_at = db.Column(db.DateTime, nullable=True)
+    #: Counted up by every save: a save names the count it started from, so a second
+    #: person's save over it is refused rather than overwriting it.
+    edit_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    #: Copied from a draft file in legal/ ("privacy-policy/de/2026-10-08.md"): that file
+    #: is no longer listed.
+    imported_from = db.Column(db.String(255), nullable=True)
 
     uploaded_by = db.relationship("User", foreign_keys=[uploaded_by_user_id])
     published_by = db.relationship("User", foreign_keys=[published_by_user_id])
@@ -1909,3 +1917,23 @@ class LegalTextVersion(db.Model):
         "translations", cascade="all, delete-orphan"))
 
     __table_args__ = (db.Index("ix_legal_text_versions_text", "document", "team_slug", "language"),)
+
+
+class LegalTextSnapshot(db.Model):
+    """An earlier state of a draft of a legal text (``LegalTextVersion``), kept when an
+    editing session starts: *Discard changes* and *History* in the editor go back to one.
+    ``content``: {"german": {"title", "revision", "body"}, "english": {...} or None}."""
+
+    __tablename__ = "legal_text_snapshots"
+
+    id = db.Column(db.Integer, primary_key=True)
+    record_id = db.Column(db.Integer, db.ForeignKey("legal_text_versions.id", ondelete="CASCADE"),
+                          nullable=False, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    content = db.Column(db.JSON, nullable=False)
+
+    created_by = db.relationship("User")
+    # Deleted with its draft, by the ORM as well as by the database.
+    record = db.relationship("LegalTextVersion", backref=db.backref(
+        "snapshots", cascade="all, delete-orphan", order_by="LegalTextSnapshot.id"))

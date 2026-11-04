@@ -210,6 +210,15 @@ def team_rules_drafts(slug):
     return app_shell()
 
 
+@teams_bp.route("/teams/<slug>/manage/rules/drafts/<int:record_id>", methods=["GET"])
+@login_required
+def team_rules_editor(slug, record_id):
+    """A draft of the team's rules in the editor (frontend/src/pages/legal/Editor.tsx)."""
+    team = _team_or_404(slug)
+    _may(team, teams_service.TeamPermission.RULES)
+    return app_shell()
+
+
 @teams_bp.route("/teams/<slug>/manage/rules/waiting.pdf", methods=["GET"])
 @login_required
 def team_rules_waiting_pdf(slug):
