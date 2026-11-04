@@ -245,6 +245,10 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/teams/manage/Devices')).Devices }),
           },
           {
+            path: 'manage/rules',
+            lazy: async () => ({ Component: (await import('../pages/teams/manage/Rules')).Rules }),
+          },
+          {
             path: 'manage/attendance',
             lazy: async () => ({
               Component: (await import('../pages/teams/manage/Attendance')).Attendance,

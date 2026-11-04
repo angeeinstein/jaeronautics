@@ -1,54 +1,85 @@
 /**
- * Legal texts (docs/frontend-structure.md, 4): a new text's PDF from its
- * uploaded Markdown file -- checked as the build checks it, kept nowhere --
- * then the texts in force, the versions not in force yet, making every PDF
- * again, and what is wrong with the files on this server. The texts are
- * files in legal/ in the repository; nothing here changes them. Data:
- * GET /api/v1/admin/legal (aeronautics_members/api/admin_legal.py).
+ * Legal texts (docs/frontend-structure.md, 4; docs/legal-texts-in-portal-plan.md):
+ * a new version uploaded as a draft -- or only previewed as its PDF, kept
+ * nowhere -- and published with the day it applies from and who approved
+ * it; the texts in force, a correction within 24 hours while nobody has
+ * accepted it, the versions not in force yet, making every PDF again, and
+ * what is wrong with the files in legal/ (the versions from before, which
+ * stay as they are). Data: GET /api/v1/admin/legal
+ * (aeronautics_members/api/admin_legal.py).
  */
-import { Alert, Anchor, Button, FileInput, Group, List, SimpleGrid, Stack, Text } from '@mantine/core';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import {
+  Anchor,
+  Button,
+  Group,
+  List,
+  Modal,
+  SegmentedControl,
+  SimpleGrid,
+  Stack,
+  Text,
+  TextInput,
+} from '@mantine/core';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { IconClock, IconEye, IconFileTypePdf, IconFolder, IconScale } from '@tabler/icons-react';
+import { IconClock, IconFileTypePdf, IconFolder, IconScale, IconUpload } from '@tabler/icons-react';
 
 import { api, ApiError, call, type Schemas } from '../../api/client';
 import { Checklist } from '../../components/Checklist';
+import { ConfirmButton } from '../../components/ConfirmButton';
+import { DayInput } from '../../components/DayInput';
+import {
+  formOf,
+  LegalFiles,
+  NO_FILES,
+  Problems,
+  problemsOf,
+  type ChosenFiles,
+} from '../../components/legal/LegalFiles';
 import { PageHeader } from '../../components/PageHeader';
 import { Panel } from '../../components/Panel';
 import { PdfLink } from '../../components/PdfLink';
 import { Pill } from '../../components/Pill';
 import { EmptyState, ErrorState, LoadingState } from '../../components/States';
 import { fileNameOf, openFile } from '../../lib/files';
-import { formatDate } from '../../lib/format';
-import { notifyFailed } from '../../lib/notify';
+import { formatDate, formatDateTime, viennaParts } from '../../lib/format';
+import { notifyDone, notifyFailed } from '../../lib/notify';
 import classes from './LegalTexts.module.css';
 
 type LegalOut = Schemas['LegalOut'];
+type Waiting = LegalOut['waiting'][number];
+type InForceText = LegalOut['in_force'][number];
 
 const legalQuery = {
   queryKey: ['admin', 'legal'] as const,
   queryFn: () => call(api.GET('/api/v1/admin/legal')),
 };
 
-function Preview({ data }: { data: LegalOut }) {
-  const [german, setGerman] = useState<File | null>(null);
-  const [english, setEnglish] = useState<File | null>(null);
+function useRefresh() {
+  const client = useQueryClient();
+  return () => client.invalidateQueries({ queryKey: legalQuery.queryKey });
+}
+
+function today() {
+  return viennaParts(new Date().toISOString()).day;
+}
+
+function NewVersion({ data }: { data: LegalOut }) {
+  const refresh = useRefresh();
+  const [files, setFiles] = useState<ChosenFiles>(NO_FILES);
   const [problems, setProblems] = useState<string[]>([]);
-  const make = useMutation({
+  const failed = (error: Error) => {
+    const listed = problemsOf(error);
+    if (listed) setProblems(listed);
+    else notifyFailed(error);
+  };
+  const preview = useMutation({
     mutationFn: async () => {
-      if (!german) throw new Error('Choose the German file.');
-      const form = new FormData();
-      form.append('german', german);
-      if (english) form.append('english', english);
       const {
         data: pdf,
         error,
         response,
-      } = await api.POST('/api/v1/admin/legal/preview', {
-        // openapi-fetch sends a FormData as it is, with its own Content-Type.
-        body: form as unknown as { german: string },
-        parseAs: 'blob',
-      });
+      } = await api.POST('/api/v1/admin/legal/preview', { body: formOf(files), parseAs: 'blob' });
       if (!response.ok || !(pdf instanceof Blob)) {
         // The API's error, as every other call has it.
         await call(Promise.resolve({ data: undefined, error, response }));
@@ -60,76 +91,64 @@ function Preview({ data }: { data: LegalOut }) {
       setProblems([]);
       openFile(pdf, name);
     },
-    onError: (error) => {
-      const listed = error instanceof ApiError ? error.details.problems : undefined;
-      if (Array.isArray(listed)) setProblems(listed.map(String));
-      else notifyFailed(error);
+    onError: failed,
+  });
+  const upload = useMutation({
+    mutationFn: () => call(api.POST('/api/v1/admin/legal/drafts', { body: formOf(files) })),
+    onSuccess: async () => {
+      setProblems([]);
+      setFiles(NO_FILES);
+      notifyDone('Uploaded as a draft.');
+      await refresh();
     },
+    onError: failed,
   });
 
   return (
-    <Panel icon={IconEye} title="Preview a new text">
+    <Panel icon={IconUpload} title="New version">
       <Stack gap="md">
         <Text size="sm" c="dimmed">
-          Upload the Markdown file of a new version, the association&apos;s or a team&apos;s rules, and get it
-          back as the PDF it will be. It is checked as the build checks it, and nothing is kept. Every page
-          says ENTWURF (a draft) or VORSCHAU, so it is never taken for the text in force. To publish it, the
-          file goes into legal/ in the repository.
+          The Markdown file of a new version -- the association&apos;s or a team&apos;s rules -- and its
+          English translation, if there is one. Checked as a file in legal/ is. A draft is seen only here
+          until it is published; the preview keeps nothing.
         </Text>
-        {problems.length ? (
-          <Alert color="amber" variant="light" title="Not laid out, because of:">
-            <List size="sm" spacing={2}>
-              {problems.map((problem) => (
-                <List.Item key={problem}>{problem}</List.Item>
-              ))}
-            </List>
-          </Alert>
-        ) : null}
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-          <FileInput
-            label="German file"
-            accept=".md,text/markdown,text/plain"
-            placeholder="Choose a .md file"
-            clearable
-            value={german}
-            onChange={(file) => {
-              setGerman(file);
-              setProblems([]);
-            }}
-          />
-          <FileInput
-            label="English translation (optional)"
-            accept=".md,text/markdown,text/plain"
-            placeholder="Choose a .md file"
-            clearable
-            value={english}
-            onChange={(file) => {
-              setEnglish(file);
-              setProblems([]);
-            }}
-          />
-        </SimpleGrid>
+        <Problems problems={problems} title="Not taken, because of:" />
+        <LegalFiles
+          value={files}
+          onChange={(chosen) => {
+            setFiles(chosen);
+            setProblems([]);
+          }}
+        />
         <Text size="sm" c="dimmed">
-          Named after the version, like 2026-10-05.md, at most {data.preview_max_kb} KB each. A team&apos;s
-          rules carry its short name in the front matter (team: &quot;rocket-team&quot;) and get that
-          team&apos;s logo.
+          At most {data.preview_max_kb} KB each; the file&apos;s name does not matter. A team&apos;s rules
+          carry its short name in the front matter (team: &quot;rocket-team&quot;) and get its logo.
         </Text>
         <Group gap="md">
           <Button
-            loading={make.isPending}
-            disabled={!german}
+            loading={upload.isPending}
+            disabled={!files.german || preview.isPending}
             onClick={() => {
-              make.mutate();
+              upload.mutate();
             }}
           >
-            Make the PDF
+            Upload as draft
+          </Button>
+          <Button
+            variant="default"
+            loading={preview.isPending}
+            disabled={!files.german || upload.isPending}
+            onClick={() => {
+              preview.mutate();
+            }}
+          >
+            Preview PDF
           </Button>
           <Anchor href={data.template_url} download>
             Download a template
           </Anchor>
           <Text size="sm" c="dimmed" className={classes.hint}>
-            The structure a text needs and everything it can do, dated today: preview it as it is to see each
-            in the PDF.
+            The structure a text needs and everything it can do, dated today.
           </Text>
         </Group>
       </Stack>
@@ -137,7 +156,68 @@ function Preview({ data }: { data: LegalOut }) {
   );
 }
 
+/** A published version's wording replaced: within 24 hours, while nobody has accepted it. */
+function Correct({ text, onClose }: { text: InForceText; onClose: () => void }) {
+  const refresh = useRefresh();
+  const [files, setFiles] = useState<ChosenFiles>(NO_FILES);
+  const [problems, setProblems] = useState<string[]>([]);
+  const correct = useMutation({
+    mutationFn: () =>
+      call(
+        api.POST('/api/v1/admin/legal/versions/{record_id}/correct', {
+          params: { path: { record_id: text.record_id ?? 0 } },
+          body: formOf(files),
+        }),
+      ),
+    onSuccess: async () => {
+      notifyDone('Corrected.');
+      onClose();
+      await refresh();
+    },
+    onError: (error) => {
+      const listed = problemsOf(error);
+      if (listed) setProblems(listed);
+      else notifyFailed(error);
+    },
+  });
+  return (
+    <Modal opened onClose={onClose} title={`Correct: ${text.title}`} size="lg">
+      <Stack gap="md">
+        <Text size="sm" c="dimmed">
+          The whole file again, with the mistake put right. Its day, the day it applies from and its approval
+          stay; the earlier wording is kept in the log. The English translation is replaced only if one is
+          chosen.
+        </Text>
+        <Problems problems={problems} title="Not corrected, because of:" />
+        <LegalFiles
+          value={files}
+          onChange={(chosen) => {
+            setFiles(chosen);
+            setProblems([]);
+          }}
+        />
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Cancel
+          </Button>
+          <ConfirmButton
+            confirmLabel="Yes, replace the text"
+            disabled={!files.german}
+            loading={correct.isPending}
+            onConfirm={() => {
+              correct.mutate();
+            }}
+          >
+            Correct
+          </ConfirmButton>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
 function InForce({ data }: { data: LegalOut }) {
+  const [correcting, setCorrecting] = useState<InForceText | null>(null);
   return (
     <Panel icon={IconScale} title="In force" flush>
       <ul className={classes.list}>
@@ -147,11 +227,25 @@ function InForce({ data }: { data: LegalOut }) {
               <Anchor href={text.page_url}>{text.title}</Anchor>
               <Text size="sm" c="dimmed">
                 {text.team_name ? `${text.team_name} · ` : ''}Version of {formatDate(text.version)}
-                {text.revision ? ` (${text.revision})` : ''} · in force since{' '}
-                {formatDate(text.effective_from)}
+              </Text>
+              <Text size="sm" c="dimmed" lang="de">
+                {text.validity}
               </Text>
             </Stack>
-            <PdfLink href={text.pdf_url}>PDF</PdfLink>
+            <Group gap="sm">
+              {text.correctable ? (
+                <Button
+                  size="xs"
+                  variant="default"
+                  onClick={() => {
+                    setCorrecting(text);
+                  }}
+                >
+                  Correct
+                </Button>
+              ) : null}
+              <PdfLink href={text.pdf_url}>PDF</PdfLink>
+            </Group>
           </li>
         ))}
         {data.teams_without_rules.map((team) => (
@@ -165,40 +259,215 @@ function InForce({ data }: { data: LegalOut }) {
           </li>
         ))}
       </ul>
+      {data.in_force.some((text) => text.correctable) ? (
+        <Text size="sm" c="dimmed" className={classes.note}>
+          A version published here can be corrected for 24 hours, while nobody has accepted it.
+        </Text>
+      ) : null}
+      {correcting ? (
+        <Correct
+          text={correcting}
+          onClose={() => {
+            setCorrecting(null);
+          }}
+        />
+      ) : null}
     </Panel>
   );
 }
 
+const APPROVERS = ['Vorstand', 'Generalversammlung'];
+
+/** Publishing a draft: the day it applies from, and who approved it and when. Not to be undone. */
+function Publish({ text, onClose }: { text: Waiting; onClose: () => void }) {
+  const refresh = useRefresh();
+  const first = today();
+  const [effectiveFrom, setEffectiveFrom] = useState(
+    text.effective_from > first ? text.effective_from : first,
+  );
+  const named = text.approved_by ?? '';
+  const [approver, setApprover] = useState(!named ? 'none' : APPROVERS.includes(named) ? named : 'other');
+  const [other, setOther] = useState(APPROVERS.includes(named) ? '' : named);
+  const [approvedOn, setApprovedOn] = useState(text.approved_on ?? '');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const approvedBy = approver === 'none' ? null : approver === 'other' ? other.trim() || null : approver;
+  const publish = useMutation({
+    mutationFn: () =>
+      call(
+        api.POST('/api/v1/admin/legal/drafts/{record_id}/publish', {
+          params: { path: { record_id: text.record_id ?? 0 } },
+          body: {
+            effective_from: effectiveFrom,
+            approved_by: approvedBy,
+            approved_on: approvedBy || approvedOn ? approvedOn || null : null,
+          },
+        }),
+      ),
+    onSuccess: async () => {
+      notifyDone('Published.');
+      onClose();
+      await refresh();
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && Object.keys(error.fields).length) setErrors(error.fields);
+      else notifyFailed(error);
+    },
+  });
+  return (
+    <Modal opened onClose={onClose} title={`Publish: ${text.title}`} size="lg">
+      <Stack gap="md">
+        <Text size="sm" c="dimmed">
+          Published, it is a version for good: from the day it applies, applicants accept it and members see
+          that it changed. For 24 hours, while nobody has accepted it, its wording can still be corrected.
+        </Text>
+        <DayInput
+          label="Applies from"
+          required
+          minDate={first}
+          value={effectiveFrom}
+          onChange={setEffectiveFrom}
+          error={errors.effective_from}
+        />
+        <Stack gap={6}>
+          <Text size="sm" fw={500}>
+            Approved by
+          </Text>
+          <SegmentedControl
+            value={approver}
+            onChange={setApprover}
+            data={[
+              { value: 'none', label: 'Nobody named' },
+              { value: 'Vorstand', label: 'Vorstand' },
+              { value: 'Generalversammlung', label: 'Generalversammlung' },
+              { value: 'other', label: 'Other' },
+            ]}
+          />
+          {approver === 'other' ? (
+            <TextInput
+              aria-label="Approved by"
+              placeholder="Who approved it"
+              maxLength={100}
+              value={other}
+              onChange={(event) => {
+                setOther(event.currentTarget.value);
+              }}
+              error={errors.approved_by}
+            />
+          ) : null}
+        </Stack>
+        <SimpleGrid cols={{ base: 1, sm: 2 }}>
+          <DayInput
+            label="Approved on"
+            clearable
+            maxDate={first}
+            value={approvedOn}
+            onChange={setApprovedOn}
+            error={errors.approved_on}
+          />
+        </SimpleGrid>
+        <Text size="sm" c="dimmed">
+          Members see: Gültig ab {effectiveFrom ? formatDate(effectiveFrom) : '…'}
+          {approvedBy || approvedOn ? ' · genehmigt' : ''}
+          {approvedBy === 'Vorstand' ? ' vom Vorstand' : ''}
+          {approvedBy === 'Generalversammlung' ? ' von der Generalversammlung' : ''}
+          {approvedOn ? ` am ${formatDate(approvedOn)}` : ''}
+          {approvedBy && !APPROVERS.includes(approvedBy) ? ` (${approvedBy})` : ''}
+        </Text>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Cancel
+          </Button>
+          <ConfirmButton
+            confirmLabel="Yes, publish"
+            disabled={!effectiveFrom}
+            loading={publish.isPending}
+            onConfirm={() => {
+              publish.mutate();
+            }}
+          >
+            Publish
+          </ConfirmButton>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
 function NotInForce({ data }: { data: LegalOut }) {
+  const refresh = useRefresh();
+  const [publishing, setPublishing] = useState<Waiting | null>(null);
+  const remove = useMutation({
+    mutationFn: (recordId: number) =>
+      call(
+        api.DELETE('/api/v1/admin/legal/drafts/{record_id}', { params: { path: { record_id: recordId } } }),
+      ),
+    onSuccess: async () => {
+      notifyDone('Draft deleted.');
+      await refresh();
+    },
+    onError: notifyFailed,
+  });
   return (
     <Panel icon={IconClock} title="Not in force yet" flush>
       {data.waiting.length ? (
         <>
           <ul className={classes.list}>
-            {data.waiting.map((text) => (
-              <li key={text.pdf_url} className={classes.item}>
-                <Stack gap={4}>
-                  <Text>{text.title}</Text>
-                  <Group gap="xs">
-                    <Text size="sm" c="dimmed">
-                      {text.team_name ? `${text.team_name} · ` : ''}Version of {formatDate(text.version)}
-                      {text.revision ? ` (${text.revision})` : ''}
-                      {text.has_english ? ' · with English' : ''}
-                    </Text>
-                    {text.status === 'draft' ? (
-                      <Pill tone="neutral">Draft</Pill>
-                    ) : (
-                      <Pill tone="info">{`From ${formatDate(text.effective_from)}`}</Pill>
-                    )}
+            {data.waiting.map((text) => {
+              // A draft uploaded here; one in legal/ is published in the repository.
+              const draftId = text.status === 'draft' ? (text.record_id ?? null) : null;
+              return (
+                <li key={text.pdf_url} className={classes.item}>
+                  <Stack gap={4}>
+                    <Text>{text.title}</Text>
+                    <Group gap="xs">
+                      <Text size="sm" c="dimmed">
+                        {text.team_name ? `${text.team_name} · ` : ''}
+                        {draftId !== null ? 'Uploaded' : `Version of ${formatDate(text.version)}`}
+                        {text.uploaded_at ? ` ${formatDateTime(text.uploaded_at)}` : ''}
+                        {text.uploaded_by ? ` by ${text.uploaded_by}` : ''}
+                        {text.revision ? ` · ${text.revision}` : ''}
+                        {text.has_english ? ' · with English' : ''}
+                      </Text>
+                      {text.status === 'draft' ? (
+                        <Pill tone="neutral">Draft</Pill>
+                      ) : (
+                        <Pill tone="info">{`From ${formatDate(text.effective_from)}`}</Pill>
+                      )}
+                    </Group>
+                  </Stack>
+                  <Group gap="sm">
+                    {draftId !== null ? (
+                      <>
+                        <Button
+                          size="xs"
+                          onClick={() => {
+                            setPublishing(text);
+                          }}
+                        >
+                          Publish
+                        </Button>
+                        <ConfirmButton
+                          size="xs"
+                          confirmLabel="Yes, delete"
+                          loading={remove.isPending && remove.variables === draftId}
+                          onConfirm={() => {
+                            remove.mutate(draftId);
+                          }}
+                        >
+                          Delete
+                        </ConfirmButton>
+                      </>
+                    ) : null}
+                    <PdfLink href={text.pdf_url}>Preview PDF</PdfLink>
                   </Group>
-                </Stack>
-                <PdfLink href={text.pdf_url}>Preview PDF</PdfLink>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
           <Text size="sm" c="dimmed" className={classes.note}>
             Drafts are shown nowhere else; published versions with a later start day switch over by themselves
-            on that day. The preview is marked ENTWURF or VORSCHAU on every page.
+            on that day. The preview is marked ENTWURF or VORSCHAU on every page. A draft in legal/ is
+            published in the repository.
           </Text>
         </>
       ) : (
@@ -206,6 +475,14 @@ function NotInForce({ data }: { data: LegalOut }) {
           <EmptyState>No drafts, and no versions waiting for their start day.</EmptyState>
         </div>
       )}
+      {publishing ? (
+        <Publish
+          text={publishing}
+          onClose={() => {
+            setPublishing(null);
+          }}
+        />
+      ) : null}
     </Panel>
   );
 }
@@ -310,7 +587,7 @@ export function LegalTexts() {
     <>
       <PageHeader
         title="Legal texts"
-        description="The texts in force, each team's rules, and a preview of a new text as a PDF."
+        description="The association's texts and each team's rules: new versions, published here."
         crumbs={[{ label: 'Admin', to: '/admin' }, { label: 'Legal texts' }]}
       />
       {legal.isPending ? (
@@ -319,7 +596,7 @@ export function LegalTexts() {
         <ErrorState error={legal.error} onRetry={() => void legal.refetch()} />
       ) : (
         <Stack gap="lg">
-          <Preview data={legal.data} />
+          <NewVersion data={legal.data} />
           <InForce data={legal.data} />
           <NotInForce data={legal.data} />
           <Remake data={legal.data} />

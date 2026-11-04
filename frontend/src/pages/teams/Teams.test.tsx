@@ -265,6 +265,7 @@ describe('a team', () => {
             version: '2026-10-01',
             revision: null,
             effective_from: '2026-10-01',
+            validity: 'Gültig ab 01.10.2026',
             in_force: '2026-10-01',
             html: '<p>Einweisung vor jedem Flug.</p>',
             contents: [],

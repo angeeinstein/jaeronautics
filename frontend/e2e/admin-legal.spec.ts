@@ -38,11 +38,29 @@ test.describe('legal texts', () => {
         timeout: 60_000,
       }),
       page.waitForEvent('popup', { timeout: 60_000 }),
-      page.getByRole('button', { name: 'Make the PDF' }).click(),
+      page.getByRole('button', { name: 'Preview PDF' }).click(),
     ]);
 
     expect(made.status()).toBe(200);
     expect(made.headers()['content-type']).toBe('application/pdf');
+  });
+
+  test('the template uploaded as a draft is listed, and deleted again', async ({ page }) => {
+    await page.goto('/admin/legal');
+    const template = await page.request.get('/admin/legal/template');
+
+    await page
+      .locator('input[type="file"]')
+      .first()
+      .setInputFiles({ name: 'anything.md', mimeType: 'text/markdown', buffer: await template.body() });
+    await page.getByRole('button', { name: 'Upload as draft' }).click();
+
+    const waiting = page.getByRole('region', { name: 'Not in force yet', exact: true });
+    const draft = waiting.getByRole('listitem').filter({ hasText: 'Mustertext' });
+    await expect(draft).toContainText('Uploaded');
+    await draft.getByRole('button', { name: 'Delete' }).click();
+    await draft.getByRole('button', { name: 'Yes, delete' }).click();
+    await expect(draft).toHaveCount(0);
   });
 
   test('on a phone nothing sticks out of the page', async ({ page, isMobile }) => {
