@@ -47,8 +47,12 @@ urgent.
   version of each text (statutes, rules of procedure, membership terms,
   privacy policy -- by version day) and when. For
   those who signed up before, the signup date stands for the version (the
-  texts in force that day). The texts and all their versions are in the
-  repository, `legal/`, and readable at `/legal`.
+  texts in force that day). The texts and all their versions are kept --
+  those from before November 2026 as files in the repository (`legal/`),
+  newer ones uploaded and published on Admin → Legal Texts, in the database
+  (with who uploaded, published and corrected what, in the log) -- and
+  readable at `/legal`. A published version is never changed or deleted,
+  except a correction within 24 hours while nobody has accepted it.
 
 **Membership and payment**
 - Membership start, end, renewal date, status, whether cancelled for the end
@@ -85,9 +89,9 @@ urgent.
 **Teams**
 - Applications (with the text written), memberships, start/end and the reason
   it ended, roles (lead, treasurer), a leaving message to the leads.
-- A team's own rules, if it has any: files the association approves and
-  keeps with its own legal texts (`legal/teams/<team>/team-rules/`), each
-  version dated, with its history in the repository. Accepted with a tick
+- A team's own rules, if it has any: uploaded by the team's leads as a draft
+  and published by the association, kept with its own legal texts (older
+  ones as files, `legal/teams/<team>/team-rules/`), each version dated. Accepted with a tick
   when applying or joining; the membership keeps when, and which version (its
   day). Members already in are not asked to accept a new version; their team
   page says the rules have changed.
@@ -255,7 +259,7 @@ under Stripe's privacy policy.
 
 ## 9. The statutes and rules of procedure vs. the portal
 
-The texts on the portal's `/legal` page (files in `legal/`) are Statutes
+The texts on the portal's `/legal` page are Statutes
 Rev 1 (17.03.2019) and Rules of Procedure Rev 3 (26.02.2020). Where they no longer match:
 
 - **Admission** (Statutes § 5 (2)): "the board decides on admission". The
@@ -305,7 +309,7 @@ Collected so nothing is forgotten; none of it is urgent.
 - [x] The footer's Impressum, Privacy and Statutes lead to the portal's own
       texts (October 2026).
 - [x] English translations of the membership terms and privacy policy
-      (04.10.2026). Others, if wanted: `legal/<text>/en/<same day>.md`.
+      (04.10.2026). Others, if wanted: uploaded with the German version.
 - [x] Give the legal texts a version date: done, versions are files by
       date and the versions accepted are kept with the member.
 - [x] Webshop and event terms and the impressum (04.10.2026).

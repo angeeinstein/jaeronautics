@@ -88,3 +88,21 @@ the title, on the page and in the PDF:
 -- the second half only when an approval was entered. The publishing day
 stays where it is needed: in the PDF's footer ("Fassung vom …") as the
 version's name, and for the administrators.
+
+## Where it is built
+
+- `db_models.LegalTextVersion` (table `legal_text_versions`): a version
+  uploaded here, German, with its English translation as a row pointing at it.
+- `services/legal_texts.py` reads files and rows alike; `validity()` is the
+  line under the title. `services/legal_uploads.py`: uploading, publishing,
+  correcting, deleting, and the emails (`legal_text_draft_uploaded` to the
+  holders of *Legal texts*, `team_rules_published` to the team's leads).
+- API: `api/admin_legal.py` (`/admin/legal/drafts`, `.../publish`,
+  `/admin/legal/versions/<id>/correct`), `api/team_manage.py`
+  (`/teams/<slug>/manage/rules`, its drafts). A draft's PDF:
+  `/admin/legal/waiting.pdf?record=<id>`, `/teams/<slug>/manage/rules/waiting.pdf`.
+- Pages: `frontend/src/pages/admin/LegalTexts.tsx`,
+  `frontend/src/pages/teams/manage/Rules.tsx` (team permission *Rules*,
+  `team.rules`, held by the leads).
+- Tests: `tests/test_legal_uploads.py`, the two pages' `*.test.tsx`,
+  `frontend/e2e/admin-legal.spec.ts`.

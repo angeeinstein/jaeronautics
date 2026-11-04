@@ -126,8 +126,10 @@ owed off the dashboard).
   association's board, the credit feature above all ("I haven't really
   discussed with them if they like it"). Shown under Admin › Legal texts,
   *Not in force yet*.
-- **Once approved:** `status: "published"` in all four files, with the day
-  of publishing as `version`/`effective_from` (and the file names); check
+- **Once approved:** since legal texts are kept in the portal
+  (`docs/legal-texts-in-portal-plan.md`), upload each German file with its
+  English one on Admin › Legal texts and publish it there, with the approval;
+  then delete the four draft files from `legal/` in the next batch. Check
   that nothing refers to the old § 31-36 of the membership terms.
 
 ## Ideas for later (not scheduled)

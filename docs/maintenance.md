@@ -372,9 +372,14 @@ external work. Archive the old price in Stripe once nobody is on it.
 
 ## Legal Texts
 
-The statutes, rules of procedure, membership terms, privacy policy and the
-rest are Markdown files in the repository: one folder per text, one per
-language, one file per version, named after the version's day.
+The statutes, rules of procedure, membership terms, privacy policy, the
+rest and each team's rules are Markdown. A new version is uploaded on Admin →
+Legal Texts and published there (below, "Kept in the portal";
+`docs/legal-texts-in-portal-plan.md`). The versions from before are files in
+the repository and stay there, read-only: one folder per text, one per
+language, one file per version, named after the version's day. The portal
+reads both; the newest published version whose day has come is in force,
+wherever it is kept.
 
 ```
 legal/
@@ -396,8 +401,17 @@ language: "en"                  # must match the language folder
 version: "2026-10-04"           # must match the file name
 effective_from: "2026-10-04"    # the day it applies from
 status: "published"             # or "draft"
+approved_by: "Vorstand"         # optional: who approved it, and when
+approved_on: "2026-09-30"
 ---
 ```
+
+**Under the title**, on the page and in the PDF, one line says when the
+version applies and, if it is known, who approved it and when: "Gültig ab
+01.12.2026 · genehmigt vom Vorstand am 10.11.2026" (`legal_texts.validity`;
+"Vorstand" and "Generalversammlung" are phrased, anybody else is named in
+brackets). The version's own day -- the day it was published, by which
+acceptances are kept -- is in the PDF's footer ("Fassung vom …").
 
 **Which version is shown:** for the text and language, files with `status:
 "published"` whose `effective_from` has come; of those, the latest
@@ -417,10 +431,10 @@ version: an outdated translation is never shown as the current text).
 `/legal/<text>/de` and `/legal/<text>/en` pick the language. An English file
 is the translation of the German file with the same `version`.
 
-**Changing a text:** add a new file next to the old one -- never edit a
-version people have already accepted -- in German, and in English if there
-is a translation, with the same `version`; commit it, and update the server.
-In the body, each `## ` heading becomes an entry in the contents list, and
+**Changing a text:** upload the new version on Admin → Legal Texts and
+publish it (below) -- in German, and in English if there is a translation.
+A file in `legal/` is never edited; one may still be added there, committed
+and installed with an update, as before. In the body, each `## ` heading becomes an entry in the contents list, and
 `## §5. …` gets the address `#paragraph-5`. Raw HTML is shown as text, not
 run; lists, bold, links and tables work.
 
@@ -471,23 +485,41 @@ the version in force on their signup day), with a line saying so; "Welcome to
 a file. A PDF that cannot be made is left out and logged; the email goes all
 the same.
 
-**Admin → Legal Texts** lists every text and team's rules in force with their
-PDFs; under *Not in force yet*, every draft and every published version whose
-`effective_from` has not come, the association's and the teams', each with a
-*Preview PDF* (with its English file of the same version, marked ENTWURF or
-VORSCHAU, kept like the others until the file changes); *PDFs* -- *Make all
-PDFs again* removes the kept ones and makes each anew, one line per PDF ticked
-off as it is done, with its size or why it failed (after an update, or when a
-PDF looks out of date; nothing needs it otherwise); and whatever is wrong with the
-files in `legal/` on this server (also a folder for a team that does not
-exist). **Preview:** upload the Markdown file
-of a new version -- and its English translation, if any -- and it comes back
-as its PDF, with ENTWURF (`status: "draft"`) or VORSCHAU across every page.
-The files are checked as CI checks them, so a file that previews is one that
-can be committed; whatever is wrong is listed instead. Nothing is kept: the
-files go to a temporary folder for the checks and the layout and are deleted
-with it. A team's rules (`team:` in the front matter) get that team's logo.
-*Download a template* there gives a Markdown file with every front matter
+**Admin → Legal Texts** (permission *Legal texts*, `legal.texts`, in the
+admin and super admin roles) lists every text and team's rules in force with
+their PDFs; under *Not in force yet*, every draft and every published version
+whose `effective_from` has not come, the association's and the teams', each
+with a *Preview PDF* (with its English file of the same version, marked
+ENTWURF or VORSCHAU, kept like the others until the text changes); *PDFs* --
+*Make all PDFs again* removes the kept ones and makes each anew, one line per
+PDF ticked off as it is done, with its size or why it failed (after an update,
+or when a PDF looks out of date; nothing needs it otherwise); and whatever is
+wrong with the files in `legal/` on this server (also a folder for a team that
+does not exist).
+
+**Kept in the portal** (`services/legal_uploads.py`, table
+`legal_text_versions`, so in the backups):
+
+- *New version:* the Markdown file, and its English translation if there is
+  one, checked as CI checks a file in `legal/`; whatever is wrong is listed
+  instead. The file's name does not matter. *Upload as draft* keeps it under
+  *Not in force yet*, seen only by whoever has the permission; *Preview PDF*
+  makes its PDF and keeps nothing (a temporary folder, deleted with it). A
+  team's rules (`team:` in the front matter) get that team's logo.
+- *Publish* asks for the day it applies from (today or later) and, if there
+  was one, who approved it and when -- a record, not checked; filled in from
+  the file's `approved_by`/`approved_on`. It asks twice: it cannot be taken
+  back. The version's day becomes today's; one version of a text a day, and
+  one per `effective_from`.
+- *Correct:* a published version may be replaced by a corrected file for 24
+  hours after publishing, while nobody has accepted it (a member at signup,
+  for the association's texts; a team member on joining, for a team's
+  rules). The earlier wording is kept in the log. After that, a change is a
+  new version.
+- *Delete:* a draft only. A published version is never deleted.
+
+Uploading, publishing, correcting and deleting are in the log (category
+*legal*). *Download a template* gives a Markdown file with every front matter
 field explained and an example of everything a text can contain -- headings
 and paragraph anchors, emphasis, links, lists, lettered points, tables,
 quotes, parts -- dated today as a draft, so it previews as it is
@@ -501,16 +533,20 @@ statutes, rules of procedure, membership terms, privacy policy. Also
 registered: webshop and event terms, legal notice. There is no general
 "Teamordnung": each team has its own, below.
 
-**A team's own rules** are kept here too, approved by the association like
-its own texts: `legal/teams/<team's short name>/team-rules/<de|en>/<day>.md`,
-with `team: "<short name>"` in the front matter as well; everything else --
+**A team's own rules** are kept the same way, published by the association
+like its own texts: uploaded with `document: "team-rules"` and `team: "<short
+name>"` in the front matter (a file from before:
+`legal/teams/<team's short name>/team-rules/<de|en>/<day>.md`); everything else --
 versions, drafts, `effective_from`, English as a translation of the same
 version, the checks in CI -- works as above. Shown at `/teams/<team>/rules`
 (signed-in only), as a PDF at `/teams/<team>/rules/pdf` with the team's logo
 beside the association's and its name (on white: the logo field asks teams for one visible on dark and on white), and ticked when applying or joining, read in a
-window over the form. The membership keeps the version's day. Leads can no
-longer change their rules in the portal; they send the new text to the
-association. A folder whose short name matches no team is reported by `flask
+window over the form. The membership keeps the version's day. **A team's
+leads** (team permission *Rules*, `team.rules`) upload drafts of their own
+rules on the team's *Rules* page (`/teams/<team>/manage/rules`), with a
+template set up for the team, and see each draft's PDF to pass round; the
+holders of *Legal texts* are emailed and publish it, and the leads are
+emailed when it is published. They may delete their own drafts. A folder whose short name matches no team is reported by `flask
 build-legal-pdfs`. A team without a file in force has no rules: joining it
 asks for none.
 
