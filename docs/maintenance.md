@@ -485,8 +485,9 @@ the version in force on their signup day), with a line saying so; "Welcome to
 a file. A PDF that cannot be made is left out and logged; the email goes all
 the same.
 
-**Admin → Legal Texts** (permission *Legal texts*, `legal.texts`, in the
-admin and super admin roles) lists every text and team's rules in force with
+**Admin → Legal Texts** (permission *Legal texts*, `legal.texts`: writing
+drafts; *Publish legal texts*, `legal.publish`: publishing and correcting;
+both in the admin and super admin roles) lists every text and team's rules in force with
 their PDFs; under *Not in force yet*, every draft and every published version
 whose `effective_from` has not come, the association's and the teams', each
 with a *Preview PDF* (with its English file of the same version, marked
@@ -500,26 +501,46 @@ does not exist).
 **Kept in the portal** (`services/legal_uploads.py`, table
 `legal_text_versions`, so in the backups):
 
-- *New version:* the Markdown file, and its English translation if there is
+- *Write a new version* opens the editor (below) with a new draft: a copy
+  of the version in force, or the template.
+- *Upload a file:* the Markdown file, and its English translation if there is
   one, checked as CI checks a file in `legal/`; whatever is wrong is listed
   instead. The file's name does not matter. *Upload as draft* keeps it under
   *Not in force yet*, seen only by whoever has the permission; *Preview PDF*
   makes its PDF and keeps nothing (a temporary folder, deleted with it). A
   team's rules (`team:` in the front matter) get that team's logo.
-- *Publish* asks for the day it applies from (today or later) and, if there
+- *Edit* opens a draft in the editor. A draft file in `legal/` is copied
+  into the portal the first time (`imported_from`), and the file is no
+  longer listed; delete it from the repository in the next batch.
+- *Publish* (only with `legal.publish`; refused while the checks find
+  something) asks for the day it applies from (today or later) and, if there
   was one, who approved it and when -- a record, not checked; filled in from
   the file's `approved_by`/`approved_on`. It asks twice: it cannot be taken
   back. The version's day becomes today's; one version of a text a day, and
   one per `effective_from`.
-- *Correct:* a published version may be replaced by a corrected file for 24
-  hours after publishing, while nobody has accepted it (a member at signup,
+- *Correct* (the editor) or *With a file:* a published version may be
+  corrected for 24 hours after publishing, while nobody has accepted it (a member at signup,
   for the association's texts; a team member on joining, for a team's
   rules). The earlier wording is kept in the log. After that, a change is a
   new version.
 - *Delete:* a draft only. A published version is never deleted.
 
-Uploading, publishing, correcting and deleting are in the log (category
-*legal*). *Download a template* gives a Markdown file with every front matter
+**The editor** (`/admin/legal/drafts/<id>`; a team's leads
+`/teams/<team>/manage/rules/drafts/<id>`; `services/legal_editor.py`,
+`api/legal_editor.py`, `frontend/src/pages/legal/Editor.tsx`): title and
+revision as fields, the Markdown in CodeMirror, German and English as tabs;
+beside it *Preview* -- rendered and checked by the server as written, half a
+second after typing stops -- and *Changes* -- the changed paragraphs against
+the version in force, word by word. A draft saves itself two seconds after
+typing stops; every save counts up `edit_count`, and a save naming an older
+count is refused ("Somebody else saved this draft meanwhile"). Undo and redo;
+*Discard changes* puts back the draft as it was when the editor was opened,
+*History* an earlier state (`legal_text_snapshots`: one per editing session,
+the last 20) -- both as a change undo takes back, saved like any other.
+Correcting a published version: the same page, saved with *Save correction*.
+
+Starting, copying in, uploading, publishing, correcting and deleting are in
+the log (category *legal*); a save is not. *Download a template* gives a Markdown file with every front matter
 field explained and an example of everything a text can contain -- headings
 and paragraph anchors, emphasis, links, lists, lettered points, tables,
 quotes, parts -- dated today as a draft, so it previews as it is
@@ -543,9 +564,10 @@ version, the checks in CI -- works as above. Shown at `/teams/<team>/rules`
 beside the association's and its name (on white: the logo field asks teams for one visible on dark and on white), and ticked when applying or joining, read in a
 window over the form. The membership keeps the version's day. **A team's
 leads** (team permission *Rules*, `team.rules`) upload drafts of their own
-rules on the team's *Rules* page (`/teams/<team>/manage/rules`), with a
-template set up for the team, and see each draft's PDF to pass round; the
-holders of *Legal texts* are emailed and publish it, and the leads are
+rules on the team's *Rules* page (`/teams/<team>/manage/rules`) -- written in
+the editor or uploaded, with a template set up for the team -- edit any
+draft of their rules, also one an admin started, and see each draft's PDF to
+pass round; the holders of *Publish legal texts* are emailed and publish it, and the leads are
 emailed when it is published. They may delete their own drafts. A folder whose short name matches no team is reported by `flask
 build-legal-pdfs`. A team without a file in force has no rules: joining it
 asks for none.

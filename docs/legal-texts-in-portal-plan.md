@@ -140,7 +140,7 @@ Decided 2026-11-04.
 - `services/legal_texts.py` reads files and rows alike; `validity()` is the
   line under the title. `services/legal_uploads.py`: uploading, publishing,
   correcting, deleting, and the emails (`legal_text_draft_uploaded` to the
-  holders of *Legal texts*, `team_rules_published` to the team's leads).
+  holders of *Publish legal texts*, `team_rules_published` to the team's leads).
 - API: `api/admin_legal.py` (`/admin/legal/drafts`, `.../publish`,
   `/admin/legal/versions/<id>/correct`), `api/team_manage.py`
   (`/teams/<slug>/manage/rules`, its drafts). A draft's PDF:
@@ -148,5 +148,11 @@ Decided 2026-11-04.
 - Pages: `frontend/src/pages/admin/LegalTexts.tsx`,
   `frontend/src/pages/teams/manage/Rules.tsx` (team permission *Rules*,
   `team.rules`, held by the leads).
-- Tests: `tests/test_legal_uploads.py`, the two pages' `*.test.tsx`,
-  `frontend/e2e/admin-legal.spec.ts`.
+- The editor: `services/legal_editor.py`, `api/legal_editor.py`
+  (`/legal/drafts`, `/legal/imports`, `/legal/drafts/<id>/session`, saving,
+  `.../check`, `.../snapshots/<id>`, `.../correct`), the table
+  `legal_text_snapshots`, `frontend/src/pages/legal/Editor.tsx` with
+  `components/legal/MarkdownEditor.tsx` (CodeMirror 6, given the page's
+  nonce for the security policy) and `components/legal/Changes.tsx`.
+- Tests: `tests/test_legal_uploads.py`, `tests/test_legal_editor.py`, the
+  pages' `*.test.tsx`, `frontend/e2e/admin-legal.spec.ts`.

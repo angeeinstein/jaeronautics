@@ -63,6 +63,38 @@ test.describe('legal texts', () => {
     await expect(draft).toHaveCount(0);
   });
 
+  test('a new version written in the editor saves itself, is discarded, and deleted again', async ({
+    page,
+  }) => {
+    test.slow();
+    await page.goto('/admin/legal');
+    const panel = page.getByRole('region', { name: 'Write a new version', exact: true });
+    await panel.getByLabel('Text', { exact: true }).click();
+    await page.getByRole('option', { name: 'Impressum' }).click();
+    await panel.getByRole('button', { name: 'Write' }).click();
+    await page.waitForURL(/\/admin\/legal\/drafts\/\d+$/);
+
+    const text = page.getByRole('textbox', { name: 'German text, Markdown' });
+    await text.click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type('\n\nEin neuer Absatz aus dem Test.');
+    await expect(page.getByText(/^Saved/)).toBeVisible({ timeout: 10_000 });
+
+    await page.getByRole('button', { name: 'Discard changes' }).click();
+    await expect(text).not.toContainText('Ein neuer Absatz aus dem Test.');
+    await expect(page.getByText(/^Saved/)).toBeVisible({ timeout: 10_000 });
+
+    await page.goto('/admin/legal');
+    const draft = page
+      .getByRole('region', { name: 'Not in force yet', exact: true })
+      .getByRole('listitem')
+      .filter({ hasText: 'Impressum' })
+      .filter({ hasText: 'Uploaded' });
+    await draft.getByRole('button', { name: 'Delete' }).click();
+    await draft.getByRole('button', { name: 'Yes, delete' }).click();
+    await expect(draft).toHaveCount(0);
+  });
+
   test('on a phone nothing sticks out of the page', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'phones only');
     await page.goto('/admin/legal');
