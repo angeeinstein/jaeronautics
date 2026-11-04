@@ -59,24 +59,13 @@ update's warning of local changes only for the portal's own files).
   proposal in `docs/team-passive-members.md` is not needed for TDT.
 - **Waiting for:** the association's board.
 
-### Legal texts managed in the portal, not in the repository
+### Legal texts managed in the portal, not in the repository (being built)
 
 - **Added:** 2026-11-04
-- **What:** a feature, its own branch. Drafts uploaded and published under
-  Admin › Legal Texts, kept in the database, instead of files in `legal/`
-  that need a pull request, CI, a merge and an update. Everything decided --
-  the new permission *Legal texts* for admins and super admins, team leads
-  uploading their own team's drafts and an admin publishing, a button that
-  asks again, upload only, published versions unchangeable except a
-  correction while nobody has accepted them -- and what was turned down (the
-  server pushing to GitHub): `docs/legal-texts-in-portal-plan.md`.
-- **Why:** the maintainer: it "would make life a lot easier, especially for
-  people who are not used to GitHub"; TDT's rules of 2026-11-04 needed a
-  pull request just to be seen as a draft.
-- **Decided on 2026-11-04 as well:** corrections only within 24 hours; the
-  leads see their own draft and are told when it is published; publishing
-  keeps an optional "approved by the board on …" date. No open questions.
-- **When:** not said yet; a feature, so not with a batch of small items.
+- **Being built** on its own branch, `claude/legal-texts-in-portal`, from
+  2026-11-04; the plan, with everything decided, is
+  `docs/legal-texts-in-portal-plan.md` there. This item goes when that branch
+  is merged.
 
 ### Stripe's Python package: from 13 to 16
 
