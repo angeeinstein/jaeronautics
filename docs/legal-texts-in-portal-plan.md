@@ -64,9 +64,11 @@ its other content lives: in the database, managed under Admin › Legal Texts.
 - **General:** another association running the portal uploads its own
   statutes, instead of changing the repository.
 
-## Open
+## Approval by the board
 
-- Optionally, when publishing, a date "approved by the board on …", kept
-  with the version (its history, the audit log) as a record that it was
-  approved -- not checked by the portal, and may stay empty. Asked on
-  2026-11-04; the maintainer was not sure what it meant, explained since.
+Decided 2026-11-04: publishing asks for the day the association's board
+approved the text ("approved by the board on …"), kept with the version --
+shown in its history, and in the audit log. A record, not a check: the portal
+does not verify it, and it may stay empty for a text that needs no approval
+(the legal notice, say). Team rules and the association's own rules usually
+do need it (TDT's rules, § 19).

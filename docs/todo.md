@@ -73,9 +73,9 @@ update's warning of local changes only for the portal's own files).
 - **Why:** the maintainer: it "would make life a lot easier, especially for
   people who are not used to GitHub"; TDT's rules of 2026-11-04 needed a
   pull request just to be seen as a draft.
-- **Open question:** in the plan, "Open" -- whether publishing keeps an
-  optional "approved by the board on …" date. (The 24 hours and the leads
-  seeing their draft were decided on 2026-11-04.)
+- **Decided on 2026-11-04 as well:** corrections only within 24 hours; the
+  leads see their own draft and are told when it is published; publishing
+  keeps an optional "approved by the board on …" date. No open questions.
 - **When:** not said yet; a feature, so not with a batch of small items.
 
 ### Stripe's Python package: from 13 to 16
