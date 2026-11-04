@@ -42,18 +42,24 @@ its other content lives: in the database, managed under Admin › Legal Texts.
   wording. And at most **24 hours** after publishing (decided 2026-11-04):
   some texts are accepted by nobody (the legal notice, the webshop terms) and
   could otherwise be changed silently for ever.
-- **Who:** a new permission, **Legal texts** (`Permission.LEGAL_TEXTS`), in
-  the `admin` and `superadmin` bundles, so whoever is promoted to either has it
-  without anything to remember (`permissions.py`: a role is a fixed bundle). A
-  role holding only it -- a secretary, say -- belongs to the finer permissions
-  the maintainer wants later.
-- **Team rules:** a team's leads upload drafts of their own team's rules; the
-  association's admins (the permission above) are told and publish. Today the
+- **Who:** two permissions (decided 2026-11-04), both in the `admin` and
+  `superadmin` bundles, so whoever is promoted to either has them without
+  anything to remember (`permissions.py`: a role is a fixed bundle):
+  **Legal texts** (`Permission.LEGAL_TEXTS`, `legal.texts`) -- Admin › Legal
+  texts, uploading, writing and deleting drafts; **Publish legal texts**
+  (`Permission.LEGAL_PUBLISH`, `legal.publish`) -- publishing and correcting.
+  A role holding only the first -- a secretary, say -- belongs to the finer
+  roles the maintainer wants later.
+- **Team rules:** a team's leads upload and edit drafts of their own team's
+  rules -- also one an admin started; the holders of *Publish legal texts*
+  are told and publish. Leads never publish. Today the
   leads send the text to the association, which goes through GitHub. The
   leads see the draft they uploaded with its PDF, to pass round in the team,
   and are told when it is published (decided 2026-11-04).
-- **Upload only.** An editor in the browser, with a live preview, may come
-  later (the maintainer: "uploading only is enough").
+- **Uploading, and an editor** (decided 2026-11-04, after the first build:
+  the plan had said upload only). Uploading stays -- a file is convenient
+  to write elsewhere, with an AI agent or outside help. The editor is
+  described below ("The editor").
 - **Kept:** in the database and so in the backups; the PDFs made as now
   (`legal_pdf.py`, kept and remade by the text's hash); who uploaded,
   corrected and published what, and when, in the audit log.
@@ -88,6 +94,44 @@ the title, on the page and in the PDF:
 -- the second half only when an approval was entered. The publishing day
 stays where it is needed: in the PDF's footer ("Fassung vom …") as the
 version's name, and for the administrators.
+
+## The editor
+
+Decided 2026-11-04.
+
+- **Where:** *Edit* on a draft opens a page of its own,
+  `/admin/legal/drafts/<id>`, or for a team's leads
+  `/teams/<team>/manage/rules/drafts/<id>`.
+- **Write and Preview side by side** (two tabs on a phone). The preview is
+  made by the server, as the published page is, half a second after typing
+  stops -- never a second renderer that could differ. The checks of an upload
+  run with it and are listed under the text. *Preview PDF* as before.
+- **The front matter is fields** -- title, revision -- not YAML; German and
+  English as two tabs, English optional.
+- **A small toolbar** (heading, bold, italic, list, link) and a short Markdown
+  cheat sheet. CodeMirror 6: line numbers, Markdown highlighting, search;
+  loaded on this page only.
+- **Starting a new version:** from the version in force (the usual case: a
+  change to it), from the template, or by uploading a file as before.
+- **A file draft in `legal/`** (the drafts from before) gets *Edit* too: the
+  first edit copies it into the portal as a draft, and the file is no longer
+  listed; the next batch deletes it from the repository.
+- **Saving:** a draft saves itself a few seconds after typing stops. Two
+  people saving the same draft: the second is refused and told, never
+  overwriting silently. Nothing is public until *Publish*, which refuses a
+  text the checks refuse.
+- **Back, forward, discard** (the maintainer: a way "to get back to the old
+  status"): undo and redo buttons (and Ctrl+Z / Ctrl+Y) for everything since
+  the editor was opened; *Discard changes* goes back to the draft as it was
+  when it was opened; *History* lists the earlier states, one per editing
+  session, with who and when, each restorable (restoring is undoable too).
+- **Changes:** beside the preview, the text compared word by word with the
+  version in force, paragraph by paragraph -- added underlined green,
+  removed struck through red (the `diff` library, in the browser). For
+  whoever approves a change.
+- **Correcting** a published version within its 24 hours opens the same
+  editor, without autosave: the correction is saved with a button that asks
+  twice, and goes into the log with the earlier wording.
 
 ## Where it is built
 
