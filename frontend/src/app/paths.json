@@ -48,6 +48,7 @@
     "/teams/:slug/manage/roles",
     "/teams/:slug/manage/sales",
     "/teams/:slug/manage/devices",
+    "/teams/:slug/manage/rules",
     "/teams/:slug/manage/attendance",
     "/teams/:slug/manage/messages",
     "/teams/:slug/manage/details",
