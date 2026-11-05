@@ -67,6 +67,7 @@ const healthy: Schemas['HealthOut'] = {
     stuck: [],
     guide_url: 'https://github.com/o/r/blob/main/docs/new-release.md',
   },
+  shell: { user: null, servers: [{ name: 'Portal', address: null, detected: '198.51.100.4' }] },
 };
 
 describe('system health', () => {
@@ -177,6 +178,97 @@ describe('staying current', () => {
       'https://github.com/o/r/pull/51',
     );
     expect(screen.getByRole('link', { name: /next Ubuntu release/ })).toBeInTheDocument();
+  });
+
+  it("the forum's version, a newer one out, and the command for its server", async () => {
+    show(<Health />, {
+      [HEALTH]: {
+        body: {
+          ...healthy,
+          current: {
+            ...healthy.current,
+            forum: {
+              url: 'https://forum.example.org',
+              update_url: 'https://forum.example.org/admin/update',
+              reachable: true,
+              installed: 'v2026.10.0-latest +248',
+              latest: '2026.11.0-latest',
+              behind: 1,
+              down_since: null,
+              behind_since: '2026-11-02T08:00:00Z',
+            },
+            forum_server_command:
+              'curl -fsSL https://raw.githubusercontent.com/o/r/main/deploy/server-night.sh',
+          },
+        },
+      },
+    });
+
+    expect(await screen.findByText('v2026.10.0-latest +248')).toBeInTheDocument();
+    expect(screen.getByText('2026.11.0-latest is out')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Its updates' })).toHaveAttribute(
+      'href',
+      'https://forum.example.org/admin/update',
+    );
+    expect(screen.getByText(/server-night\.sh/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: "Copy the forum server's setup command" })).toBeInTheDocument();
+  });
+});
+
+describe('shell access', () => {
+  it('nothing entered: says what to enter; saving sends it', async () => {
+    const user = userEvent.setup();
+    const { calls } = show(<Health />, {
+      [HEALTH]: { body: healthy },
+      [`PUT ${HEALTH}/shell`]: { body: { changed: ['user'] } },
+    });
+
+    expect(await screen.findByText('Enter the login and its address below.')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Login'), 'azureuser');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(calls.some((call) => call.method === 'PUT')).toBe(true);
+    });
+    const sent = calls.find((call) => call.method === 'PUT');
+    expect(await sent?.json()).toEqual({ user: 'azureuser', portal_address: '', forum_address: '' });
+  });
+
+  it('the command per server, with the address the portal finds when none is entered', async () => {
+    show(<Health />, {
+      [HEALTH]: {
+        body: {
+          ...healthy,
+          shell: {
+            user: 'azureuser',
+            servers: [
+              { name: 'Portal', address: null, detected: '198.51.100.4' },
+              { name: 'Forum', address: '198.51.100.9', detected: null },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(await screen.findByText(/ssh -i "\$key" azureuser@198\.51\.100\.4/)).toBeInTheDocument();
+    expect(screen.getByText(/ssh -i "\$key" azureuser@198\.51\.100\.9/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Read-Host/)).toHaveLength(2);
+  });
+
+  it('an address entered that is not the one the server finds now: said', async () => {
+    show(<Health />, {
+      [HEALTH]: {
+        body: {
+          ...healthy,
+          shell: {
+            user: 'azureuser',
+            servers: [{ name: 'Portal', address: '198.51.100.4', detected: '198.51.100.7' }],
+          },
+        },
+      },
+    });
+
+    expect(await screen.findByText(/its address may have changed/)).toBeInTheDocument();
   });
 });
 

@@ -29,9 +29,83 @@ live portal); the rest of the security review (`claude/audit-fixes`, merged
 2026-10-19); and the batch of 2026-10-20 (an answer's email quotes the whole
 conversation and a reply is shown without its quote, the side menu's groups
 set apart, deleted price-list items folded into one row, what the teams are
-owed off the dashboard).
+owed off the dashboard); and the batch of 2026-11-02
+(`claude/update-follow-ups`: cloudflared and the forum's server in the night,
+`deploy/server-night.sh`; the forum and *Shell access* on System health; the
+update's warning of local changes only for the portal's own files).
 
 ## Open
+
+### TDT's rules 2026.2: publish once the board approves (waiting)
+
+- **Added:** 2026-11-04
+- **What:** Team Drone Tech's new rules, agreed with the team's lead on
+  2026-11-04, are in the repository as a draft:
+  `legal/teams/tdt/team-rules/de/2026-11-04.md` (`status: "draft"`, pull
+  request "TDT's rules, version 2026.2, as a draft"). When the association's
+  board has approved them (their § 19): `status: "published"`, `version` and
+  `effective_from` the day they apply, the file renamed to that day. From then
+  on applicants accept them; current members see on the team page that the
+  rules changed (TDT tells them itself, § 19 ii).
+- **Why the text differs from what TDT submitted:** fitted to how the portal
+  works -- debits on 01.10. and 01.04. (01.01./01.04. cannot be set for a
+  subscription), applying and accepting through the portal, the first payment
+  and the 14 days an approval waits, a failed debit ending the membership and
+  rejoining by paying, exclusion at once and no refunds; and, as agreed with
+  the lead, no außerordentliche Mitglieder. Otherwise TDT's wording, slips
+  included. The comparison PDF that went to TDT was made outside the
+  repository.
+- **Also settled by it:** the new rules drop the passive status, so the open
+  proposal in `docs/team-passive-members.md` is not needed for TDT.
+- **Waiting for:** the association's board.
+
+### Legal texts managed in the portal, not in the repository (being built)
+
+- **Added:** 2026-11-04
+- **Being built** on its own branch, `claude/legal-texts-in-portal`, from
+  2026-11-04; the plan, with everything decided, is
+  `docs/legal-texts-in-portal-plan.md` there. This item goes when that branch
+  is merged.
+
+### Stripe's Python package: from 13 to 16
+
+- **Added:** 2026-11-02
+- **What:** move `stripe` from 13.0.1 (API version `2025-09-30.clover`) to
+  16.x (`2026-09-30.endive`). Dependabot's #63 did only the version and was
+  closed: CI passed because the tests fake Stripe with plain dicts, but on
+  the server it would have broken payments.
+- **The changes that matter here** (stripe-python's `CHANGELOG.md`, 15.0.0
+  and 16.0.0):
+  - 15.0.0: `StripeObject` is no longer a `dict` -- no `.get()`, `.items()`;
+    `"key" in obj`, `getattr(obj, "key", None)` and `obj.to_dict()` (a plain
+    dict, recursively) remain. The portal calls `.get()` on Stripe objects
+    in hundreds of places (`services/billing.py`, `team_payments.py`,
+    `credit.py`, `payments.py`, `stripe_books.py`, `blueprints/webhook.py`,
+    …). Planned: turn objects into dicts where they come in -- the retrieve
+    and list calls and `Webhook.construct_event` -- with `to_dict()`, so the
+    code after that stays as it is.
+  - 15.0.0: `decimal_string` fields (`unit_amount_decimal`, `fx_rate`, …)
+    are `Decimal`, not `str` -- check whether the portal reads any.
+  - 16.0.0 (API `endive`): `payment_method_types` on Checkout Sessions and
+    Payment Intents is replaced by `allowed_payment_method_types` -- a
+    rename, the portal keeps choosing the methods (`billing.py`,
+    `team_payments.py` twice, `credit.py`: EPS only when switched on).
+  - The Stripe API's own changes from `clover` through `dahlia` to `endive`
+    (docs.stripe.com/changelog), checked against the fields the portal
+    reads: invoices and their payments, subscriptions, charges, refunds,
+    balance transactions, prices. The webhook's events are not affected by
+    the package: they follow the API version set on the webhook endpoint in
+    Stripe's dashboard.
+- **Also:** the tests' Stripe fakes become real `StripeObject`s
+  (`StripeObject.construct_from`), so CI notices the next change of this
+  kind instead of passing.
+- **How it is tried:** Stripe's test mode on the test server -- a
+  membership checkout with card and SEPA, a team payment, credit with EPS,
+  a refund, the nightly billing check, the books (`stripe_books.py`).
+- **Why it waits:** nothing breaks while it does -- Stripe keeps answering
+  `clover` as before; package 13 only gets no more fixes or features.
+- **Put off (2026-11-02):** "Let's keep Stripe for later" -- not with the
+  batch of that day; its own branch when the maintainer asks.
 
 ### Team leads answer their team's messages in the portal
 

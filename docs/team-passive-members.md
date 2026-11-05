@@ -1,9 +1,12 @@
 # Passive team members, rejoining, and staying informed
 
 **Status:** the rejoin setting is built (2026-10-11, the team's *Joining*
-settings; `services/teams.py`, `rejoin_until`). The rest of passive membership waits for the maintainer's
-conversation with TDT's leads; the proposal and open points below are kept
-for it.
+settings; `services/teams.py`, `rejoin_until`). The rest is not needed for
+now: TDT's rules of 2026-11-04 (version 2026.2,
+`legal/teams/tdt/team-rules/`) no longer have a passive status -- a failed
+debit ends the team membership, and the member comes back by paying within
+the rejoin time. The proposal and open points below are kept in case a team
+asks again.
 
 ## The request
 
