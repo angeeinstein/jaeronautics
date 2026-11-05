@@ -744,6 +744,7 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--settings", "user": "admin@example.org", "path": "/admin/settings"},
         {"name": "admin--settings-health", "user": "admin@example.org", "path": "/admin/settings/health"},
         {"name": "admin--settings-updates", "user": "admin@example.org", "path": "/admin/settings/updates"},
+        {"name": "admin--settings-translation", "user": "admin@example.org", "path": "/admin/settings/translation"},
         {"name": "admin--settings-updates-history", "user": "admin@example.org",
          "path": "/admin/settings/updates#history"},
         {"name": "admin--teams", "user": "admin@example.org", "path": "/admin/teams"},

@@ -455,10 +455,30 @@ may contain mistakes, and that the German version applies where they differ
 translation of this version yet" when the English file is of an older
 version: an outdated translation is never shown as the current text).
 `/legal/<text>/de` and `/legal/<text>/en` pick the language. An English file
-is the translation of the German file with the same `version`.
+in `legal/` is the translation of the German file with the same `version`.
+
+**The English is made by machine** for every version published in the portal
+(`docs/legal-translation-plan.md`; `services/translation.py`,
+`services/legal_translation.py`): only the German is written. Publishing --
+and a correction -- queues outbox work that translates the German page block
+by block (each paragraph, heading, list, table, as HTML: anchors, links and
+tables stay) and keeps the result with the version, fixed: an English row of
+`legal_text_versions` marked `machine_translated`, its body the cleaned HTML.
+Each block's translation is kept by its exact text (`translations`), so a
+version that differs in one paragraph costs that paragraph. Until it is made
+-- no service set up, or none answering; the work is retried with the
+outbox's backoff -- the English page says there is no English of this version
+yet. The page and the PDF say it was made by machine. **Settings ›
+Translation** (`settings.credentials`): DeepL (a Free key ends `:fx`) and Azure
+AI Translator (key, region), either or both, which is tried first -- the other
+is the fallback --, *Try it*, DeepL's characters this month, and the
+**glossary** (Verein → association …): DeepL gets it as a glossary of its own,
+made anew when it changes; Azure the English word in place for the German as
+written. The English is never corrected by hand -- the glossary keeps terms
+right. Published English from before (the files of 04.10.2026) stays as it is.
 
 **Changing a text:** upload the new version on Admin → Legal Texts and
-publish it (below) -- in German, and in English if there is a translation.
+publish it (below) -- in German; the English is made by machine.
 A file in `legal/` is never edited; one may still be added there, committed
 and installed with an update, as before. In the body, each `## ` heading becomes an entry in the contents list, and
 `## §5. …` gets the address `#paragraph-5`. Raw HTML is shown as text, not
@@ -516,8 +536,8 @@ drafts; *Publish legal texts*, `legal.publish`: publishing and correcting;
 both in the admin and super admin roles) lists every text and team's rules in force with
 their PDFs; under *Not in force yet*, every draft and every published version
 whose `effective_from` has not come, the association's and the teams', each
-with a *Preview PDF* (with its English file of the same version, marked
-ENTWURF or VORSCHAU, kept like the others until the text changes); *PDFs* --
+with a *Preview PDF* (a draft's in German; marked ENTWURF or VORSCHAU, kept
+like the others until the text changes); *PDFs* --
 *Make all PDFs again* removes the kept ones and makes each anew, one line per
 PDF ticked off as it is done, with its size or why it failed (after an update,
 or when a PDF looks out of date; nothing needs it otherwise); and whatever is
@@ -529,8 +549,8 @@ does not exist).
 
 - *Write a new version* opens the editor (below) with a new draft: a copy
   of the version in force, or the template.
-- *Upload a file:* the Markdown file, and its English translation if there is
-  one, checked as CI checks a file in `legal/`; whatever is wrong is listed
+- *Upload a file:* the German Markdown file, checked as CI checks a file in
+  `legal/`; whatever is wrong is listed
   instead. The file's name does not matter. *Upload as draft* keeps it under
   *Not in force yet*, seen only by whoever has the permission; *Preview PDF*
   makes its PDF and keeps nothing (a temporary folder, deleted with it). A
@@ -562,10 +582,12 @@ does not exist).
 **The editor** (`/admin/legal/drafts/<id>`; a team's leads
 `/teams/<team>/manage/rules/drafts/<id>`; `services/legal_editor.py`,
 `api/legal_editor.py`, `frontend/src/pages/legal/Editor.tsx`): title and
-revision as fields, the Markdown in CodeMirror, German and English as tabs;
-beside it *Preview* -- rendered and checked by the server as written, half a
-second after typing stops -- and *Changes* -- the changed paragraphs against
-the version in force, word by word. A draft saves itself two seconds after
+revision as fields, the German Markdown in CodeMirror; beside it *Preview* --
+rendered and checked by the server as written, half a second after typing
+stops --, *English* -- the draft as members will read it, translated by
+machine three seconds after typing stops, only while that view is open --
+and *Changes* -- the changed paragraphs against the version in force, word by
+word. A draft saves itself two seconds after
 typing stops; every save counts up `edit_count`, and a save naming an older
 count is refused ("Somebody else saved this draft meanwhile"). Undo and redo;
 *Discard changes* puts back the draft as it was when the editor was opened,
@@ -583,11 +605,10 @@ closed, the laptop asleep) -- *Edit* then takes it, loading it as it is. After
 says so -- what they wrote is saved already. Saving, correcting and
 publishing are refused while somebody else holds it; the save count stays
 behind the lock as a safety net.
-*File* in the editor downloads the draft as saved as its Markdown file (German,
-and English when there is a translation), front matter included -- the file an
-upload takes back -- and *Replace with a file* reads uploaded files into the
-editor (checked as an upload is; without an English file the translation
-stays), keeping the state before under *History*; undo takes it back. Every
+*File* in the editor downloads the draft as saved as its German Markdown file,
+front matter included -- the file an upload takes back -- and *Replace with a
+file* reads an uploaded German file into the editor (checked as an upload is),
+keeping the state before under *History*; undo takes it back. Every
 row under *Not in force yet* (and on a team's Rules page) has its *Markdown*
 too, a file in `legal/` as it is. So a draft kept in the portal can be handed
 to someone -- or an AI agent -- who cannot reach the server, and taken back.
@@ -639,9 +660,8 @@ the signup date stands for the version.
 procedure (Rev 3, 2020, and Rev 4, 2026), membership terms, privacy policy
 (website and portal together), webshop and event terms, impressum -- all in
 German; the membership terms and privacy policy also in English (a
-translation of the same version, 04.10.2026). A new German version of those
-two needs its English file too, or the portal shows German there until it
-has one. `source_revision` in the front matter ("Rev 4") is shown next to
+translation of the same version, 04.10.2026). Newer versions get their
+English by machine (above). `source_revision` in the front matter ("Rev 4") is shown next to
 the date. A `# ` heading further down a text ("Teil B – Mitgliederportal") is a
 part of it, listed in the contents. Points lettered "a." under a numbered one
 need a line break (two spaces) at the end of the line before; the tests check.

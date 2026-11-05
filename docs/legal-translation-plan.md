@@ -58,6 +58,23 @@ be live translated from German."
 - The texts are public and hold no personal data: the privacy policy does
   not change.
 
+## Where it is built
+
+- `services/translation.py`: the two services, the order and fallback, the
+  kept translations (table `translations`), the glossary, the cleaning of
+  what comes back (an allow-list of the pages' own tags).
+- `services/legal_translation.py`: a version's English -- made at publishing
+  and after a correction as outbox work (`legal_translate`), kept as the
+  English row of `legal_text_versions` (`machine_translated`, `source_hash`);
+  `legal_texts.blocks()` cuts the German page into what is translated.
+- API: `/admin/settings/translation` (and `.../<service>/try`);
+  `/legal/drafts/<id>/english` for the editor's view.
+- Pages: `frontend/src/pages/admin/settings/Translation.tsx`; the editor's
+  *English* view in `frontend/src/pages/legal/Editor.tsx`.
+- Migration `e3c8a1f6b9d2`. Tests: `tests/test_translation.py`, the English
+  in `tests/test_legal_uploads.py` and `tests/test_legal_editor.py`, the pages'
+  `*.test.tsx`.
+
 ## Not built
 
 - Keeping text typed in the last seconds before an editor lost its lock
