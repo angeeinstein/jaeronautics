@@ -1,21 +1,32 @@
-{#- The template offered on Admin -> Legal Texts: the structure a legal text
-    needs and everything its Markdown can do. Rendered with today's date, so it
-    previews as it is. Not a Jinja page otherwise: no other braces below. -#}
+{#- The template offered on Admin -> Legal Texts and, set up for their team's
+    rules, to a team's leads: the structure a legal text needs and everything
+    its Markdown can do. Rendered with today's date, so it previews as it is.
+    Not a Jinja page otherwise: no other braces below. -#}
 ---
 # The front matter: between the two --- lines, never shown in the text.
-title: "Mustertext"              # the title, as shown and in the PDF's name
-document: "statutes"             # the text's folder: statutes, rules-of-procedure, membership-terms,
+title: "{{ 'Teamordnung' if team else 'Mustertext' }}"{{ ' ' * 13 if team else ' ' * 14 }}# the title, as shown and in the PDF's name
+{%- if team %}
+document: "team-rules"           # a team's rules: team-rules, with the team line below
+{%- else %}
+document: "statutes"             # which text: statutes, rules-of-procedure, membership-terms,
                                  # privacy-policy, webshop-event-terms, legal-notice -- or, for a
                                  # team's rules, team-rules together with the team line below
+{%- endif %}
 language: "de"                   # de for the text that applies, en for its translation
-version: "{{ day }}"             # the version's day; the file is named after it: {{ day }}.md
-effective_from: "{{ day }}"      # the day it applies from; may be later than the version
-status: "draft"                  # draft (not shown) or published
+version: "{{ day }}"            # the day it is written; publishing sets the day it is published
+effective_from: "{{ day }}"     # the day it applies from; chosen again when publishing
+status: "draft"                  # uploaded as a draft; published with the button
 source_revision: "Rev 1"         # optional: the text's own revision, shown beside the date
+{%- if team %}
+team: "{{ team.slug }}"{{ ' ' * [25 - team.slug|length, 1]|max }}# the team's short name
+{%- else %}
 # team: "rocket-team"            # only for a team's rules: the team's short name
+{%- endif %}
+# approved_by: "Vorstand"        # optional: who approved it -- asked again when publishing
+# approved_on: "{{ day }}"      # optional: the day it was approved
 ---
 
-This template shows the structure of a legal text and everything its Markdown can do. Upload it on Admin → Legal Texts as it is to see the PDF; replace the content with your text. The file goes to legal/<document>/<language>/<version>.md -- a team's rules to legal/teams/<team>/team-rules/<language>/<version>.md. An English translation is a second file with the same version and document, language "en".
+This template shows the structure of a legal text and everything its Markdown can do. {% if team %}Upload it on your team's Rules page as it is to see the PDF; replace the content with your rules. The association publishes them.{% else %}Upload it on Admin → Legal Texts as it is to see the PDF; replace the content with your text.{% endif %} The file's name does not matter. An English translation is a second file with the same document{% if team %} and team{% endif %}, language "en", uploaded together with it.
 
 A paragraph is lines of text with an empty line before and after. Lines directly below each other are joined into one paragraph.  
 To start a new line without a new paragraph, end the line before with two spaces -- as this one does -- or with a backslash.\

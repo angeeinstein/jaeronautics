@@ -68,3 +68,48 @@ def pdf(slug, version, *, back, team=None, owner=None):
         return prepared(digest)
     return send_file(io.BytesIO(data), mimetype="application/pdf",
                      download_name=legal_pdf.filename(german, team=owner))
+
+
+def waiting_pdf(german, team=None):
+    """A version not shown yet -- a draft, or one whose day has not come -- as its PDF,
+    marked ENTWURF or VORSCHAU on every page (``?prepare=1`` first, as ``pdf``)."""
+    try:
+        path, digest, name = legal_pdf.waiting_ready(german, team)
+        data = None if preparing() else path.read_bytes()
+    except Exception:  # noqa: BLE001
+        current_app.logger.exception("Could not make the PDF of the waiting version %s", german.label)
+        if preparing():
+            return not_prepared()
+        abort(500)
+    if data is None:
+        return prepared(digest)
+    return send_file(io.BytesIO(data), mimetype="application/pdf", download_name=name)
+
+
+def template(team=None):
+    """The Markdown template, dated today and a draft so it previews as it is; for a
+    team's leads, set up as that team's rules."""
+    from flask import render_template
+
+    from ..services.clock import get_membership_today
+
+    day = get_membership_today().isoformat()
+    response = current_app.response_class(
+        render_template("legal/template.md", day=day, team=team), mimetype="text/markdown")
+    response.headers["Content-Disposition"] = f'attachment; filename="{day}.md"'
+    return response
+
+
+def waiting_version(document, team_slug):
+    """The German version a waiting PDF asks for: ``record`` (uploaded in the portal) or
+    ``version`` (a file in legal/); None if there is no such one."""
+    try:
+        if request.args.get("record"):
+            german = legal.record(int(request.args["record"]))
+            if german is None or german.is_translation or (german.slug, german.team) != (document, team_slug):
+                return None
+            return german
+        return legal.find_any(document, legal.AUTHORITATIVE, date.fromisoformat(request.args.get("version", "")),
+                              team=team_slug)
+    except ValueError:
+        return None

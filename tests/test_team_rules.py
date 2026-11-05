@@ -138,7 +138,7 @@ class TestReading:
         german = teams.team_rules(team).version
         html = legal_pdf.render_template(
             legal_pdf.TEMPLATE, sections=legal_pdf._sections(german), german=german,
-            association=legal_pdf.ASSOCIATION, team=team, team_logo="file:///logo.png")
+            association=legal_pdf.ASSOCIATION, team=team, team_logo="file:///logo.png", validity=legal.validity)
         assert 'class="team-mark"' in html and "Rocket" in html
 
     def test_its_logo_is_the_one_file_outside_static_read(self, app):

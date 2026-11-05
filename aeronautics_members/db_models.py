@@ -1860,3 +1860,80 @@ class CardLink(db.Model):
     device = db.relationship("Device")
     card = db.relationship("Card")
 
+
+
+class LegalTextVersion(db.Model):
+    """A version of a legal text uploaded in the portal (services/legal_texts.py,
+    docs/legal-texts-in-portal-plan.md): a draft, or published. The association's
+    texts and the teams' rules alike; the versions in legal/ in the repository
+    are read from there and are not here.
+
+    A published version is the version its day names, the day it was
+    published, and is never changed afterwards -- except a correction within
+    24 hours while nobody has accepted it. A draft's ``version`` is the day it
+    was uploaded until it is published."""
+
+    __tablename__ = "legal_text_versions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    #: The text: statutes, privacy-policy, ... or team-rules.
+    document = db.Column(db.String(40), nullable=False)
+    #: The team whose rules these are; None for the association's own texts.
+    team_slug = db.Column(db.String(64), nullable=True)
+    language = db.Column(db.String(2), nullable=False)
+    #: The English translation of a German version: that version.
+    translation_of_id = db.Column(db.Integer, db.ForeignKey("legal_text_versions.id", ondelete="CASCADE"),
+                                  nullable=True)
+    #: "draft" or "published".
+    status = db.Column(db.String(12), nullable=False, default="draft")
+    version = db.Column(db.Date, nullable=False)
+    effective_from = db.Column(db.Date, nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    #: The text's own revision ("Version 2026.2"), shown with the date.
+    revision = db.Column(db.String(100), nullable=True)
+    #: The Markdown, without its front matter. MEDIUMTEXT on MariaDB.
+    body = db.Column(db.Text(length=4_000_000), nullable=False)
+    #: Approved by whom, and when -- entered when publishing, not checked.
+    approved_by = db.Column(db.String(100), nullable=True)
+    approved_on = db.Column(db.Date, nullable=True)
+    uploaded_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    uploaded_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    published_at = db.Column(db.DateTime, nullable=True)
+    published_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    corrected_at = db.Column(db.DateTime, nullable=True)
+    #: Last saved in the editor.
+    edited_at = db.Column(db.DateTime, nullable=True)
+    #: Counted up by every save: a save names the count it started from, so a second
+    #: person's save over it is refused rather than overwriting it.
+    edit_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    #: Copied from a draft file in legal/ ("privacy-policy/de/2026-10-08.md"): that file
+    #: is no longer listed.
+    imported_from = db.Column(db.String(255), nullable=True)
+
+    uploaded_by = db.relationship("User", foreign_keys=[uploaded_by_user_id])
+    published_by = db.relationship("User", foreign_keys=[published_by_user_id])
+    # Deleted with its German version, by the ORM as well as by the database.
+    translation_of = db.relationship("LegalTextVersion", remote_side=[id], backref=db.backref(
+        "translations", cascade="all, delete-orphan"))
+
+    __table_args__ = (db.Index("ix_legal_text_versions_text", "document", "team_slug", "language"),)
+
+
+class LegalTextSnapshot(db.Model):
+    """An earlier state of a draft of a legal text (``LegalTextVersion``), kept when an
+    editing session starts: *Discard changes* and *History* in the editor go back to one.
+    ``content``: {"german": {"title", "revision", "body"}, "english": {...} or None}."""
+
+    __tablename__ = "legal_text_snapshots"
+
+    id = db.Column(db.Integer, primary_key=True)
+    record_id = db.Column(db.Integer, db.ForeignKey("legal_text_versions.id", ondelete="CASCADE"),
+                          nullable=False, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    content = db.Column(db.JSON, nullable=False)
+
+    created_by = db.relationship("User")
+    # Deleted with its draft, by the ORM as well as by the database.
+    record = db.relationship("LegalTextVersion", backref=db.backref(
+        "snapshots", cascade="all, delete-orphan", order_by="LegalTextSnapshot.id"))

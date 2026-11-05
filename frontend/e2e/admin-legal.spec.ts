@@ -38,11 +38,61 @@ test.describe('legal texts', () => {
         timeout: 60_000,
       }),
       page.waitForEvent('popup', { timeout: 60_000 }),
-      page.getByRole('button', { name: 'Make the PDF' }).click(),
+      page.getByRole('button', { name: 'Preview PDF' }).click(),
     ]);
 
     expect(made.status()).toBe(200);
     expect(made.headers()['content-type']).toBe('application/pdf');
+  });
+
+  test('the template uploaded as a draft is listed, and deleted again', async ({ page }) => {
+    await page.goto('/admin/legal');
+    const template = await page.request.get('/admin/legal/template');
+
+    await page
+      .locator('input[type="file"]')
+      .first()
+      .setInputFiles({ name: 'anything.md', mimeType: 'text/markdown', buffer: await template.body() });
+    await page.getByRole('button', { name: 'Upload as draft' }).click();
+
+    const waiting = page.getByRole('region', { name: 'Not in force yet', exact: true });
+    const draft = waiting.getByRole('listitem').filter({ hasText: 'Mustertext' });
+    await expect(draft).toContainText('Uploaded');
+    await draft.getByRole('button', { name: 'Delete' }).click();
+    await draft.getByRole('button', { name: 'Yes, delete' }).click();
+    await expect(draft).toHaveCount(0);
+  });
+
+  test('a new version written in the editor saves itself, is discarded, and deleted again', async ({
+    page,
+  }) => {
+    test.slow();
+    await page.goto('/admin/legal');
+    const panel = page.getByRole('region', { name: 'Write a new version', exact: true });
+    await panel.getByLabel('Text', { exact: true }).click();
+    await page.getByRole('option', { name: 'Impressum' }).click();
+    await panel.getByRole('button', { name: 'Write' }).click();
+    await page.waitForURL(/\/admin\/legal\/drafts\/\d+$/);
+
+    const text = page.getByRole('textbox', { name: 'German text, Markdown' });
+    await text.click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type('\n\nEin neuer Absatz aus dem Test.');
+    await expect(page.getByText(/^Saved/)).toBeVisible({ timeout: 10_000 });
+
+    await page.getByRole('button', { name: 'Discard changes' }).click();
+    await expect(text).not.toContainText('Ein neuer Absatz aus dem Test.');
+    await expect(page.getByText(/^Saved/)).toBeVisible({ timeout: 10_000 });
+
+    await page.goto('/admin/legal');
+    const draft = page
+      .getByRole('region', { name: 'Not in force yet', exact: true })
+      .getByRole('listitem')
+      .filter({ hasText: 'Impressum' })
+      .filter({ hasText: 'Uploaded' });
+    await draft.getByRole('button', { name: 'Delete' }).click();
+    await draft.getByRole('button', { name: 'Yes, delete' }).click();
+    await expect(draft).toHaveCount(0);
   });
 
   test('on a phone nothing sticks out of the page', async ({ page, isMobile }) => {

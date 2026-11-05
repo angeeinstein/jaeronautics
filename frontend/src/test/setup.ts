@@ -47,3 +47,8 @@ Object.defineProperty(document, 'fonts', {
 
 // Nor scrollIntoView, which a Select's dropdown calls to show the chosen option.
 Element.prototype.scrollIntoView = () => undefined;
+
+// jsdom lays nothing out; CodeMirror measures text ranges (components/legal/MarkdownEditor.tsx).
+const noRects = () => ({ length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] });
+Range.prototype.getClientRects = noRects;
+Range.prototype.getBoundingClientRect = () => new DOMRect();

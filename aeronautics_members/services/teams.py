@@ -96,12 +96,15 @@ class TeamPermission:
     #: Who checked in and out at its readers, how many hours, corrections, the
     #: switch (docs/attendance-plan.md).
     ATTENDANCE = "team.attendance"
+    #: Upload drafts of the team's own rules, and see them; publishing them is
+    #: the association's (docs/legal-texts-in-portal-plan.md).
+    RULES = "team.rules"
 
     ALL = frozenset({
         VIEW_MEMBERS, REVIEW_APPLICATIONS, REMOVE_MEMBERS,
         WRITE_NOTES, EXPORT, EDIT_SETTINGS, SEND_ACCESS_LIST,
         VIEW_MONEY, EDIT_BANK_DETAILS, APPOINT_TREASURER, APPOINT_LEADS, EDIT_PRICES, MESSAGES, DEVICES,
-        ATTENDANCE,
+        ATTENDANCE, RULES,
     })
     #: The team's money, the account it is paid to, its prices and the readers
     #: that sell them -- nothing about people.

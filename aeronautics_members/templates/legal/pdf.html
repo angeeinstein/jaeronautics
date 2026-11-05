@@ -108,7 +108,7 @@ body { margin: 0; }
         {{ brand() }}
         <p class="notice">This is an English translation for convenience. It may contain mistakes. Where it differs from the German version before it, the German version applies.</p>
         <h1 class="doc-title">{{ v.title }}</h1>
-        <p class="meta">Version of {{ v.version|date_display }}{% if v.revision %} ({{ v.revision }}){% endif %}{% if v.effective_from != v.version %} · in force from {{ v.effective_from|date_display }}{% endif %}</p>
+        <p class="meta">{{ validity(v) }}</p>
     </header>
     {% if section.contents|length >= 3 %}
     <nav class="toc"><h2>Contents</h2><ol>{% for anchor, label, level in section.contents %}<li class="level-{{ level }}"><a href="#{{ anchor }}">{{ label }}</a></li>{% endfor %}</ol></nav>
@@ -118,7 +118,7 @@ body { margin: 0; }
     <header class="cover" data-footer="{{ owner }} · {{ v.title }} · Fassung vom {{ v.version|date_display }}" data-page="Seite" data-of="von">
         {{ brand() }}
         <h1 class="doc-title">{{ v.title }}</h1>
-        <p class="meta">Fassung vom {{ v.version|date_display }}{% if v.revision %} ({{ v.revision }}){% endif %}{% if v.effective_from != v.version %} · gültig ab {{ v.effective_from|date_display }}{% endif %}</p>
+        <p class="meta">{{ validity(v) }}</p>
         {% if sections|length > 1 %}<p class="meta">Englische Übersetzung (English translation): Seite <a class="pageref" href="#part-en"></a></p>{% endif %}
     </header>
     {% if section.contents|length >= 3 %}

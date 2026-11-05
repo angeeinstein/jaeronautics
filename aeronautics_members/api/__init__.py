@@ -30,6 +30,7 @@ from . import (  # noqa: F401 -- registers their endpoints
     email_settings,
     form_options,
     legal,
+    legal_editor,
     mailings,
     messages,
     presence,

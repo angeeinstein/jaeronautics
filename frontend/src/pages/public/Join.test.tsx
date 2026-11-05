@@ -89,6 +89,7 @@ const statutes: Schemas['LegalTextOut'] = {
   version: '2026-01-01',
   revision: null,
   effective_from: '2026-01-01',
+  validity: 'Gültig ab 01.01.2026',
   in_force: '2026-01-01',
   html: '<p>Der Verein führt den Namen.</p>',
   contents: [],

@@ -838,3 +838,104 @@ def team_treasurer_dismiss(slug, user_id):
     teams_service.dismiss_treasurer(current_user, team, user_id)
     _commit()
     return _roles_out(team)
+
+
+# --- Its rules ----------------------------------------------------------------------------
+# The leads upload drafts of their own rules; the association publishes them
+# (services/legal_uploads.py, docs/legal-texts-in-portal-plan.md).
+
+
+class RulesInForceOut(Model):
+    title: str
+    #: The line under its title ("Gültig ab … · genehmigt vom Vorstand am …").
+    validity: str
+    page_url: str
+    pdf_url: str
+
+
+class RulesWaitingOut(Model):
+    title: str
+    #: draft: not published yet; scheduled: published, applies from a later day.
+    status: Literal["draft", "scheduled"]
+    version: date
+    effective_from: date
+    has_english: bool
+    #: Marked ENTWURF or VORSCHAU; open it with ``?prepare=1`` first.
+    pdf_url: str
+    #: Uploaded in the portal: its id. None: a file in legal/.
+    record_id: int | None = None
+    uploaded_at: UtcDateTime | None = None
+    uploaded_by: str | None = None
+    #: A draft uploaded in the portal: the leads may delete it.
+    deletable: bool = False
+
+
+class TeamRulesOut(Model):
+    in_force: RulesInForceOut | None
+    #: Newest first.
+    waiting: list[RulesWaitingOut]
+    #: The Markdown template, set up for this team.
+    template_url: str
+
+
+class RulesUploadedOut(TeamRulesOut):
+    record_id: int
+
+
+def _rules_out(team):
+    from ..db_models import LegalTextVersion
+    from ..services import legal_texts as legal
+
+    rules = teams_service.team_rules(team)
+    in_force = None
+    if rules is not None:
+        in_force = RulesInForceOut(
+            title=rules.version.title, validity=legal.validity(rules.version),
+            page_url=url_for("teams.team_rules_text", slug=team.slug),
+            pdf_url=url_for("teams.team_rules_pdf", slug=team.slug))
+    waiting = []
+    for version in legal.waiting(legal.TEAM_RULES, team=team.slug):
+        record = db.session.get(LegalTextVersion, version.record_id) if version.record_id else None
+        waiting.append(RulesWaitingOut(
+            title=version.title, status="draft" if version.status == "draft" else "scheduled",
+            version=version.version, effective_from=version.effective_from,
+            has_english=legal.translation_any(version) is not None,
+            pdf_url=url_for("teams.team_rules_waiting_pdf", slug=team.slug,
+                            **({"record": record.id} if record else {"version": version.version.isoformat()})),
+            record_id=version.record_id, uploaded_at=record.uploaded_at if record else None,
+            uploaded_by=_name(record.uploaded_by) if record and record.uploaded_by else None,
+            deletable=record is not None and record.status == "draft"))
+    waiting.sort(key=lambda item: (item.uploaded_at is not None, item.uploaded_at or item.version), reverse=True)
+    return TeamRulesOut(in_force=in_force, waiting=waiting,
+                        template_url=url_for("teams.team_rules_template", slug=team.slug))
+
+
+@endpoint("GET", "/teams/<slug>/manage/rules", response=TeamRulesOut, tag=TAG)
+def team_rules_manage(slug):
+    """The team's rules in force, and the versions waiting: drafts and those published for a later day."""
+    return _rules_out(_managed(slug, P.RULES))
+
+
+@endpoint("POST", "/teams/<slug>/manage/rules/drafts", response=RulesUploadedOut, tag=TAG,
+          uploads={"german": True, "english": False})
+def team_rules_upload(slug, files):
+    """Upload a draft of the team's rules, and its English translation if there is one. The
+    association's admins are told and publish it. What is wrong is a 400 with ``details.problems``."""
+    from ..services import legal_uploads
+    from .admin_legal import _uploads
+
+    team = _managed(slug, P.RULES)
+    record = legal_uploads.upload_draft(current_user, *_uploads(files), team=team)
+    _commit()
+    return RulesUploadedOut(record_id=record.id, **_rules_out(team).model_dump())
+
+
+@endpoint("DELETE", "/teams/<slug>/manage/rules/drafts/<int:record_id>", response=TeamRulesOut, tag=TAG)
+def team_rules_delete_draft(slug, record_id):
+    """Delete a draft of the team's rules; a published version is never deleted."""
+    from ..services import legal_uploads
+
+    team = _managed(slug, P.RULES)
+    legal_uploads.delete_draft(current_user, record_id, team=team)
+    _commit()
+    return _rules_out(team)

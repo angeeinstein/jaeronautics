@@ -3301,6 +3301,44 @@
         "title": "ChannelHealth",
         "type": "object"
       },
+      "CheckIn": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "default": "",
+            "title": "Body",
+            "type": "string"
+          },
+          "language": {
+            "default": "de",
+            "enum": [
+              "de",
+              "en"
+            ],
+            "title": "Language",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Revision"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "CheckIn",
+        "type": "object"
+      },
       "CheckOut": {
         "additionalProperties": false,
         "properties": {
@@ -3336,6 +3374,36 @@
           "detail"
         ],
         "title": "CheckOut",
+        "type": "object"
+      },
+      "CheckedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "contents": {
+            "items": {
+              "$ref": "#/components/schemas/SectionOut"
+            },
+            "title": "Contents",
+            "type": "array"
+          },
+          "html": {
+            "title": "Html",
+            "type": "string"
+          },
+          "problems": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Problems",
+            "type": "array"
+          }
+        },
+        "required": [
+          "html",
+          "contents",
+          "problems"
+        ],
+        "title": "CheckedOut",
         "type": "object"
       },
       "ChecklistOut": {
@@ -4040,6 +4108,54 @@
           "has_attachments"
         ],
         "title": "ContactReplyOut",
+        "type": "object"
+      },
+      "ContentOut": {
+        "additionalProperties": false,
+        "properties": {
+          "english": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TextOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "german": {
+            "$ref": "#/components/schemas/TextOut"
+          }
+        },
+        "required": [
+          "german",
+          "english"
+        ],
+        "title": "ContentOut",
+        "type": "object"
+      },
+      "CorrectIn": {
+        "additionalProperties": false,
+        "properties": {
+          "english": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TextIn"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "german": {
+            "$ref": "#/components/schemas/TextIn"
+          }
+        },
+        "required": [
+          "german"
+        ],
+        "title": "CorrectIn",
         "type": "object"
       },
       "CorrectionIn": {
@@ -6954,6 +7070,20 @@
         "title": "DoneOut",
         "type": "object"
       },
+      "DraftDeletedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "DraftDeletedOut",
+        "type": "object"
+      },
       "DraftIn": {
         "additionalProperties": false,
         "properties": {
@@ -6982,6 +7112,165 @@
           "body"
         ],
         "title": "DraftIn",
+        "type": "object"
+      },
+      "EditorOut": {
+        "additionalProperties": false,
+        "properties": {
+          "approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By"
+          },
+          "approved_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved On"
+          },
+          "back_url": {
+            "title": "Back Url",
+            "type": "string"
+          },
+          "document": {
+            "title": "Document",
+            "type": "string"
+          },
+          "edit_count": {
+            "title": "Edit Count",
+            "type": "integer"
+          },
+          "edited_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited At"
+          },
+          "effective_from": {
+            "format": "date",
+            "title": "Effective From",
+            "type": "string"
+          },
+          "english": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TextOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "german": {
+            "$ref": "#/components/schemas/TextOut"
+          },
+          "in_force": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InForceTextOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "may_publish": {
+            "title": "May Publish",
+            "type": "boolean"
+          },
+          "mode": {
+            "enum": [
+              "draft",
+              "correcting"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "opened_snapshot_id": {
+            "title": "Opened Snapshot Id",
+            "type": "integer"
+          },
+          "pdf_url": {
+            "title": "Pdf Url",
+            "type": "string"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "integer"
+          },
+          "snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/SnapshotOut"
+            },
+            "title": "Snapshots",
+            "type": "array"
+          },
+          "team": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team"
+          },
+          "team_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Name"
+          }
+        },
+        "required": [
+          "record_id",
+          "document",
+          "name",
+          "team",
+          "team_name",
+          "mode",
+          "german",
+          "english",
+          "edit_count",
+          "edited_at",
+          "in_force",
+          "opened_snapshot_id",
+          "snapshots",
+          "pdf_url",
+          "back_url",
+          "may_publish",
+          "approved_by",
+          "approved_on",
+          "effective_from"
+        ],
+        "title": "EditorOut",
         "type": "object"
       },
       "EmailAddressOut": {
@@ -9249,6 +9538,38 @@
         "title": "IdentityOut",
         "type": "object"
       },
+      "ImportIn": {
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "title": "Document",
+            "type": "string"
+          },
+          "team": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Team"
+          },
+          "version": {
+            "format": "date",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document",
+          "version"
+        ],
+        "title": "ImportIn",
+        "type": "object"
+      },
       "ImportOut": {
         "additionalProperties": false,
         "properties": {
@@ -9291,6 +9612,11 @@
       "InForce": {
         "additionalProperties": false,
         "properties": {
+          "correctable": {
+            "default": false,
+            "title": "Correctable",
+            "type": "boolean"
+          },
           "effective_from": {
             "format": "date",
             "title": "Effective From",
@@ -9303,6 +9629,18 @@
           "pdf_url": {
             "title": "Pdf Url",
             "type": "string"
+          },
+          "record_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Record Id"
           },
           "revision": {
             "anyOf": [
@@ -9330,6 +9668,10 @@
             "title": "Title",
             "type": "string"
           },
+          "validity": {
+            "title": "Validity",
+            "type": "string"
+          },
           "version": {
             "format": "date",
             "title": "Version",
@@ -9342,10 +9684,41 @@
           "version",
           "revision",
           "effective_from",
+          "validity",
           "page_url",
           "pdf_url"
         ],
         "title": "InForce",
+        "type": "object"
+      },
+      "InForceTextOut": {
+        "additionalProperties": false,
+        "description": "The version in force, for the comparison.",
+        "properties": {
+          "english": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TextOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "german": {
+            "$ref": "#/components/schemas/TextOut"
+          },
+          "validity": {
+            "title": "Validity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "german",
+          "english",
+          "validity"
+        ],
+        "title": "InForceTextOut",
         "type": "object"
       },
       "InviteIn": {
@@ -9836,6 +10209,11 @@
             "title": "In Force",
             "type": "array"
           },
+          "may_publish": {
+            "default": false,
+            "title": "May Publish",
+            "type": "boolean"
+          },
           "pdf_jobs": {
             "items": {
               "$ref": "#/components/schemas/PdfJob"
@@ -9864,6 +10242,14 @@
           "template_url": {
             "title": "Template Url",
             "type": "string"
+          },
+          "texts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WritableText"
+            },
+            "title": "Texts",
+            "type": "array"
           },
           "waiting": {
             "items": {
@@ -10011,6 +10397,10 @@
             "title": "Title",
             "type": "string"
           },
+          "validity": {
+            "title": "Validity",
+            "type": "string"
+          },
           "version": {
             "format": "date",
             "title": "Version",
@@ -10025,6 +10415,7 @@
           "revision",
           "effective_from",
           "in_force",
+          "validity",
           "html",
           "contents",
           "german_url",
@@ -10833,7 +11224,8 @@
                 "team.edit_prices",
                 "team.messages",
                 "team.devices",
-                "team.attendance"
+                "team.attendance",
+                "team.rules"
               ],
               "type": "string"
             },
@@ -10976,6 +11368,8 @@
                 "forum.admin",
                 "forum.moderate",
                 "forum.moderator",
+                "legal.publish",
+                "legal.texts",
                 "logs.view",
                 "messages.receive",
                 "notifications.manage",
@@ -14303,6 +14697,46 @@
         "title": "ProgressOut",
         "type": "object"
       },
+      "PublishIn": {
+        "additionalProperties": false,
+        "properties": {
+          "approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Approved By"
+          },
+          "approved_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Approved On"
+          },
+          "effective_from": {
+            "format": "date",
+            "title": "Effective From",
+            "type": "string"
+          }
+        },
+        "required": [
+          "effective_from"
+        ],
+        "title": "PublishIn",
+        "type": "object"
+      },
       "QueueItem": {
         "additionalProperties": false,
         "properties": {
@@ -15120,6 +15554,35 @@
         "title": "RosterPersonOut",
         "type": "object"
       },
+      "RulesInForceOut": {
+        "additionalProperties": false,
+        "properties": {
+          "page_url": {
+            "title": "Page Url",
+            "type": "string"
+          },
+          "pdf_url": {
+            "title": "Pdf Url",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "validity": {
+            "title": "Validity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "validity",
+          "page_url",
+          "pdf_url"
+        ],
+        "title": "RulesInForceOut",
+        "type": "object"
+      },
       "RulesInfoOut": {
         "additionalProperties": false,
         "properties": {
@@ -15176,6 +15639,130 @@
           "changed_since"
         ],
         "title": "RulesOut",
+        "type": "object"
+      },
+      "RulesUploadedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "in_force": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RulesInForceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "integer"
+          },
+          "template_url": {
+            "title": "Template Url",
+            "type": "string"
+          },
+          "waiting": {
+            "items": {
+              "$ref": "#/components/schemas/RulesWaitingOut"
+            },
+            "title": "Waiting",
+            "type": "array"
+          }
+        },
+        "required": [
+          "in_force",
+          "waiting",
+          "template_url",
+          "record_id"
+        ],
+        "title": "RulesUploadedOut",
+        "type": "object"
+      },
+      "RulesWaitingOut": {
+        "additionalProperties": false,
+        "properties": {
+          "deletable": {
+            "default": false,
+            "title": "Deletable",
+            "type": "boolean"
+          },
+          "effective_from": {
+            "format": "date",
+            "title": "Effective From",
+            "type": "string"
+          },
+          "has_english": {
+            "title": "Has English",
+            "type": "boolean"
+          },
+          "pdf_url": {
+            "title": "Pdf Url",
+            "type": "string"
+          },
+          "record_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Record Id"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "scheduled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "uploaded_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Uploaded At"
+          },
+          "uploaded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Uploaded By"
+          },
+          "version": {
+            "format": "date",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "status",
+          "version",
+          "effective_from",
+          "has_english",
+          "pdf_url"
+        ],
+        "title": "RulesWaitingOut",
         "type": "object"
       },
       "SaidOut": {
@@ -15250,6 +15837,61 @@
           "sellers"
         ],
         "title": "SalesOverviewOut",
+        "type": "object"
+      },
+      "SaveIn": {
+        "additionalProperties": false,
+        "properties": {
+          "edit_count": {
+            "title": "Edit Count",
+            "type": "integer"
+          },
+          "english": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TextIn"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "german": {
+            "$ref": "#/components/schemas/TextIn"
+          }
+        },
+        "required": [
+          "german",
+          "edit_count"
+        ],
+        "title": "SaveIn",
+        "type": "object"
+      },
+      "SavedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "edit_count": {
+            "title": "Edit Count",
+            "type": "integer"
+          },
+          "edited_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited At"
+          }
+        },
+        "required": [
+          "edit_count",
+          "edited_at"
+        ],
+        "title": "SavedOut",
         "type": "object"
       },
       "SchemaOut": {
@@ -16054,6 +16696,37 @@
         "title": "SiteOut",
         "type": "object"
       },
+      "SnapshotOut": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "created_by"
+        ],
+        "title": "SnapshotOut",
+        "type": "object"
+      },
       "SoldItem": {
         "additionalProperties": false,
         "properties": {
@@ -16076,6 +16749,60 @@
           "earned"
         ],
         "title": "SoldItem",
+        "type": "object"
+      },
+      "StartIn": {
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "title": "Document",
+            "type": "string"
+          },
+          "start": {
+            "default": "in_force",
+            "enum": [
+              "in_force",
+              "template"
+            ],
+            "title": "Start",
+            "type": "string"
+          },
+          "team": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Team"
+          }
+        },
+        "required": [
+          "document"
+        ],
+        "title": "StartIn",
+        "type": "object"
+      },
+      "StartedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "editor_url": {
+            "title": "Editor Url",
+            "type": "string"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "record_id",
+          "editor_url"
+        ],
+        "title": "StartedOut",
         "type": "object"
       },
       "Statement": {
@@ -17712,7 +18439,8 @@
                 "team.edit_prices",
                 "team.messages",
                 "team.devices",
-                "team.attendance"
+                "team.attendance",
+                "team.rules"
               ],
               "type": "string"
             },
@@ -18182,6 +18910,39 @@
         "title": "TeamRow",
         "type": "object"
       },
+      "TeamRulesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "in_force": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RulesInForceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "template_url": {
+            "title": "Template Url",
+            "type": "string"
+          },
+          "waiting": {
+            "items": {
+              "$ref": "#/components/schemas/RulesWaitingOut"
+            },
+            "title": "Waiting",
+            "type": "array"
+          }
+        },
+        "required": [
+          "in_force",
+          "waiting",
+          "template_url"
+        ],
+        "title": "TeamRulesOut",
+        "type": "object"
+      },
       "TeamSettings": {
         "additionalProperties": false,
         "properties": {
@@ -18417,6 +19178,66 @@
           "to"
         ],
         "title": "TestSentOut",
+        "type": "object"
+      },
+      "TextIn": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "default": "",
+            "title": "Body",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Revision"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "TextIn",
+        "type": "object"
+      },
+      "TextOut": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "revision",
+          "body"
+        ],
+        "title": "TextOut",
         "type": "object"
       },
       "TextQuery": {
@@ -18794,6 +19615,36 @@
         "additionalProperties": false,
         "description": "A version not shown yet: a draft, or one whose day has not come.",
         "properties": {
+          "approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Approved By"
+          },
+          "approved_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Approved On"
+          },
+          "document": {
+            "default": "",
+            "title": "Document",
+            "type": "string"
+          },
           "effective_from": {
             "format": "date",
             "title": "Effective From",
@@ -18806,6 +19657,18 @@
           "pdf_url": {
             "title": "Pdf Url",
             "type": "string"
+          },
+          "record_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Record Id"
           },
           "revision": {
             "anyOf": [
@@ -18826,6 +19689,18 @@
             "title": "Status",
             "type": "string"
           },
+          "team": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Team"
+          },
           "team_name": {
             "anyOf": [
               {
@@ -18840,6 +19715,30 @@
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "uploaded_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Uploaded At"
+          },
+          "uploaded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Uploaded By"
           },
           "version": {
             "format": "date",
@@ -19042,6 +19941,20 @@
         "title": "UpdatesQuery",
         "type": "object"
       },
+      "UploadedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "record_id": {
+            "title": "Record Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "record_id"
+        ],
+        "title": "UploadedOut",
+        "type": "object"
+      },
       "VersionOut": {
         "additionalProperties": false,
         "properties": {
@@ -19177,6 +20090,42 @@
           "days"
         ],
         "title": "WaitingOut",
+        "type": "object"
+      },
+      "WritableText": {
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "title": "Document",
+            "type": "string"
+          },
+          "has_in_force": {
+            "title": "Has In Force",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "team": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team"
+          }
+        },
+        "required": [
+          "document",
+          "team",
+          "name",
+          "has_in_force"
+        ],
+        "title": "WritableText",
         "type": "object"
       }
     }
@@ -25730,7 +26679,263 @@
           "Admin"
         ],
         "x-permissions": [
-          "settings.general"
+          "legal.texts"
+        ]
+      }
+    },
+    "/api/v1/admin/legal/drafts": {
+      "post": {
+        "operationId": "admin_legal_upload",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "english": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "german": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "german"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Keep a new version as a draft: its Markdown file, and its English translation if there is one.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "legal.texts"
+        ]
+      }
+    },
+    "/api/v1/admin/legal/drafts/{record_id}": {
+      "delete": {
+        "operationId": "admin_legal_delete_draft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftDeletedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Delete a draft, with its translation. A published version is never deleted.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "legal.texts"
+        ]
+      }
+    },
+    "/api/v1/admin/legal/drafts/{record_id}/publish": {
+      "post": {
+        "operationId": "admin_legal_publish",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Publish a draft. Its day is today's; it applies from ``effective_from``. Not to be undone:",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "legal.texts",
+          "legal.publish"
         ]
       }
     },
@@ -25784,7 +26989,7 @@
           "Admin"
         ],
         "x-permissions": [
-          "settings.general"
+          "legal.texts"
         ]
       }
     },
@@ -25858,7 +27063,7 @@
           "Admin"
         ],
         "x-permissions": [
-          "settings.general"
+          "legal.texts"
         ]
       }
     },
@@ -25946,7 +27151,115 @@
           "Admin"
         ],
         "x-permissions": [
-          "settings.general"
+          "legal.texts"
+        ]
+      }
+    },
+    "/api/v1/admin/legal/versions/{record_id}/correct": {
+      "post": {
+        "operationId": "admin_legal_correct",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "english": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "german": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "german"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Replace a published version's text -- within 24 hours of publishing, while nobody has",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "legal.texts",
+          "legal.publish"
         ]
       }
     },
@@ -31713,6 +33026,491 @@
         ]
       }
     },
+    "/api/v1/legal/drafts": {
+      "post": {
+        "operationId": "legal_draft_start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Start a new draft of a text: a copy of the version in force, or the template.",
+        "tags": [
+          "Legal"
+        ]
+      }
+    },
+    "/api/v1/legal/drafts/{record_id}": {
+      "put": {
+        "operationId": "legal_draft_save",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Save a draft as written. Refused (409, ``legal_draft_changed``) when somebody else saved it",
+        "tags": [
+          "Legal"
+        ]
+      }
+    },
+    "/api/v1/legal/drafts/{record_id}/check": {
+      "post": {
+        "operationId": "legal_draft_check",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "One language as written -- saved or not -- rendered as its page will be, and checked.",
+        "tags": [
+          "Legal"
+        ]
+      }
+    },
+    "/api/v1/legal/drafts/{record_id}/correct": {
+      "post": {
+        "operationId": "legal_draft_correct",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrectIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Correct a published version as written in the editor: within 24 hours of publishing, while",
+        "tags": [
+          "Legal"
+        ]
+      }
+    },
+    "/api/v1/legal/drafts/{record_id}/session": {
+      "post": {
+        "operationId": "legal_draft_session",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Start an editing session: the draft as it is now, kept as an earlier state to go back to.",
+        "tags": [
+          "Legal"
+        ]
+      }
+    },
+    "/api/v1/legal/drafts/{record_id}/snapshots/{snapshot_id}": {
+      "get": {
+        "operationId": "legal_draft_snapshot",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "An earlier state of the draft, to go back to in the editor (then saved as any change).",
+        "tags": [
+          "Legal"
+        ]
+      }
+    },
+    "/api/v1/legal/imports": {
+      "post": {
+        "operationId": "legal_draft_import",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Copy a draft file in legal/ into the portal, to be edited and published there (or the",
+        "tags": [
+          "Legal"
+        ]
+      }
+    },
     "/api/v1/legal/{slug}": {
       "get": {
         "operationId": "legal_text_page",
@@ -36349,6 +38147,220 @@
           }
         },
         "summary": "The team's leads and its treasurer, and whom this person may appoint.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/rules": {
+      "get": {
+        "operationId": "team_rules_manage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamRulesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "The team's rules in force, and the versions waiting: drafts and those published for a later day.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/rules/drafts": {
+      "post": {
+        "operationId": "team_rules_upload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "english": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "german": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "german"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulesUploadedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Upload a draft of the team's rules, and its English translation if there is one. The",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/rules/drafts/{record_id}": {
+      "delete": {
+        "operationId": "team_rules_delete_draft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamRulesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Delete a draft of the team's rules; a published version is never deleted.",
         "tags": [
           "Teams"
         ]

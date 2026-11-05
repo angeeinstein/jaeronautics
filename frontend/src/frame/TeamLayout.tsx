@@ -23,6 +23,7 @@ import {
   IconListCheck,
   IconMail,
   IconReceipt,
+  IconScale,
   IconTag,
   IconCpu,
   IconUserShield,
@@ -123,6 +124,7 @@ export function teamSidebar(team: Team): SidebarContent {
             ? { label: 'Access list', to: `${base}/manage/access-list`, icon: IconListCheck }
             : null,
           people ? { label: 'Roles', to: `${base}/manage/roles`, icon: IconUserShield } : null,
+          may(team, 'team.rules') ? { label: 'Rules', to: `${base}/manage/rules`, icon: IconScale } : null,
           attendance && !team.attendance_enabled ? attendanceItem : null,
         ],
       },

@@ -1346,6 +1346,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/legal/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Keep a new version as a draft: its Markdown file, and its English translation if there is one. */
+        post: operations["admin_legal_upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/legal/drafts/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a draft, with its translation. A published version is never deleted. */
+        delete: operations["admin_legal_delete_draft"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/legal/drafts/{record_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish a draft. Its day is today's; it applies from ``effective_from``. Not to be undone: */
+        post: operations["admin_legal_publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/legal/pdfs/forget": {
         parameters: {
             query?: never;
@@ -1391,6 +1442,23 @@ export interface paths {
         put?: never;
         /** A new text as the PDF it will be, from its Markdown file (and its English translation), */
         post: operations["admin_legal_preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/legal/versions/{record_id}/correct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace a published version's text -- within 24 hours of publishing, while nobody has */
+        post: operations["admin_legal_correct"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2688,6 +2756,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/legal/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start a new draft of a text: a copy of the version in force, or the template. */
+        post: operations["legal_draft_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/legal/drafts/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save a draft as written. Refused (409, ``legal_draft_changed``) when somebody else saved it */
+        put: operations["legal_draft_save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/legal/drafts/{record_id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** One language as written -- saved or not -- rendered as its page will be, and checked. */
+        post: operations["legal_draft_check"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/legal/drafts/{record_id}/correct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct a published version as written in the editor: within 24 hours of publishing, while */
+        post: operations["legal_draft_correct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/legal/drafts/{record_id}/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start an editing session: the draft as it is now, kept as an earlier state to go back to. */
+        post: operations["legal_draft_session"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/legal/drafts/{record_id}/snapshots/{snapshot_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An earlier state of the draft, to go back to in the editor (then saved as any change). */
+        get: operations["legal_draft_snapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/legal/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Copy a draft file in legal/ into the portal, to be edited and published there (or the */
+        post: operations["legal_draft_import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/legal/{slug}": {
         parameters: {
             query?: never;
@@ -3633,6 +3820,57 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The team's rules in force, and the versions waiting: drafts and those published for a later day. */
+        get: operations["team_rules_manage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/rules/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload a draft of the team's rules, and its English translation if there is one. The */
+        post: operations["team_rules_upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/rules/drafts/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a draft of the team's rules; a published version is never deleted. */
+        delete: operations["team_rules_delete_draft"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4871,6 +5109,30 @@ export interface components {
             /** Pending */
             pending: number;
         };
+        /** CheckIn */
+        CheckIn: {
+            /**
+             * Body
+             * @default
+             */
+            body?: string;
+            /**
+             * Language
+             * @default de
+             * @enum {string}
+             */
+            language?: "de" | "en";
+            /**
+             * Revision
+             * @default null
+             */
+            revision?: string | null;
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+        };
         /** CheckOut */
         CheckOut: {
             /** Detail */
@@ -4884,6 +5146,15 @@ export interface components {
              * @enum {string}
              */
             state: "ok" | "failed" | "running" | "waiting" | "scheduled" | "skipped";
+        };
+        /** CheckedOut */
+        CheckedOut: {
+            /** Contents */
+            contents: components["schemas"]["SectionOut"][];
+            /** Html */
+            html: string;
+            /** Problems */
+            problems: string[];
         };
         /** ChecklistOut */
         ChecklistOut: {
@@ -5085,6 +5356,17 @@ export interface components {
             quoted?: string | null;
             /** Sent At */
             sent_at: string | null;
+        };
+        /** ContentOut */
+        ContentOut: {
+            english: components["schemas"]["TextOut"] | null;
+            german: components["schemas"]["TextOut"];
+        };
+        /** CorrectIn */
+        CorrectIn: {
+            /** @default null */
+            english?: components["schemas"]["TextIn"] | null;
+            german: components["schemas"]["TextIn"];
         };
         /** CorrectionIn */
         CorrectionIn: {
@@ -6069,6 +6351,11 @@ export interface components {
             message: string;
             team: components["schemas"]["TeamPageOut"];
         };
+        /** DraftDeletedOut */
+        DraftDeletedOut: {
+            /** Deleted */
+            deleted: boolean;
+        };
         /** DraftIn */
         DraftIn: {
             /** Body */
@@ -6081,6 +6368,50 @@ export interface components {
             kind?: "news" | "notice";
             /** Subject */
             subject: string;
+        };
+        /** EditorOut */
+        EditorOut: {
+            /** Approved By */
+            approved_by: string | null;
+            /** Approved On */
+            approved_on: string | null;
+            /** Back Url */
+            back_url: string;
+            /** Document */
+            document: string;
+            /** Edit Count */
+            edit_count: number;
+            /** Edited At */
+            edited_at: string | null;
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            english: components["schemas"]["TextOut"] | null;
+            german: components["schemas"]["TextOut"];
+            in_force: components["schemas"]["InForceTextOut"] | null;
+            /** May Publish */
+            may_publish: boolean;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "draft" | "correcting";
+            /** Name */
+            name: string;
+            /** Opened Snapshot Id */
+            opened_snapshot_id: number;
+            /** Pdf Url */
+            pdf_url: string;
+            /** Record Id */
+            record_id: number;
+            /** Snapshots */
+            snapshots: components["schemas"]["SnapshotOut"][];
+            /** Team */
+            team: string | null;
+            /** Team Name */
+            team_name: string | null;
         };
         /** EmailAddressOut */
         EmailAddressOut: {
@@ -6806,6 +7137,21 @@ export interface components {
             /** Year Group */
             year_group: string | null;
         };
+        /** ImportIn */
+        ImportIn: {
+            /** Document */
+            document: string;
+            /**
+             * Team
+             * @default null
+             */
+            team?: string | null;
+            /**
+             * Version
+             * Format: date
+             */
+            version: string;
+        };
         /** ImportOut */
         ImportOut: {
             /** Created */
@@ -6826,6 +7172,11 @@ export interface components {
         /** InForce */
         InForce: {
             /**
+             * Correctable
+             * @default false
+             */
+            correctable?: boolean;
+            /**
              * Effective From
              * Format: date
              */
@@ -6834,17 +7185,34 @@ export interface components {
             page_url: string;
             /** Pdf Url */
             pdf_url: string;
+            /**
+             * Record Id
+             * @default null
+             */
+            record_id?: number | null;
             /** Revision */
             revision: string | null;
             /** Team Name */
             team_name: string | null;
             /** Title */
             title: string;
+            /** Validity */
+            validity: string;
             /**
              * Version
              * Format: date
              */
             version: string;
+        };
+        /**
+         * InForceTextOut
+         * @description The version in force, for the comparison.
+         */
+        InForceTextOut: {
+            english: components["schemas"]["TextOut"] | null;
+            german: components["schemas"]["TextOut"];
+            /** Validity */
+            validity: string;
         };
         /** InviteIn */
         InviteIn: {
@@ -7007,6 +7375,11 @@ export interface components {
         LegalOut: {
             /** In Force */
             in_force: components["schemas"]["InForce"][];
+            /**
+             * May Publish
+             * @default false
+             */
+            may_publish?: boolean;
             /** Pdf Jobs */
             pdf_jobs: components["schemas"]["PdfJob"][];
             /** Preview Max Kb */
@@ -7017,6 +7390,11 @@ export interface components {
             teams_without_rules: string[];
             /** Template Url */
             template_url: string;
+            /**
+             * Texts
+             * @default []
+             */
+            texts?: components["schemas"]["WritableText"][];
             /** Waiting */
             waiting: components["schemas"]["UpcomingVersionOut"][];
         };
@@ -7076,6 +7454,8 @@ export interface components {
             revision: string | null;
             /** Title */
             title: string;
+            /** Validity */
+            validity: string;
             /**
              * Version
              * Format: date
@@ -7356,7 +7736,7 @@ export interface components {
             /** Name */
             name: string;
             /** Permissions */
-            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices" | "team.attendance")[];
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices" | "team.attendance" | "team.rules")[];
             /** Slug */
             slug: string;
         };
@@ -7410,7 +7790,7 @@ export interface components {
             /** Last Name */
             last_name: string | null;
             /** Permissions */
-            permissions: ("accounts.billing" | "accounts.privacy" | "accounts.view" | "admin.access" | "announcements.send" | "approvals.review" | "cards.manage" | "credit.manage" | "devices.manage" | "forum.admin" | "forum.moderate" | "forum.moderator" | "logs.view" | "messages.receive" | "notifications.manage" | "notifications.receive" | "roles.manage" | "settings.credentials" | "settings.general" | "system.backup" | "system.update" | "teams.manage" | "teams.money")[];
+            permissions: ("accounts.billing" | "accounts.privacy" | "accounts.view" | "admin.access" | "announcements.send" | "approvals.review" | "cards.manage" | "credit.manage" | "devices.manage" | "forum.admin" | "forum.moderate" | "forum.moderator" | "legal.publish" | "legal.texts" | "logs.view" | "messages.receive" | "notifications.manage" | "notifications.receive" | "roles.manage" | "settings.credentials" | "settings.general" | "system.backup" | "system.update" | "teams.manage" | "teams.money")[];
             /** Picture Url */
             picture_url: string | null;
             /** Roles */
@@ -8458,6 +8838,24 @@ export interface components {
             /** Steps Expected */
             steps_expected: number | null;
         };
+        /** PublishIn */
+        PublishIn: {
+            /**
+             * Approved By
+             * @default null
+             */
+            approved_by?: string | null;
+            /**
+             * Approved On
+             * @default null
+             */
+            approved_on?: string | null;
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+        };
         /** QueueItem */
         QueueItem: {
             /** At */
@@ -8718,6 +9116,17 @@ export interface components {
             /** University Email */
             university_email: string | null;
         };
+        /** RulesInForceOut */
+        RulesInForceOut: {
+            /** Page Url */
+            page_url: string;
+            /** Pdf Url */
+            pdf_url: string;
+            /** Title */
+            title: string;
+            /** Validity */
+            validity: string;
+        };
         /** RulesInfoOut */
         RulesInfoOut: {
             /** Page Url */
@@ -8736,6 +9145,60 @@ export interface components {
             accepted: string | null;
             /** Changed Since */
             changed_since: boolean;
+            /**
+             * Version
+             * Format: date
+             */
+            version: string;
+        };
+        /** RulesUploadedOut */
+        RulesUploadedOut: {
+            in_force: components["schemas"]["RulesInForceOut"] | null;
+            /** Record Id */
+            record_id: number;
+            /** Template Url */
+            template_url: string;
+            /** Waiting */
+            waiting: components["schemas"]["RulesWaitingOut"][];
+        };
+        /** RulesWaitingOut */
+        RulesWaitingOut: {
+            /**
+             * Deletable
+             * @default false
+             */
+            deletable?: boolean;
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Has English */
+            has_english: boolean;
+            /** Pdf Url */
+            pdf_url: string;
+            /**
+             * Record Id
+             * @default null
+             */
+            record_id?: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "scheduled";
+            /** Title */
+            title: string;
+            /**
+             * Uploaded At
+             * @default null
+             */
+            uploaded_at?: string | null;
+            /**
+             * Uploaded By
+             * @default null
+             */
+            uploaded_by?: string | null;
             /**
              * Version
              * Format: date
@@ -8767,6 +9230,21 @@ export interface components {
         SalesOverviewOut: {
             /** Sellers */
             sellers: components["schemas"]["SellerSalesOut"][];
+        };
+        /** SaveIn */
+        SaveIn: {
+            /** Edit Count */
+            edit_count: number;
+            /** @default null */
+            english?: components["schemas"]["TextIn"] | null;
+            german: components["schemas"]["TextIn"];
+        };
+        /** SavedOut */
+        SavedOut: {
+            /** Edit Count */
+            edit_count: number;
+            /** Edited At */
+            edited_at: string | null;
         };
         /** SchemaOut */
         SchemaOut: {
@@ -9068,6 +9546,15 @@ export interface components {
             /** Teams Label */
             teams_label: string | null;
         };
+        /** SnapshotOut */
+        SnapshotOut: {
+            /** Created At */
+            created_at: string;
+            /** Created By */
+            created_by: string | null;
+            /** Id */
+            id: number;
+        };
         /** SoldItem */
         SoldItem: {
             /** Count */
@@ -9076,6 +9563,29 @@ export interface components {
             earned: number;
             /** Name */
             name: string;
+        };
+        /** StartIn */
+        StartIn: {
+            /** Document */
+            document: string;
+            /**
+             * Start
+             * @default in_force
+             * @enum {string}
+             */
+            start?: "in_force" | "template";
+            /**
+             * Team
+             * @default null
+             */
+            team?: string | null;
+        };
+        /** StartedOut */
+        StartedOut: {
+            /** Editor Url */
+            editor_url: string;
+            /** Record Id */
+            record_id: number;
         };
         /**
          * Statement
@@ -9586,7 +10096,7 @@ export interface components {
             /** Name */
             name: string;
             /** Permissions */
-            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices" | "team.attendance")[];
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices" | "team.attendance" | "team.rules")[];
             /** Photos */
             photos: components["schemas"]["PhotoOut"][];
             /** Picture Url */
@@ -9730,6 +10240,14 @@ export interface components {
              */
             status: "active" | "archived";
         };
+        /** TeamRulesOut */
+        TeamRulesOut: {
+            in_force: components["schemas"]["RulesInForceOut"] | null;
+            /** Template Url */
+            template_url: string;
+            /** Waiting */
+            waiting: components["schemas"]["RulesWaitingOut"][];
+        };
         /** TeamSettings */
         TeamSettings: {
             /** Enabled */
@@ -9805,6 +10323,33 @@ export interface components {
         TestSentOut: {
             /** To */
             to: string;
+        };
+        /** TextIn */
+        TextIn: {
+            /**
+             * Body
+             * @default
+             */
+            body?: string;
+            /**
+             * Revision
+             * @default null
+             */
+            revision?: string | null;
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+        };
+        /** TextOut */
+        TextOut: {
+            /** Body */
+            body: string;
+            /** Revision */
+            revision: string | null;
+            /** Title */
+            title: string;
         };
         /** TextQuery */
         TextQuery: {
@@ -9927,6 +10472,21 @@ export interface components {
          */
         UpcomingVersionOut: {
             /**
+             * Approved By
+             * @default null
+             */
+            approved_by?: string | null;
+            /**
+             * Approved On
+             * @default null
+             */
+            approved_on?: string | null;
+            /**
+             * Document
+             * @default
+             */
+            document?: string;
+            /**
              * Effective From
              * Format: date
              */
@@ -9935,6 +10495,11 @@ export interface components {
             has_english: boolean;
             /** Pdf Url */
             pdf_url: string;
+            /**
+             * Record Id
+             * @default null
+             */
+            record_id?: number | null;
             /** Revision */
             revision: string | null;
             /**
@@ -9942,10 +10507,25 @@ export interface components {
              * @enum {string}
              */
             status: "draft" | "scheduled";
+            /**
+             * Team
+             * @default null
+             */
+            team?: string | null;
             /** Team Name */
             team_name: string | null;
             /** Title */
             title: string;
+            /**
+             * Uploaded At
+             * @default null
+             */
+            uploaded_at?: string | null;
+            /**
+             * Uploaded By
+             * @default null
+             */
+            uploaded_by?: string | null;
             /**
              * Version
              * Format: date
@@ -10010,6 +10590,11 @@ export interface components {
              */
             refresh?: boolean;
         };
+        /** UploadedOut */
+        UploadedOut: {
+            /** Record Id */
+            record_id: number;
+        };
         /** VersionOut */
         VersionOut: {
             /** Branch */
@@ -10045,6 +10630,17 @@ export interface components {
             title: string;
             /** Url */
             url: string | null;
+        };
+        /** WritableText */
+        WritableText: {
+            /** Document */
+            document: string;
+            /** Has In Force */
+            has_in_force: boolean;
+            /** Name */
+            name: string;
+            /** Team */
+            team: string | null;
         };
     };
     responses: never;
@@ -15090,6 +15686,200 @@ export interface operations {
             };
         };
     };
+    admin_legal_upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    english?: string;
+                    /** Format: binary */
+                    german: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_legal_delete_draft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftDeletedOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_legal_publish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     admin_legal_forget_pdfs: {
         parameters: {
             query?: never;
@@ -15244,6 +16034,82 @@ export interface operations {
             };
             /** @description Signed in, without the permission. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_legal_correct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    english?: string;
+                    /** Format: binary */
+                    german: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -19820,6 +20686,384 @@ export interface operations {
             };
         };
     };
+    legal_draft_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    legal_draft_save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    legal_draft_check: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    legal_draft_correct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CorrectIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    legal_draft_session: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EditorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    legal_draft_snapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: number;
+                snapshot_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    legal_draft_import: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     legal_text_page: {
         parameters: {
             query?: {
@@ -23235,6 +24479,163 @@ export interface operations {
             };
             /** @description Not found. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_rules_manage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamRulesOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_rules_upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    english?: string;
+                    /** Format: binary */
+                    german: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RulesUploadedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_rules_delete_draft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                record_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamRulesOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -200,6 +200,47 @@ def team_attendance(slug):
     return app_shell()
 
 
+@teams_bp.route("/teams/<slug>/manage/rules", methods=["GET"])
+@login_required
+def team_rules_drafts(slug):
+    """The team's rules, for its leads: uploading a draft for the association to publish
+    (frontend/src/pages/teams/manage/Rules.tsx)."""
+    team = _team_or_404(slug)
+    _may(team, teams_service.TeamPermission.RULES)
+    return app_shell()
+
+
+@teams_bp.route("/teams/<slug>/manage/rules/drafts/<int:record_id>", methods=["GET"])
+@login_required
+def team_rules_editor(slug, record_id):
+    """A draft of the team's rules in the editor (frontend/src/pages/legal/Editor.tsx)."""
+    team = _team_or_404(slug)
+    _may(team, teams_service.TeamPermission.RULES)
+    return app_shell()
+
+
+@teams_bp.route("/teams/<slug>/manage/rules/waiting.pdf", methods=["GET"])
+@login_required
+def team_rules_waiting_pdf(slug):
+    """The team's rules not in force yet -- a draft, or published for a later day -- as
+    the PDF marked ENTWURF or VORSCHAU: ``record`` (uploaded) or ``version`` (a file in legal/)."""
+    team = _team_or_404(slug)
+    _may(team, teams_service.TeamPermission.RULES)
+    german = legal_pages.waiting_version(legal.TEAM_RULES, team.slug)
+    if german is None:
+        abort(404)
+    return legal_pages.waiting_pdf(german, team)
+
+
+@teams_bp.route("/teams/<slug>/manage/rules/template", methods=["GET"])
+@login_required
+def team_rules_template(slug):
+    """The Markdown template, set up for this team's rules and dated today."""
+    team = _team_or_404(slug)
+    _may(team, teams_service.TeamPermission.RULES)
+    return legal_pages.template(team)
+
+
 @teams_bp.route("/teams/<slug>/manage/<any(details, fee, archive):section>", methods=["GET"])
 @login_required
 def team_admin_settings(slug, section):

@@ -95,7 +95,7 @@ export function adminSidebar(me: Me): SidebarContent {
         label: 'System',
         items: [
           can(me, 'logs.view') ? { label: 'Logs', to: '/admin/logs', icon: IconListDetails } : null,
-          can(me, 'settings.general') ? { label: 'Legal texts', to: '/admin/legal', icon: IconScale } : null,
+          can(me, 'legal.texts') ? { label: 'Legal texts', to: '/admin/legal', icon: IconScale } : null,
           can(me, 'settings.general')
             ? { label: 'Settings', to: '/admin/settings', icon: IconSettings, children: settingsChildren(me) }
             : null,

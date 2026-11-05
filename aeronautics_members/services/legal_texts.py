@@ -42,6 +42,17 @@ approved by the association like its own texts:
 
 with ``team: "rocket"`` in the front matter as well. Every function here takes
 ``team=`` for them; without it, it is about the association's texts.
+
+**Versions uploaded in the portal** (docs/legal-texts-in-portal-plan.md) are
+kept in the database, ``LegalTextVersion``, not in legal/: drafts, and what
+was published from Admin > Legal Texts. Everything here reads both, and to
+the rest of the portal a version is a version wherever it is kept: the
+newest published one whose day has come is in force. A version from the
+database has a ``record_id`` instead of a ``path``; the uploading,
+publishing and correcting is services/legal_uploads.py.
+
+Optional in the front matter of either: ``approved_on`` and ``approved_by``,
+the day the text was approved and by whom ("Vorstand"), shown with it.
 """
 
 import re
@@ -109,10 +120,26 @@ class Version:
     path: Path
     revision: str = None
     team: str = None  # the team's slug, for a team's own text
+    approved_on: date = None
+    approved_by: str = None
+    #: Kept in the database (LegalTextVersion.id) rather than in legal/; ``path`` is None.
+    record_id: int = None
+    #: What changes when the text does: the file's mtime, or the record's correction.
+    stamp: str = ""
 
     @property
     def is_translation(self):
         return self.language != AUTHORITATIVE
+
+    @property
+    def key(self):
+        """Which version this is, for a cache: the file, or the record."""
+        return str(self.path) if self.path is not None else f"record:{self.record_id}"
+
+    @property
+    def label(self):
+        """For a log line: the file, or the record."""
+        return str(self.path) if self.path is not None else f"{self.slug} (uploaded, #{self.record_id})"
 
 
 def texts_dir():
@@ -179,6 +206,8 @@ def _check(path, slug, language, team=None):
             problems.append(f'effective_from "{meta["effective_from"]}" is not a day (YYYY-MM-DD)')
         if meta.get("status") not in (None, "") and meta["status"] not in STATUSES:
             problems.append(f'status is "{meta["status"]}"; it can be {" or ".join(STATUSES)}')
+        if meta.get("approved_on") not in (None, "") and _as_date(meta["approved_on"]) is None:
+            problems.append(f'approved_on "{meta["approved_on"]}" is not a day (YYYY-MM-DD)')
     if problems:
         return None, problems
     return Version(
@@ -187,7 +216,59 @@ def _check(path, slug, language, team=None):
         title=str(meta["title"]).strip(), path=path,
         revision=str(meta["source_revision"]).strip() if meta.get("source_revision") else None,
         team=team,
+        approved_on=_as_date(meta["approved_on"]) if meta.get("approved_on") else None,
+        approved_by=str(meta["approved_by"]).strip() if meta.get("approved_by") else None,
+        stamp=str(path.stat().st_mtime_ns),
     ), []
+
+
+def _from_record(record):
+    return Version(
+        slug=record.document, language=record.language, version=record.version,
+        effective_from=record.effective_from, status=record.status, title=record.title, path=None,
+        revision=record.revision, team=record.team_slug, approved_on=record.approved_on,
+        approved_by=record.approved_by, record_id=record.id,
+        # Changes with every save in the editor and every correction: the render cache follows.
+        stamp=f"{(record.corrected_at or record.published_at or record.uploaded_at).isoformat()}"
+              f"#{record.edit_count or 0}",
+    )
+
+
+def _records(slug, language, team=None):
+    """The versions of a text uploaded in the portal, as Versions: drafts too."""
+    from ..db_models import LegalTextVersion, db
+
+    query = db.select(LegalTextVersion).where(LegalTextVersion.document == slug,
+                                              LegalTextVersion.language == language)
+    query = query.where(LegalTextVersion.team_slug.is_(None) if team is None
+                        else LegalTextVersion.team_slug == team)
+    return [_from_record(record) for record in db.session.execute(query).scalars()]
+
+
+def record(record_id):
+    """A version uploaded in the portal, by its id, as a Version; None if there is none."""
+    from ..db_models import LegalTextVersion, db
+
+    found = db.session.get(LegalTextVersion, record_id)
+    return _from_record(found) if found is not None else None
+
+
+def body(version):
+    """The Markdown of a version, without its front matter."""
+    if version.path is not None:
+        return _read(version.path)[1]
+    from ..db_models import LegalTextVersion, db
+
+    return db.session.get(LegalTextVersion, version.record_id).body
+
+
+def source_bytes(version):
+    """Everything a version's PDF is made from, as bytes: the file, or the record's text and fields."""
+    if version.path is not None:
+        return version.path.read_bytes()
+    fields = (version.title, version.revision, version.effective_from, version.version, version.status,
+              version.approved_on, version.approved_by)
+    return repr(fields).encode() + b"\n" + body(version).encode("utf-8")
 
 
 def _files(slug, language, team=None):
@@ -212,7 +293,16 @@ def versions(slug, language=AUTHORITATIVE, today=None, team=None):
         version, problems = _check(path, slug, language, team)
         if version and version.status == "published" and version.effective_from <= today:
             found.append(version)
+    if _known(slug, language, team):
+        found += [v for v in _records(slug, language, team)
+                  if v.status == "published" and v.effective_from <= today]
     return sorted(found, key=lambda v: (v.effective_from, v.version), reverse=True)
+
+
+def _known(slug, language, team=None):
+    if language not in LANGUAGES:
+        return False
+    return slug in BY_SLUG if team is None else (slug in TEAM_BY_SLUG and bool(TEAM_SLUG.match(team)))
 
 
 def current_version(slug, today=None, team=None):
@@ -235,13 +325,35 @@ def has_language(slug, language, today=None, team=None):
     return bool(versions(slug, language, today, team))
 
 
+def relative(path):
+    """A file's place in legal/: "privacy-policy/de/2026-10-08.md"."""
+    return path.relative_to(texts_dir()).as_posix()
+
+
+def _imported():
+    """The draft files in legal/ copied into the portal for the editor: no longer listed."""
+    from ..db_models import LegalTextVersion, db
+
+    return set(db.session.execute(db.select(LegalTextVersion.imported_from).where(
+        LegalTextVersion.imported_from.is_not(None))).scalars())
+
+
 def _all_versions(slug, language, team=None):
-    """Every version with nothing wrong with it, whatever its status and day."""
+    """Every version with nothing wrong with it, whatever its status and day -- but a draft file
+    copied into the portal (its copy is the draft now)."""
     found = []
+    imported = None
     for path in _files(slug, language, team):
         version, _problems = _check(path, slug, language, team)
-        if version is not None:
-            found.append(version)
+        if version is None:
+            continue
+        if version.status == "draft":
+            imported = _imported() if imported is None else imported
+            if relative(path) in imported:
+                continue
+        found.append(version)
+    if _known(slug, language, team):
+        found += _records(slug, language, team)
     return found
 
 
@@ -256,16 +368,35 @@ def waiting(slug, team=None, today=None):
 
 
 def find_any(slug, language, version_day, team=None):
-    """A version by language and day, shown or not (a draft, one not in force yet), or None."""
-    return next((v for v in _all_versions(slug, language, team) if v.version == version_day), None)
+    """A version in legal/ by language and day, shown or not (a draft, one not in force yet), or None.
+    One uploaded in the portal is found by ``record``: two drafts may share a day."""
+    return next((v for v in _all_versions(slug, language, team)
+                 if v.version == version_day and v.record_id is None), None)
+
+
+def translation_any(version, language="en"):
+    """The translation of a German version, shown or not: of a file by its day, of a record by its link."""
+    if version.record_id is None:
+        return find_any(version.slug, language, version.version, version.team)
+    from ..db_models import LegalTextVersion, db
+
+    found = db.session.execute(db.select(LegalTextVersion).where(
+        LegalTextVersion.translation_of_id == version.record_id,
+        LegalTextVersion.language == language)).scalars().first()
+    return _from_record(found) if found is not None else None
 
 
 def teams_with_texts():
-    """The team slugs that have a folder in legal/teams/."""
+    """The team slugs with rules of their own: a folder in legal/teams/, or uploaded in the portal."""
+    from ..db_models import LegalTextVersion, db
+
     folder = texts_dir() / TEAMS_FOLDER
-    if not folder.is_dir():
-        return []
-    return sorted(path.name for path in folder.iterdir() if path.is_dir() and TEAM_SLUG.match(path.name))
+    found = set()
+    if folder.is_dir():
+        found = {path.name for path in folder.iterdir() if path.is_dir() and TEAM_SLUG.match(path.name)}
+    found |= set(db.session.execute(db.select(LegalTextVersion.team_slug).where(
+        LegalTextVersion.team_slug.is_not(None)).distinct()).scalars())
+    return sorted(found)
 
 
 def available(today=None):
@@ -373,12 +504,11 @@ def render(version):
     they and the second-level headings get anchors and make the contents
     list, as ``(anchor, label, level)``.
     """
-    key = (str(version.path), version.path.stat().st_mtime_ns)
+    key = (version.key, version.stamp)
     if key in _rendered:
         return _rendered[key]
 
-    _meta, body, _problems = _read(version.path)
-    tokens = _markdown.parse(body)
+    tokens = _markdown.parse(body(version))
     contents, taken, kept = [], set(), []
     skip_until, title_dropped = None, False
     for index, token in enumerate(tokens):
@@ -405,3 +535,33 @@ def render(version):
     }
     _rendered[key] = rendered
     return rendered
+
+
+#: Who approved a text, as the line under its title says it; anybody else is named in brackets.
+APPROVED_BY_PHRASES = {
+    "de": {"Vorstand": "vom Vorstand", "Generalversammlung": "von der Generalversammlung"},
+    "en": {"Vorstand": "by the board", "Generalversammlung": "by the general assembly"},
+}
+
+
+def validity(version):
+    """The line under a text's title, in its language: its revision, the day it applies from,
+    and who approved it and when -- "Version 2026.2 · Gültig ab 01.12.2026 · genehmigt vom
+    Vorstand am 10.11.2026". The version's own day stays in the footer of its PDF."""
+    from .membership import format_date_display
+
+    german = version.language == AUTHORITATIVE
+    parts = [version.revision] if version.revision else []
+    parts.append(("Gültig ab " if german else "In force from ") + format_date_display(version.effective_from))
+    if version.approved_by or version.approved_on:
+        phrases = APPROVED_BY_PHRASES["de" if german else "en"]
+        by = phrases.get(version.approved_by) if version.approved_by else None
+        approved = "genehmigt" if german else "approved"
+        if by:
+            approved += f" {by}"
+        if version.approved_on:
+            approved += (" am " if german else " on ") + format_date_display(version.approved_on)
+        if version.approved_by and not by:
+            approved += f" ({version.approved_by})"
+        parts.append(approved)
+    return " · ".join(parts)

@@ -213,7 +213,8 @@ class TestThePreview:
         assert "VORSCHAU_Joanneum-Aeronautics_Statuten_2026-10-05.pdf" in response.headers["Content-Disposition"]
         assert list(legal_dir.iterdir()) == [] and legal.current_version("statutes") is None
         # The preview's files are gone, and nothing read from them is kept either.
-        assert not [key for key in [*legal._parsed, *legal._rendered] if not Path(key[0]).exists()]
+        assert not [key for key in [*legal._parsed, *legal._rendered]
+                    if not str(key[0]).startswith("record:") and not Path(key[0]).exists()]
 
     @pytest.mark.parametrize("status, word", [("draft", "ENTWURF"), ("published", "VORSCHAU")])
     def test_the_word_across_every_page(self, app, client, monkeypatch, status, word):
@@ -231,7 +232,6 @@ class TestThePreview:
         (_md(document="unknown"), None, None, 'document "unknown" is not a text there is'),
         (_md(language="en"), None, None, 'this file must be "de"'),
         (_md(), _md(language="en", version="2026-10-06"), "2026-10-06.md", "must be the translation"),
-        (_md(version="2026-10-06"), None, None, "but the file is named 2026-10-05.md"),
     ])
     def test_what_ci_would_refuse_is_listed_instead(self, app, client, german, english, english_name, problem):
         _login(client, _staff("boss@example.org", "admin").id)
