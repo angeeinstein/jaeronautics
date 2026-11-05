@@ -49,6 +49,8 @@ TIMEOUT_SECONDS = 30
 #: Texts per request: DeepL takes 50 at a time.
 BATCH = 50
 GLOSSARY_MAX = 200
+#: The start of the name of every glossary this portal makes at DeepL.
+GLOSSARY_NAME = "jaeronautics legal texts"
 TERM_MAX = 100
 
 #: Offered on a fresh installation; changed and added to under Settings › Translation.
@@ -222,13 +224,25 @@ def _call(url, *, data=None, headers=None, method="POST"):
 
 
 def _said(exc):
-    if exc.code in (401, 403):
-        return "the key is not accepted"
-    if exc.code == 456:
-        return "this month's characters are used up"
-    if exc.code == 429:
-        return "too many requests just now"
-    return f"error {exc.code}"
+    """What went wrong, in a few words, and the service's own message: a 456 at DeepL is any of
+    several limits (characters, glossaries, a key's own limit), and only the message says which."""
+    reason = {401: "the key is not accepted", 403: "the key is not accepted", 429: "too many requests just now",
+              456: "a limit of the account is reached"}.get(exc.code, f"error {exc.code}")
+    detail = _their_message(exc)
+    return f"{reason} ({detail})" if detail else reason
+
+
+def _their_message(exc):
+    try:
+        body = json.loads(exc.read() or b"{}")
+    except (ValueError, OSError):
+        return ""
+    if isinstance(body, dict) and isinstance(body.get("error"), dict):
+        body = body["error"]  # Azure's shape
+    if not isinstance(body, dict):
+        return ""
+    said = " ".join(" ".join(str(body.get(part) or "").split()) for part in ("message", "detail")).strip()
+    return said[:200]
 
 
 # --- DeepL ---------------------------------------------------------------------------------
@@ -244,27 +258,45 @@ def _deepl_headers(key):
 
 
 def _deepl_glossary(current):
-    """DeepL's glossary id for the glossary as it is now: made anew when it changed."""
+    """DeepL's glossary id for the glossary as it is now: made anew when it changed.
+
+    The id is kept in a setting, but DeepL is also asked which glossaries it holds: one of this
+    portal's made for the same terms is used again, the others are deleted. So none is left over
+    when the setting was not saved -- DeepL takes only a few glossaries on a Free account."""
     if not current["glossary"]:
         return None
     key, fingerprint = current["deepl_key"], _fingerprint(current["glossary"])
+    key_tag = hashlib.sha256(key.encode()).hexdigest()[:8]
     try:
         kept = json.loads(get_settings_map([DEEPL_GLOSSARY_KEY]).get(DEEPL_GLOSSARY_KEY) or "{}")
     except ValueError:
         kept = {}
-    if kept.get("fingerprint") == fingerprint and kept.get("key") == hashlib.sha256(key.encode()).hexdigest()[:8]:
-        return kept.get("id")
-    if kept.get("id"):
-        try:
-            _call(f"{_deepl_base(key)}/v2/glossaries/{kept['id']}", headers=_deepl_headers(key), method="DELETE")
-        except _ServiceError:
-            pass  # an old glossary left over at DeepL does no harm
-    made = _call(f"{_deepl_base(key)}/v2/glossaries", headers=_deepl_headers(key), data={
-        "name": "jaeronautics legal texts", "source_lang": "de", "target_lang": "en", "entries_format": "tsv",
-        "entries": "\n".join(f"{german}\t{english}" for german, english in current["glossary"])})
-    glossary_id = (made or {}).get("glossary_id")
-    set_setting_value(DEEPL_GLOSSARY_KEY, json.dumps({
-        "id": glossary_id, "fingerprint": fingerprint, "key": hashlib.sha256(key.encode()).hexdigest()[:8]}))
+    if kept.get("fingerprint") == fingerprint and kept.get("key") == key_tag and kept.get("id"):
+        return kept["id"]
+    base, headers, wanted = _deepl_base(key), _deepl_headers(key), f"{GLOSSARY_NAME} {fingerprint}"
+    glossary_id = None
+    try:
+        held = (_call(f"{base}/v2/glossaries", headers=headers, method="GET") or {}).get("glossaries") or []
+        for glossary in held:
+            name = str(glossary.get("name") or "")
+            if not name.startswith(GLOSSARY_NAME):
+                continue  # not this portal's
+            if name == wanted and glossary_id is None:
+                glossary_id = glossary.get("glossary_id")
+                continue
+            try:
+                _call(f"{base}/v2/glossaries/{glossary.get('glossary_id')}", headers=headers, method="DELETE")
+            except _ServiceError:
+                pass  # an old glossary left over at DeepL does no harm
+        if glossary_id is None:
+            made = _call(f"{base}/v2/glossaries", headers=headers, data={
+                "name": wanted, "source_lang": "de", "target_lang": "en", "entries_format": "tsv",
+                "entries": "\n".join(f"{german}\t{english}" for german, english in current["glossary"])})
+            glossary_id = (made or {}).get("glossary_id")
+    except _ServiceError as exc:
+        raise _ServiceError(f"the glossary: {exc}") from exc
+    set_setting_value(DEEPL_GLOSSARY_KEY, json.dumps({"id": glossary_id, "fingerprint": fingerprint,
+                                                      "key": key_tag}))
     return glossary_id
 
 

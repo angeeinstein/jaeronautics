@@ -376,11 +376,15 @@ class TranslationTryOut(Model):
 @endpoint("POST", "/admin/settings/translation/<name>/try", response=TranslationTryOut,
           permissions=CREDENTIALS, tag=TAG)
 def admin_settings_translation_try(name):
-    """Translate one sentence with this service only: whether its key works. Nothing is kept."""
+    """Translate one sentence with this service only: whether its key works. The sentence is not
+    kept; DeepL's glossary id, made on the way, is."""
     from ..services import ValidationError
     from ..services import translation
 
     try:
-        return TranslationTryOut(ok=True, message=translation.try_service(name))
+        tried = TranslationTryOut(ok=True, message=translation.try_service(name))
     except ValidationError as exc:
+        db.session.rollback()
         return TranslationTryOut(ok=False, message=str(exc))
+    db.session.commit()
+    return tried

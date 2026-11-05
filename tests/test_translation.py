@@ -19,6 +19,7 @@ class FakeServices:
     def __init__(self):
         self.calls = []
         self.failing = set()
+        self.glossaries = {}  # what DeepL holds: id -> name
 
     def __call__(self, url, *, data=None, headers=None, method="POST"):
         self.calls.append((url, data, headers, method))
@@ -26,9 +27,14 @@ class FakeServices:
         if service in self.failing:
             raise translation._ServiceError("the key is not accepted")
         if method == "DELETE":
+            self.glossaries.pop(url.rsplit("/", 1)[1], None)
             return None
+        if url.endswith("/v2/glossaries") and method == "GET":
+            return {"glossaries": [{"glossary_id": id_, "name": name} for id_, name in self.glossaries.items()]}
         if url.endswith("/v2/glossaries") and method == "POST":
-            return {"glossary_id": "g-1"}
+            made = f"g-{len(self.calls)}"
+            self.glossaries[made] = data["name"]
+            return {"glossary_id": made}
         if url.endswith("/v2/usage"):
             return {"character_count": 1234, "character_limit": 500000}
         if service == "deepl":
@@ -97,15 +103,32 @@ class TestTranslating:
 class TestTheGlossary:
     def test_deepl_gets_a_glossary_of_its_own_made_anew_when_it_changes(self, services):
         _set_up()
+        def made():
+            return [call for call in services.calls if call[0].endswith("/v2/glossaries") and call[3] == "POST"]
+
         translation.translate(["<p>Der Vorstand.</p>"])
-        made = [call for call in services.calls if call[0].endswith("/v2/glossaries")]
-        assert len(made) == 1 and "Vorstand\tboard" in made[0][1]["entries"]
+        assert len(made()) == 1 and "Vorstand\tboard" in made()[0][1]["entries"]
         translation.translate(["<p>Der Verein.</p>"])
-        assert len([call for call in services.calls if call[0].endswith("/v2/glossaries")]) == 1
+        assert len(made()) == 1
 
         set_setting_value(translation.GLOSSARY_KEY, json.dumps([["Vorstand", "executive board"]]))
         translation.translate(["<p>Neu.</p>"])
-        assert len([call for call in services.calls if call[0].endswith("/v2/glossaries")]) == 2
+        assert len(made()) == 2 and len(services.glossaries) == 1  # the old one deleted
+
+    def test_none_left_over_at_deepl_when_its_id_was_not_kept(self, services):
+        # Trying the key once did not keep the id: each translation made another glossary, until
+        # DeepL refused ("a limit of the account is reached").
+        _set_up()
+        services.glossaries = {"g-old": translation.GLOSSARY_NAME, "g-theirs": "another program's"}
+        translation.translate(["<p>Eins.</p>"])
+        mine = {id_ for id_, name in services.glossaries.items() if name.startswith(translation.GLOSSARY_NAME)}
+
+        set_setting_value(translation.DEEPL_GLOSSARY_KEY, "")  # the id lost again
+        translation.translate(["<p>Zwei.</p>"])
+
+        assert services.glossaries.keys() == mine | {"g-theirs"} and len(mine) == 1
+        sent = [call for call in services.calls if call[0].endswith("/v2/translate")]
+        assert [call[1]["glossary_id"] for call in sent] == [next(iter(mine))] * 2
 
     def test_azure_gets_the_english_in_place_not_to_be_translated(self, services):
         _set_up(deepl="", azure="azure-key")
@@ -139,6 +162,32 @@ def test_trying_a_service(services):
 
     assert translation.try_service("deepl").startswith("[DeepL] Der Vorstand")
     assert db.session.query(Translation).count() == 0
+
+
+def test_the_services_own_message_said(app):
+    import io
+    from urllib.error import HTTPError
+
+    def refused(code, body):
+        return translation._said(HTTPError("https://x", code, "", {}, io.BytesIO(body)))
+
+    assert refused(456, b'{"message": "Quota Exceeded", "detail": "Too many glossaries."}') == (
+        "a limit of the account is reached (Quota Exceeded Too many glossaries.)")
+    assert refused(401, b'{"error": {"code": 401000, "message": "Access denied."}}') == (
+        "the key is not accepted (Access denied.)")
+    assert refused(500, b"<html>down</html>") == "error 500"
+
+
+def test_trying_keeps_deepls_glossary(client, services):
+    from test_admin_reviews import _login, _staff
+
+    _login(client, _staff("boss@example.org", "superadmin").id)
+    _set_up()
+
+    for _ in range(2):
+        assert client.post("/api/v1/admin/settings/translation/deepl/try").get_json()["ok"]
+
+    assert len([call for call in services.calls if call[0].endswith("/v2/glossaries") and call[3] == "POST"]) == 1
 
 
 def test_deepls_characters_this_month(services):

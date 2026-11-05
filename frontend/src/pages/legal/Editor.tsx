@@ -877,8 +877,8 @@ function EnglishView({ recordId, part }: { recordId: number; part: Part }) {
   if (translated.data.unavailable) {
     return (
       <Alert color="yellow" variant="light" title="No English just now">
-        {translated.data.unavailable} Publishing does not wait for it: the English is made once a service
-        answers.
+        {translated.data.unavailable.replace(/\.?$/, '.')} Publishing does not wait for it: the English is
+        made once a service answers.
       </Alert>
     );
   }
