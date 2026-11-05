@@ -316,6 +316,21 @@ def find(slug, language, version_day, today=None, team=None):
     return next((v for v in versions(slug, language, today, team) if v.version == version_day), None)
 
 
+def announced(slug, language=AUTHORITATIVE, today=None, team=None):
+    """Published versions whose day has not come, soonest first: readable at their own address
+    before it -- the members are told of them when they are published."""
+    today = today or get_membership_today()
+    return sorted((v for v in _all_versions(slug, language, team)
+                   if v.status == "published" and v.effective_from > today),
+                  key=lambda v: (v.effective_from, v.version))
+
+
+def find_published(slug, language, version_day, today=None, team=None):
+    """A version members may read, by its day: one that may be shown, or one announced for later."""
+    return (find(slug, language, version_day, today, team)
+            or next((v for v in announced(slug, language, today, team) if v.version == version_day), None))
+
+
 def translation(version, language="en", today=None):
     """The translation of a German version into ``language``, if there is one."""
     return find(version.slug, language, version.version, today, version.team)

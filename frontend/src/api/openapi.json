@@ -10397,6 +10397,11 @@
             "title": "Title",
             "type": "string"
           },
+          "upcoming": {
+            "default": false,
+            "title": "Upcoming",
+            "type": "boolean"
+          },
           "validity": {
             "title": "Validity",
             "type": "string"
@@ -13100,8 +13105,26 @@
       "OtherVersionOut": {
         "additionalProperties": false,
         "properties": {
+          "effective_from": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Effective From"
+          },
           "in_force": {
             "title": "In Force",
+            "type": "boolean"
+          },
+          "upcoming": {
+            "default": false,
+            "title": "Upcoming",
             "type": "boolean"
           },
           "url": {

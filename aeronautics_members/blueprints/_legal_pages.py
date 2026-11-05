@@ -19,7 +19,8 @@ def _german(slug, version, team):
         german = legal.current_version(slug, team=team)
     else:
         try:
-            german = legal.find(slug, legal.AUTHORITATIVE, date.fromisoformat(version), team=team)
+            # A version announced for a later day too: the members are told of it ahead.
+            german = legal.find_published(slug, legal.AUTHORITATIVE, date.fromisoformat(version), team=team)
         except ValueError:
             abort(404)
     if german is None:

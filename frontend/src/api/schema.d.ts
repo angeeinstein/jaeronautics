@@ -7454,6 +7454,11 @@ export interface components {
             revision: string | null;
             /** Title */
             title: string;
+            /**
+             * Upcoming
+             * @default false
+             */
+            upcoming?: boolean;
             /** Validity */
             validity: string;
             /**
@@ -8319,8 +8324,18 @@ export interface components {
         };
         /** OtherVersionOut */
         OtherVersionOut: {
+            /**
+             * Effective From
+             * @default null
+             */
+            effective_from?: string | null;
             /** In Force */
             in_force: boolean;
+            /**
+             * Upcoming
+             * @default false
+             */
+            upcoming?: boolean;
             /** Url */
             url: string;
             /**
