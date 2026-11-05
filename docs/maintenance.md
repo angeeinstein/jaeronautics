@@ -1445,8 +1445,8 @@ preview of the text) and by site admins; uploads are made anew as JPEG on the
 server, like members' pictures, and go into backups. Rules are optional and kept by the association as files (see "Legal
 Texts"); a team with rules needs them ticked to apply or join, and each
 membership keeps when they were accepted and which version. A new version
-applies to whoever applies next; members already in are not asked again, and
-their team page says the rules have changed.
+applies to whoever applies next; members already in are not asked again: they
+are emailed when it is published, and their team page says the rules have changed.
 
 **Running a team** (its leads, from the team's side menu: open the team's tile under Teams), in sections:
 *Applications* (invite with the meeting details, approve, not accept),
