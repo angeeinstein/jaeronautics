@@ -15,7 +15,7 @@ import io
 from datetime import date
 from typing import Literal
 
-from flask import current_app, send_file, url_for
+from flask import current_app, g, send_file, url_for
 from flask_login import current_user
 
 from .. import legal_pdf
@@ -75,6 +75,10 @@ class UpcomingVersionOut(Model):
     #: Which text, for *Edit* on a draft file in legal/ (copied into the portal first).
     document: str = ""
     team: str | None = None
+    #: Publishing emails the members unless unticked: the texts accepted at signup, a team's rules.
+    tells_by_default: bool = False
+    #: How many members that email would reach: all active ones, or the team's.
+    members_to_tell: int = 0
 
 
 class PdfJob(Model):
@@ -113,6 +117,14 @@ class LegalOut(Model):
 
 def _team_names():
     return {team.slug: team.name for team in teams_service.all_teams(include_archived=True)}
+
+
+def _members_to_tell(document, team):
+    """Counted once per request and audience: all members, or one team's."""
+    counted = g.setdefault("legal_members_to_tell", {})
+    if team not in counted:
+        counted[team] = legal_uploads.members_to_tell(document, team)
+    return counted[team]
 
 
 def _person(user):
@@ -175,7 +187,8 @@ def admin_legal():
                 uploaded_at=record.uploaded_at if record else None,
                 uploaded_by=_person(record.uploaded_by) if record else None,
                 approved_by=version.approved_by, approved_on=version.approved_on,
-                document=slug, team=team))
+                document=slug, team=team, tells_by_default=legal_uploads.tells_by_default(slug, team),
+                members_to_tell=_members_to_tell(slug, team) if record and record.status == "draft" else 0))
 
     orphans = [f"legal/teams/{slug}/: no team has this short name, so these rules are shown nowhere."
                for slug in legal.teams_with_texts() if slug not in names]
@@ -295,6 +308,10 @@ class PublishIn(Model):
     #: Who approved it ("Vorstand", "Generalversammlung", ...); empty: no approval to name.
     approved_by: str | None = None
     approved_on: date | None = None
+    #: Email the members it applies to; None: as the text's default (``tells_by_default``).
+    tell: bool | None = None
+    #: What changed, a few lines for that email (Markdown).
+    summary: str | None = None
 
 
 @endpoint("POST", "/admin/legal/drafts/<int:record_id>/publish", response=UploadedOut, body=PublishIn,
@@ -303,7 +320,8 @@ def admin_legal_publish(record_id, body):
     """Publish a draft. Its day is today's; it applies from ``effective_from``. Not to be undone:
     a published version is only ever corrected, within 24 hours, while nobody has accepted it."""
     record = legal_uploads.publish(current_user, record_id, effective_from=body.effective_from,
-                                   approved_by=body.approved_by, approved_on=body.approved_on)
+                                   approved_by=body.approved_by, approved_on=body.approved_on,
+                                   tell=body.tell, summary=body.summary)
     db.session.commit()
     return UploadedOut(record_id=record.id)
 

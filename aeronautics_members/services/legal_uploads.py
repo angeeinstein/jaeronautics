@@ -11,6 +11,10 @@ the day it applies from, and, if there was one, who approved it and when.
 From then on it is a version like the files in legal/ (services/legal_texts.py
 reads both).
 
+Published, the members are told by email -- told, never asked: a new
+version applies to everybody from its day (``tell_the_members``; the texts
+accepted at signup and a team's rules by default).
+
 A published version is never changed or deleted, with one exception: it may
 be corrected within ``CORRECTION_WINDOW`` of publishing while nobody has
 accepted it (a typo found a minute later needs no new version). The earlier
@@ -32,6 +36,7 @@ from .clock import get_membership_today, get_now_utc
 
 CORRECTION_WINDOW = timedelta(hours=24)
 APPROVED_BY_MAX = 100
+SUMMARY_MAX = 2000
 
 DRAFT_UPLOADED = "legal_text_draft_uploaded"
 RULES_PUBLISHED = "team_rules_published"
@@ -139,8 +144,18 @@ def _published_versions(record):
             if v.status == "published" and v.record_id != record.id]
 
 
-def publish(actor, record_id, *, effective_from, approved_by=None, approved_on=None):
-    """Publish a draft: today is its version's day; it applies from ``effective_from``."""
+def tells_by_default(document, team_slug):
+    """Whether publishing tells the members unless asked not to: the texts accepted at signup, and a
+    team's rules -- not the legal notice or the webshop terms."""
+    if team_slug is not None:
+        return document == legal.TEAM_RULES
+    text = legal.BY_SLUG.get(document)
+    return bool(text and text.accepted_at_signup)
+
+
+def publish(actor, record_id, *, effective_from, approved_by=None, approved_on=None, tell=None, summary=None):
+    """Publish a draft: today is its version's day; it applies from ``effective_from``. ``tell``: email
+    the members (None: as ``tells_by_default``), with ``summary`` -- what changed -- in it."""
     record = _german_record(record_id)
     if record.status != "draft":
         raise ConflictError("This version is published already.", code="legal_published_already")
@@ -155,6 +170,11 @@ def publish(actor, record_id, *, effective_from, approved_by=None, approved_on=N
     if approved_on is not None and approved_on > today:
         raise ValidationError("An approval cannot be in the future.", details={"fields": {
             "approved_on": "Today or earlier."}})
+    summary = (summary or "").strip() or None
+    if summary is not None and len(summary) > SUMMARY_MAX:
+        raise ValidationError("Too long.", details={"fields": {"summary": f"At most {SUMMARY_MAX} characters."}})
+    if tell is None:
+        tell = tells_by_default(record.document, record.team_slug)
     from .legal_editor import problems_of
 
     problems = problems_of(record)
@@ -177,11 +197,14 @@ def publish(actor, record_id, *, effective_from, approved_by=None, approved_on=N
         row.approved_on = approved_on
         row.published_at = now
         row.published_by = actor
+    told = tell_the_members(actor, record, summary) if tell else None
     log_audit_event("legal", "legal_text_published", actor_user=actor, target_user=actor,
                     metadata={"document": record.document, "team": record.team_slug, "record": record.id,
                               "title": record.title, "version": today.isoformat(),
                               "effective_from": effective_from.isoformat(), "approved_by": approved_by,
-                              "approved_on": approved_on.isoformat() if approved_on else None})
+                              "approved_on": approved_on.isoformat() if approved_on else None,
+                              "members_told": told.recipient_count if told else 0,
+                              "mailing": told.id if told else None})
     if record.team_slug is not None:
         _tell_the_leads(record)
     return record
@@ -295,6 +318,69 @@ def team_drafts(team):
 
 
 # --- Telling people -----------------------------------------------------------------------
+
+
+def _approval(record):
+    """ "approved by the board on 10.11.2026", or "" without an approval."""
+    from .membership import format_date_display
+
+    if not (record.approved_by or record.approved_on):
+        return ""
+    by = legal.APPROVED_BY_PHRASES["en"].get(record.approved_by) if record.approved_by else None
+    words = "approved"
+    if by:
+        words += f" {by}"
+    if record.approved_on:
+        words += f" on {format_date_display(record.approved_on)}"
+    if record.approved_by and not by:
+        words += f" ({record.approved_by})"
+    return words
+
+
+def members_to_tell(document, team_slug):
+    """How many members publishing would email: all active ones, or the team's."""
+    from . import mailings
+
+    if team_slug is None:
+        return mailings.count_for({"scope": mailings.SCOPE_ALL, "kinds": [], "teams": []},
+                                  mailings.NOTICE)["recipients"]
+    team = _team_of(team_slug)
+    return mailings.count_for(None, mailings.TEAM, team=team)["recipients"] if team is not None else 0
+
+
+def tell_the_members(actor, record, summary=None):
+    """A new version published: the members it applies to are told, by email -- which text, from
+    which day, who approved it, what changed, and where to read it. Nothing to accept. Returns the
+    mailing (services/mailings.py), or None when there is nobody to tell."""
+    from ..security_utils import build_public_url
+    from . import mailings
+    from .membership import format_date_display
+
+    team = _team_of(record.team_slug) if record.team_slug else None
+    if record.team_slug and team is None:
+        return None
+    day = format_date_display(record.effective_from)
+    version = record.version.isoformat()
+    if team is None:
+        page = build_public_url("public.legal_text", slug=record.document, language="de", version=version)
+        pdf = build_public_url("public.legal_text_pdf", slug=record.document, version=version)
+        whose, who = f"the **{record.title}**", "everybody"
+    else:
+        page = build_public_url("teams.team_rules_text", slug=team.slug, language="de", version=version)
+        pdf = build_public_url("teams.team_rules_pdf", slug=team.slug, version=version)
+        whose, who = f"the rules of {team.name}, the **{record.title}**", f"everybody in {team.name}"
+    approval = _approval(record)
+    lines = [f"A new version of {whose} has been published. It applies from **{day}**"
+             + (f", {approval}." if approval else "."), ""]
+    if summary:
+        lines += ["What changed:", "", summary, ""]
+    lines += [f"[Read it]({page}) · [PDF]({pdf})", "",
+              f"There is nothing you need to do: from {day} this version applies to {who}."]
+    ending = f": a new version from {day}"
+    title = record.title if len(record.title) + len(ending) <= mailings.SUBJECT_MAX else (
+        record.title[:mailings.SUBJECT_MAX - len(ending) - 1].rstrip() + "…")
+    subject = title + ending
+    return mailings.legal_notice(actor, subject=subject, body="\n".join(lines), team=team)
 
 
 def _publishers():

@@ -21,6 +21,10 @@ allows (Settings › Email: the mail account under Senders, how many per hour
 and per day under What goes out). A failed send is tried again twice. The mailing keeps its counts;
 the recipient rows are forgotten a year later.
 
+**A new version of a legal text** (services/legal_uploads.py): published,
+it is a notice to all active members -- a team's rules, a mailing to the
+team's -- queued with the publishing, not committed on its own.
+
 **The general assembly.** Statutes § 10 (3): every member is invited at
 least two weeks ahead, by email to the address they gave, with the agenda.
 An invitation sent later is refused unless it is confirmed as late.
@@ -337,6 +341,27 @@ def write_to_team(actor, team, *, subject, body, now=None):
                     metadata={"mailing_id": mailing.id, "team_id": team.id, "recipients": mailing.recipient_count})
     db.session.commit()
     return mailing
+
+
+def legal_notice(actor, *, subject, body, team=None, now=None):
+    """The members told of a new version of a legal text: a notice to all active members, or a
+    mailing to a team's active members for its rules. Not committed: it goes with the publishing
+    it tells of. None when there is nobody to tell."""
+    subject, body = _clean_text(subject, body)
+    now = now or get_now_utc()
+    if team is None:
+        audience = {"scope": SCOPE_ALL, "kinds": [], "teams": []}
+        mailing = Mailing(kind=NOTICE, audience=audience, subject=subject, body=body, author_user_id=actor.id,
+                          reply_to=None, status=SENDING, created_at=now)
+        people = people_for(audience)
+    else:
+        mailing = Mailing(team_id=team.id, kind=TEAM, audience={"scope": "team", "kinds": [], "teams": [team.id]},
+                          subject=subject, body=body, author_user_id=actor.id, reply_to=None, status=SENDING,
+                          created_at=now)
+        people = people_for(None, team=team)
+    if not people:
+        return None
+    return _start(mailing, people)
 
 
 def stop(actor, mailing):

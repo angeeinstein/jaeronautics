@@ -22,6 +22,7 @@ from ..permissions import Permission
 from ..services import NotFoundError
 from ..services import legal_editor as editor
 from ..services import legal_texts as legal
+from ..services import legal_uploads
 from ..services.clock import get_membership_today
 from ._core import Model, UtcDateTime, endpoint
 from .admin_legal import _person
@@ -128,6 +129,9 @@ class EditorOut(Model):
     approved_by: str | None
     approved_on: date | None
     effective_from: date
+    #: Publishing emails the members unless unticked, and how many it would reach.
+    tells_by_default: bool = False
+    members_to_tell: int = 0
 
 
 def _text(part):
@@ -171,7 +175,10 @@ def _editor_out(record, opened):
                    for s in reversed(record.snapshots)],
         pdf_url=pdf_url, back_url=back_url,
         may_publish=current_user.can(Permission.LEGAL_TEXTS) and current_user.can(Permission.LEGAL_PUBLISH),
-        approved_by=record.approved_by, approved_on=record.approved_on, effective_from=record.effective_from)
+        approved_by=record.approved_by, approved_on=record.approved_on, effective_from=record.effective_from,
+        tells_by_default=legal_uploads.tells_by_default(record.document, record.team_slug),
+        members_to_tell=legal_uploads.members_to_tell(record.document, record.team_slug)
+        if record.status == "draft" and current_user.can(Permission.LEGAL_PUBLISH) else 0)
 
 
 @endpoint("POST", "/legal/drafts/<int:record_id>/session", response=EditorOut, tag=TAG)

@@ -160,6 +160,8 @@ const DRAFT: LegalOut['waiting'][number] = {
   uploaded_by: 'Lea Lead',
   approved_by: 'Vorstand',
   approved_on: null,
+  tells_by_default: true,
+  members_to_tell: 12,
 };
 
 describe('a version uploaded here', () => {
@@ -193,6 +195,12 @@ describe('a version uploaded here', () => {
     await userEvent.click(within(waiting).getByRole('button', { name: 'Publish' }));
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('genehmigt vom Vorstand');
+    expect(
+      within(dialog).getByRole('checkbox', {
+        name: 'Tell the members by email (12, the members of Rocket Team)',
+      }),
+    ).toBeChecked();
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /What changed/ }), 'Kürzer.');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Publish' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Yes, publish' }));
 
@@ -200,7 +208,12 @@ describe('a version uploaded here', () => {
       expect(calls.some((call) => new URL(call.url).pathname === `${API}/drafts/7/publish`)).toBe(true);
     });
     const sent = calls.find((call) => new URL(call.url).pathname === `${API}/drafts/7/publish`);
-    expect(await sent?.clone().json()).toMatchObject({ approved_by: 'Vorstand', approved_on: null });
+    expect(await sent?.clone().json()).toMatchObject({
+      approved_by: 'Vorstand',
+      approved_on: null,
+      tell: true,
+      summary: 'Kürzer.',
+    });
   });
 
   it('a draft is deleted, asked twice', async () => {

@@ -7195,6 +7195,11 @@
             "title": "May Publish",
             "type": "boolean"
           },
+          "members_to_tell": {
+            "default": 0,
+            "title": "Members To Tell",
+            "type": "integer"
+          },
           "mode": {
             "enum": [
               "draft",
@@ -7247,6 +7252,11 @@
               }
             ],
             "title": "Team Name"
+          },
+          "tells_by_default": {
+            "default": false,
+            "title": "Tells By Default",
+            "type": "boolean"
           }
         },
         "required": [
@@ -14752,6 +14762,30 @@
             "format": "date",
             "title": "Effective From",
             "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Summary"
+          },
+          "tell": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tell"
           }
         },
         "required": [
@@ -19677,6 +19711,11 @@
             "title": "Has English",
             "type": "boolean"
           },
+          "members_to_tell": {
+            "default": 0,
+            "title": "Members To Tell",
+            "type": "integer"
+          },
           "pdf_url": {
             "title": "Pdf Url",
             "type": "string"
@@ -19734,6 +19773,11 @@
               }
             ],
             "title": "Team Name"
+          },
+          "tells_by_default": {
+            "default": false,
+            "title": "Tells By Default",
+            "type": "boolean"
           },
           "title": {
             "title": "Title",

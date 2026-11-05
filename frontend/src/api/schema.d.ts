@@ -6394,6 +6394,11 @@ export interface components {
             /** May Publish */
             may_publish: boolean;
             /**
+             * Members To Tell
+             * @default 0
+             */
+            members_to_tell?: number;
+            /**
              * Mode
              * @enum {string}
              */
@@ -6412,6 +6417,11 @@ export interface components {
             team: string | null;
             /** Team Name */
             team_name: string | null;
+            /**
+             * Tells By Default
+             * @default false
+             */
+            tells_by_default?: boolean;
         };
         /** EmailAddressOut */
         EmailAddressOut: {
@@ -8870,6 +8880,16 @@ export interface components {
              * Format: date
              */
             effective_from: string;
+            /**
+             * Summary
+             * @default null
+             */
+            summary?: string | null;
+            /**
+             * Tell
+             * @default null
+             */
+            tell?: boolean | null;
         };
         /** QueueItem */
         QueueItem: {
@@ -10508,6 +10528,11 @@ export interface components {
             effective_from: string;
             /** Has English */
             has_english: boolean;
+            /**
+             * Members To Tell
+             * @default 0
+             */
+            members_to_tell?: number;
             /** Pdf Url */
             pdf_url: string;
             /**
@@ -10529,6 +10554,11 @@ export interface components {
             team?: string | null;
             /** Team Name */
             team_name: string | null;
+            /**
+             * Tells By Default
+             * @default false
+             */
+            tells_by_default?: boolean;
             /** Title */
             title: string;
             /**

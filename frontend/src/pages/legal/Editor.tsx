@@ -531,6 +531,9 @@ function Workspace({ data }: { data: EditorOut }) {
             effective_from: data.effective_from,
             approved_by: data.approved_by,
             approved_on: data.approved_on,
+            tells_by_default: data.tells_by_default,
+            members_to_tell: data.members_to_tell,
+            team_name: data.team_name,
           }}
           onClose={() => {
             setPublishing(false);
