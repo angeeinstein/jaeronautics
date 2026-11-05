@@ -3,6 +3,11 @@ portal's server -- and on the forum's, where one is set up -- for whoever
 looks after them. Their addresses and the login are settings, entered once;
 the key stays with the person (a password manager), never here.
 
+The command is copied into a terminal, so nothing but a login name and a
+plain address may get into it: checked when saved, and again when shown --
+an IPv6 address with a zone ("fe80::1%eth0", and whatever follows the "%")
+is never one.
+
 The portal's own address is found by itself when none is entered: the one it
 reaches the internet from, as Cloudflare sees it. On a server with its own
 public address (Azure) that is the one to connect to; behind a router at home
@@ -49,7 +54,7 @@ def detected_address():
         with urllib.request.urlopen(request, timeout=5) as response:  # noqa: S310 (a fixed address)
             for line in response.read(4096).decode("utf-8", "replace").splitlines():
                 if line.startswith("ip="):
-                    value = str(ipaddress.ip_address(line[3:].strip()))
+                    value = _plain_address(line[3:])
     except (OSError, ValueError) as exc:
         current_app.logger.info("Could not find this server's public address: %s", exc)
     _detected.update(at=now, value=value)
@@ -57,24 +62,38 @@ def detected_address():
 
 
 def describe(with_forum):
-    """The login, and each server: the address entered, the one found (the portal's)."""
+    """The login, and each server: the address entered, the one found (the portal's). Whatever is
+    saved is checked again: a value that would not make a safe command is not shown."""
     saved = get_settings_map(KEYS)
-    servers = [{"name": "Portal", "address": saved.get(PORTAL_KEY) or None, "detected": detected_address()}]
+    servers = [{"name": "Portal", "address": _plain_address(saved.get(PORTAL_KEY)), "detected": detected_address()}]
     if with_forum:
-        servers.append({"name": "Forum", "address": saved.get(FORUM_KEY) or None, "detected": None})
-    return {"user": saved.get(USER_KEY) or None, "servers": servers}
+        servers.append({"name": "Forum", "address": _plain_address(saved.get(FORUM_KEY)), "detected": None})
+    user = (saved.get(USER_KEY) or "").strip()
+    return {"user": user if _USER.match(user) else None, "servers": servers}
+
+
+def _plain_address(value):
+    """An IP address -- without an IPv6 zone -- or a host name, as written in the command; None
+    when it is neither."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        address = ipaddress.ip_address(value)
+    except ValueError:
+        return value.lower() if _HOST.match(value) else None
+    if getattr(address, "scope_id", None) is not None or "%" in value:
+        return None
+    return str(address)
 
 
 def _address(value, field):
-    value = (value or "").strip()
-    if not value:
+    if not (value or "").strip():
         return ""
-    try:
-        return str(ipaddress.ip_address(value))
-    except ValueError:
-        if _HOST.match(value):
-            return value.lower()
-    raise ValidationError("Not an address.", details={"fields": {field: "An IP address or a host name."}})
+    plain = _plain_address(value)
+    if plain is None:
+        raise ValidationError("Not an address.", details={"fields": {field: "An IP address or a host name."}})
+    return plain
 
 
 def save(actor, *, user, portal_address, forum_address):

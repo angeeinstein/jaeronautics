@@ -64,11 +64,26 @@ class TestShellAccess:
         assert db.session.query(AuditLog).filter_by(event_type="shell_access_changed").count() == 1
 
     @pytest.mark.parametrize("field, value", [("user", "Azure User"), ("portal_address", "203.0.113.7; rm -rf /"),
-                                              ("forum_address", "-oProxyCommand=x")])
+                                              ("forum_address", "-oProxyCommand=x"),
+                                              ("portal_address", "::1%; whoami"),
+                                              ("forum_address", "fe80::1%eth0")])
     def test_what_would_not_make_a_command_is_refused(self, boss, field, value):
         response = send(boss, "PUT", f"{HEALTH}/shell", json={field: value})
 
         assert response.status_code == 400 and field in response.get_json()["error"]["fields"]
+
+    def test_a_value_saved_otherwise_is_not_shown_unless_it_makes_a_safe_command(self, boss):
+        from aeronautics_members.services import shell_access
+        from aeronautics_members.services.settings import set_setting_value
+
+        # Saved before the check, or into the database by hand.
+        set_setting_value(shell_access.USER_KEY, "azureuser; calc")
+        set_setting_value(shell_access.PORTAL_KEY, "::1%; whoami")
+        db.session.commit()
+
+        shell = boss.get(HEALTH).get_json()["shell"]
+
+        assert shell["user"] is None and shell["servers"][0]["address"] is None
 
     def test_the_address_the_server_finds_for_itself(self, boss, app, monkeypatch):
         from aeronautics_members.services import shell_access
