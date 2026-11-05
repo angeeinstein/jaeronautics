@@ -13,12 +13,13 @@ from datetime import date
 from typing import Literal
 
 from flask_login import current_user
+from pydantic import Field
 
 from ..app import limiter
 from ..config import RATELIMIT_ADMIN_EMAIL
 from ..db_models import db
 from ..permissions import Permission
-from ..services import automatic_updates, maintenance
+from ..services import automatic_updates, maintenance, shell_access
 from ..services.diagnostics import collect_system_health
 from ..services.notifications import list_undelivered_emails
 from ..services.clock import get_now_utc
@@ -117,8 +118,27 @@ class NodeOut(Model):
     supported_until: date | None
 
 
+class ForumCurrentOut(Model):
+    """The forum's Discourse (part 5), updated by hand from its own dashboard."""
+
+    url: str
+    #: Its Admin › Updates.
+    update_url: str
+    #: False: it did not answer the portal just now.
+    reachable: bool
+    #: As Discourse writes it ("v2026.10.0-latest +248").
+    installed: str | None
+    #: The newest release; None while Discourse has not asked yet.
+    latest: str | None
+    #: How many releases it is behind.
+    behind: int
+    down_since: UtcDateTime | None
+    #: Since when the portal has seen the newest release out and not installed.
+    behind_since: UtcDateTime | None
+
+
 class CurrentOut(Model):
-    """Staying current (docs/automatic-updates-plan.md, part 4): the portal, Ubuntu, Node.js."""
+    """Staying current (docs/automatic-updates-plan.md, parts 4 and 5): the portal, Ubuntu, Node.js, the forum."""
 
     portal: PortalCurrentOut
     #: Dependabot's updates waiting for a person (open over 14 days); None: GitHub could not be asked.
@@ -131,6 +151,25 @@ class CurrentOut(Model):
     stuck: list[StuckOut]
     #: The step-by-step guide to the next Ubuntu release.
     guide_url: str | None
+    #: None: no forum set up.
+    forum: ForumCurrentOut | None = None
+    #: Run once on the forum's server: its night (deploy/server-night.sh). None without a forum.
+    forum_server_command: str | None = None
+
+
+class ShellServerOut(Model):
+    name: str
+    #: Entered on this page; None: not entered.
+    address: str | None
+    #: The portal's own, as found by itself; None for the forum, or when it cannot be found.
+    detected: str | None
+
+
+class ShellOut(Model):
+    """Shell access (services/shell_access.py): the login and each server's address."""
+
+    user: str | None
+    servers: list[ShellServerOut]
 
 
 class HealthOut(Model):
@@ -146,6 +185,7 @@ class HealthOut(Model):
     #: None when the pages were not fetched (the test suite).
     pages: PagesOut | None = None
     current: CurrentOut
+    shell: ShellOut
 
 
 def _current(current):
@@ -159,6 +199,9 @@ def _current(current):
         node=NodeOut(**build) if build else None,
         stuck=[StuckOut(text=item["text"], link=item["link"]) for item in current["stuck"]],
         guide_url=current["guide_url"],
+        forum=(ForumCurrentOut(**{key: current["forum"][key] for key in ForumCurrentOut.model_fields})
+               if current.get("forum") else None),
+        forum_server_command=current.get("forum_server_command"),
     )
 
 
@@ -179,7 +222,30 @@ def admin_system_health():
         ],
         pages=PagesOut(**{key: health["pages"][key] for key in PagesOut.model_fields}) if health["pages"] else None,
         current=_current(health["current"]),
+        shell=ShellOut(**shell_access.describe(with_forum=bool(health["current"].get("forum")))),
     )
+
+
+class ShellIn(Model):
+    #: The login on both servers ("azureuser"); empty: none entered.
+    user: str = Field(default="", max_length=32)
+    #: Empty: the address the portal finds for itself.
+    portal_address: str = Field(default="", max_length=253)
+    forum_address: str = Field(default="", max_length=253)
+
+
+class ShellSavedOut(Model):
+    #: What changed: "user", "portal_address", "forum_address".
+    changed: list[str]
+
+
+@endpoint("PUT", "/admin/settings/health/shell", body=ShellIn, response=ShellSavedOut, permissions=SYSTEM, tag=TAG)
+def admin_shell_access(body):
+    """The login and the servers' addresses for the shell commands. Never the key: that stays with the person."""
+    changed = shell_access.save(current_user, user=body.user, portal_address=body.portal_address,
+                                forum_address=body.forum_address)
+    db.session.commit()
+    return ShellSavedOut(changed=changed)
 
 
 class RetriedOut(Model):

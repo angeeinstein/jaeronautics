@@ -73,6 +73,35 @@ The portal's **Test connection** button warns when the avatar, email or name
 setting is off, so a forum that has been rebuilt says so the first time
 anybody checks it.
 
+## The forum's server
+
+**Its night**: Ubuntu's security updates and cloudflared at 03:40 in the
+portal's time zone, a restart at 04:00 only when one of them needs it -- the
+same as on the portal's server (`deploy/server-night.sh`,
+`docs/automatic-updates-plan.md`, part 5). Set up once: System health, *Staying
+current*, copy the command under the forum, paste it into a shell on the
+forum's server. Running it again brings that server up to date with the
+script; `sudo /usr/local/lib/forum/server-night.sh remove --name forum` takes
+it away.
+
+**By hand** (the maintainer's choice: a rebuild that fails does not undo
+itself): Discourse and its Docker manager, from Admin › Updates; Docker
+itself and Ubuntu's ordinary updates, with `sudo apt upgrade` before a
+rebuild. The dashboard's *Update* changes Discourse's code and plugins inside
+the running container; only `cd /var/discourse && sudo git pull && sudo
+./launcher rebuild app` renews the container's own Linux, Ruby, PostgreSQL,
+Redis and nginx. System health shows the forum's version and the newest
+release, and emails once when a release has waited 14 days or the forum has
+not answered for an hour.
+
+**Its mail** is set in `containers/app.yml` only (`DISCOURSE_SMTP_ADDRESS`,
+`…_PORT`, `…_USER_NAME`, `…_PASSWORD`, `…_ENABLE_START_TLS`,
+`DISCOURSE_NOTIFICATION_EMAIL`), never in Discourse's settings. A change takes
+effect when the container is made again -- `sudo ./launcher destroy app && sudo
+./launcher start app`, or a rebuild --; the dashboard's *Update* does not read
+`app.yml`. The launcher prints every setting, the password too: leave that
+out of anything pasted elsewhere. Test with Admin › Email › *Send test email*.
+
 ## In the portal
 
 | Setting | Where | Why |

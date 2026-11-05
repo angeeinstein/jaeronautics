@@ -683,6 +683,11 @@ class DiscourseConnectProvider(ForumProvider):
         except Exception as exc:
             raise ForumProviderError(f"Discourse request failed: {exc}") from exc
 
+    def version_check(self):
+        """Discourse's own answer about its version: the installed one, the
+        newest release and how many releases it is behind (System health)."""
+        return self._request("GET", "/admin/version_check.json")
+
     def _sign_sso_payload(self, payload_values):
         payload = urlencode(payload_values)
         encoded = base64.b64encode(payload.encode("utf-8")).decode("utf-8")

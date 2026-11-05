@@ -12,7 +12,10 @@ end -- and what counts as stuck:
 - automatic updates on, and no check for more than a day: the night does not run;
 - Ubuntu's security updates not installed for more than 3 days;
 - a restart an update needs, pending for more than 3 days;
-- Ubuntu's or Node.js's support ending within a year.
+- Ubuntu's or Node.js's support ending within a year;
+- the forum (Discourse, where one is set up) not answering for more than an
+  hour, or a newer Discourse release not installed after 14 days -- it is
+  updated by hand, from its own dashboard (part 5).
 
 Each of those is emailed once -- to whoever may install updates, never a
 daily reminder --, forgotten when it resolves, and emailed again if it comes
@@ -39,6 +42,10 @@ CHECK_MISSING = timedelta(hours=26)
 # Asked at most this often: GitHub answers 60 questions an hour without an account.
 TELL_EVERY = timedelta(hours=1)
 WAITING_CACHE = timedelta(hours=1)
+FORUM_DOWN = timedelta(hours=1)
+# Discourse publishes a release a month; the forum is updated by hand.
+FORUM_BEHIND = timedelta(days=14)
+FORUM_CACHE = timedelta(minutes=10)
 
 # When each Node.js long-term release stops getting fixes (nodejs.org's schedule).
 # The one the front end is built with is NODE_VERSION in .github/workflows/ci.yml.
@@ -60,10 +67,16 @@ CI_FILE = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 GUIDE = "docs/new-release.md"
 
 TOLD_PREFIX = "staying_current.told."
+# Since when the forum has not answered; the release it lacks, and since when.
+# Kept by tell(), the hourly job, so the page only reads them.
+FORUM_DOWN_KEY = "staying_current.forum_down_since"
+FORUM_RELEASE_KEY = "staying_current.forum_release"
+SERVER_NIGHT_SCRIPT = "deploy/server-night.sh"
 TOLD_AT_KEY = "staying_current.checked_at"
 EMAIL_KIND = "updates_need_a_person"
 
 _waiting_cache = {"at": None, "value": None}
+_forum_cache = {"at": None, "value": None}
 
 
 def _aware(moment):
@@ -173,6 +186,93 @@ def portal(now=None):
     }
 
 
+def _stored(key):
+    row = db.session.get(Setting, key)
+    return row.value if row else None
+
+
+def forum(now=None):
+    """The forum's Discourse: the version installed, the newest release, how many
+    releases behind, and since when it has not answered or lacked that release.
+    None where no forum is set up."""
+    from ..forum_service import ForumProviderError
+    from .forum import get_forum_service
+    from .system_update import parse_time
+
+    now = now or get_now_utc()
+    service = get_forum_service()
+    if not service.is_ready():
+        return None
+    if _forum_cache["at"] and now - _forum_cache["at"] < FORUM_CACHE:
+        answer = _forum_cache["value"]
+    else:
+        try:
+            answer = service.provider.version_check()
+        except ForumProviderError:
+            answer = None
+        if not isinstance(answer, dict) or "installed_version" not in answer:
+            answer = None
+        _forum_cache.update(at=now, value=answer)
+    base = service.settings["forum_base_url"].rstrip("/")
+    board = {"url": base, "update_url": f"{base}/admin/update", "reachable": answer is not None,
+             "installed": None, "latest": None, "behind": 0, "checked_at": None,
+             "down_since": parse_time(_stored(FORUM_DOWN_KEY)), "behind_since": None}
+    if answer is not None:
+        board.update(
+            installed=answer.get("installed_describe") or answer.get("installed_version"),
+            latest=answer.get("latest_pretty_version") or answer.get("latest_version"),
+            behind=int(answer.get("missing_versions_count") or 0),
+            checked_at=parse_time(answer.get("updated_at")),
+        )
+    try:
+        release = json.loads(_stored(FORUM_RELEASE_KEY) or "null")
+    except ValueError:
+        release = None
+    if board["behind"] and isinstance(release, dict) and release.get("latest") == board["latest"]:
+        board["behind_since"] = parse_time(release.get("since"))
+    return board
+
+
+def _note_forum(board, now):
+    """Remember since when the forum has not answered, and since when it lacks
+    the newest release -- the hourly job's part, so the page only reads."""
+    from .settings import set_setting_value
+
+    if board is None:
+        set_setting_value(FORUM_DOWN_KEY, None)
+        set_setting_value(FORUM_RELEASE_KEY, None)
+        return
+    if board["reachable"]:
+        set_setting_value(FORUM_DOWN_KEY, None)
+        board["down_since"] = None
+    elif board["down_since"] is None:
+        set_setting_value(FORUM_DOWN_KEY, now.isoformat())
+        board["down_since"] = now
+    if not board["reachable"]:
+        return
+    if not board["behind"]:
+        set_setting_value(FORUM_RELEASE_KEY, None)
+    elif board["behind_since"] is None:
+        set_setting_value(FORUM_RELEASE_KEY, json.dumps({"latest": board["latest"], "since": now.isoformat()}))
+        board["behind_since"] = now
+
+
+def forum_server_command():
+    """The command that sets up the forum's server for the night
+    (deploy/server-night.sh): fetched from this installation's repository and
+    branch, in the portal's time zone. None without a GitHub repository."""
+    from ..config import MEMBERSHIP_TIMEZONE_NAME
+    from . import system_update
+
+    slug = system_update.github_slug()
+    if not slug:
+        return None
+    branch = system_update.tracked_branch() or "main"
+    url = f"https://raw.githubusercontent.com/{slug}/{branch}/{SERVER_NIGHT_SCRIPT}"
+    return (f"curl -fsSL {url} -o /tmp/server-night.sh && "
+            f"sudo bash /tmp/server-night.sh install --name forum --timezone {MEMBERSHIP_TIMEZONE_NAME}")
+
+
 def guide_url():
     from . import system_update
 
@@ -187,11 +287,11 @@ def _date(day):
     return day.strftime("%d.%m.%Y")
 
 
-def stuck(now=None, *, parts=None):
-    """Each thing stuck: ``{"key", "text", "link"}`` -- the key says which, to tell it once."""
+def stuck(now=None, *, parts=None, board=None):
+    """Each thing stuck: ``{"key", "text", "link"}`` -- the key says which, to tell it once.
+    ``board``: the forum as the hourly job has just noted it."""
     now = now or get_now_utc()
-    parts = parts or {"portal": portal(now), "ubuntu": ubuntu(now), "node": node(),
-                      "waiting": waiting_updates(now)}
+    parts = parts or _parts(now, board)
     found = []
     for pull in parts["waiting"] or []:
         found.append({"key": f"waiting:{pull['number']}", "link": pull["url"],
@@ -226,14 +326,33 @@ def stuck(now=None, *, parts=None):
         found.append({"key": f"support:node:{build['major']}", "link": None,
                       "text": f"Node.js {build['major']}, which builds the front end, gets fixes until "
                               f"{_date(build['supported_until'])}: move to the next long-term release before then."})
+    board = parts.get("forum")
+    if board and not board["reachable"]:
+        since = _aware(board["down_since"])
+        if since and now - since > FORUM_DOWN:
+            hours = int((now - since).total_seconds() // 3600)
+            found.append({"key": "forum_down", "link": board["url"],
+                          "text": f"The forum has not answered for {hours} hours."})
+    elif board and board["behind"]:
+        since = _aware(board["behind_since"])
+        if since and now - since > FORUM_BEHIND:
+            found.append({"key": f"forum_behind:{board['latest']}", "link": board["update_url"],
+                          "text": f"A newer Discourse, {board['latest']}, has waited {_days(now - since)} days "
+                                  f"to be installed on the forum (it runs {board['installed']})."})
     return found
+
+
+def _parts(now, board=None):
+    return {"portal": portal(now), "ubuntu": ubuntu(now), "node": node(), "waiting": waiting_updates(now),
+            "forum": board if board is not None else forum(now)}
 
 
 def report(now=None):
     """What System health shows: each part, and what is stuck."""
     now = now or get_now_utc()
-    parts = {"portal": portal(now), "ubuntu": ubuntu(now), "node": node(), "waiting": waiting_updates(now)}
-    return {**parts, "stuck": stuck(now, parts=parts), "guide_url": guide_url()}
+    parts = _parts(now)
+    return {**parts, "stuck": stuck(now, parts=parts), "guide_url": guide_url(),
+            "forum_server_command": forum_server_command() if parts["forum"] else None}
 
 
 # --- Telling a person, once ---------------------------------------------------------------
@@ -268,7 +387,9 @@ def tell(now=None):
     else:
         checked.value = now.isoformat()
 
-    items = stuck(now)
+    board = forum(now)
+    _note_forum(board, now)
+    items = stuck(now, board=board)
     told = {row.key[len(TOLD_PREFIX):]: row for row in db.session.execute(
         db.select(Setting).where(Setting.key.like(f"{TOLD_PREFIX}%"))).scalars()}
     current = {item["key"] for item in items}
