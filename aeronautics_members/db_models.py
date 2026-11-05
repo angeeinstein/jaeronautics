@@ -810,7 +810,8 @@ class ProcessedStripeEvent(db.Model):
 
 class Setting(db.Model):
     key = db.Column(db.String(50), primary_key=True)
-    value = db.Column(db.String(255), nullable=False)
+    # Text: some values are long -- the translation glossary is a JSON list.
+    value = db.Column(db.Text, nullable=False)
 
 
 # Teams: groups inside the association with their own members and leads. A

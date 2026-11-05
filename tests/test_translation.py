@@ -164,6 +164,25 @@ class TestTheSettingsPage:
         assert [s["key_set"] for s in shown["services"]] == [False, True]
         assert "secret" not in str(shown) and shown["glossary"] == [["Verein", "association"]]
 
+    def test_the_default_glossary_saved_whole(self, client, services):
+        # SQLite keeps a value longer than its column; MariaDB refuses it. So the
+        # column itself is checked: the glossary is longer than 255 characters.
+        from api_helpers import send
+        from test_admin_reviews import _login, _staff
+        from aeronautics_members.db_models import Setting
+
+        _login(client, _staff("boss@example.org", "superadmin").id)
+        glossary = [list(pair) for pair in translation.DEFAULT_GLOSSARY] + [[f"Wort {n}", f"word {n}"] for n in range(40)]
+
+        saved = send(client, "PUT", "/api/v1/admin/settings/translation", {
+            "order": ["deepl", "azure"], "deepl_key": "secret:fx", "azure_key": "", "azure_region": "",
+            "glossary": glossary})
+        stored = db.session.get(Setting, translation.GLOSSARY_KEY).value
+
+        assert saved.status_code == 200
+        assert client.get("/api/v1/admin/settings/translation").get_json()["glossary"] == glossary
+        assert len(stored) > 255 and getattr(Setting.__table__.c.value.type, "length", None) is None
+
     def test_only_with_the_credentials_permission(self, client):
         from test_admin_reviews import _login, _staff
 
