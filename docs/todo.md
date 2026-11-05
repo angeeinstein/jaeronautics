@@ -43,9 +43,11 @@ update's warning of local changes only for the portal's own files).
   2026-11-04, are in the repository as a draft:
   `legal/teams/tdt/team-rules/de/2026-11-04.md` (`status: "draft"`, pull
   request "TDT's rules, version 2026.2, as a draft"). When the association's
-  board has approved them (their § 19): `status: "published"`, `version` and
-  `effective_from` the day they apply, the file renamed to that day. From then
-  on applicants accept them; current members see on the team page that the
+  board has approved them (their § 19): published in the portal
+  (`docs/legal-texts-in-portal-plan.md`) -- *Edit* on the draft under Admin ›
+  Legal texts copies the file in, then *Publish* with the day they apply and
+  the board's approval; the file in `legal/` is deleted in the next batch.
+  From then on applicants accept them; current members see on the team page that the
   rules changed (TDT tells them itself, § 19 ii).
 - **Why the text differs from what TDT submitted:** fitted to how the portal
   works -- debits on 01.10. and 01.04. (01.01./01.04. cannot be set for a
@@ -58,14 +60,6 @@ update's warning of local changes only for the portal's own files).
 - **Also settled by it:** the new rules drop the passive status, so the open
   proposal in `docs/team-passive-members.md` is not needed for TDT.
 - **Waiting for:** the association's board.
-
-### Legal texts managed in the portal, not in the repository (being built)
-
-- **Added:** 2026-11-04
-- **Being built** on its own branch, `claude/legal-texts-in-portal`, from
-  2026-11-04; the plan, with everything decided, is
-  `docs/legal-texts-in-portal-plan.md` there. This item goes when that branch
-  is merged.
 
 ### Stripe's Python package: from 13 to 16
 
