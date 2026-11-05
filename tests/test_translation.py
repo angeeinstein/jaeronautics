@@ -145,3 +145,28 @@ def test_deepls_characters_this_month(services):
     _set_up()
 
     assert translation.deepl_usage() == {"used": 1234, "limit": 500000}
+
+
+class TestTheSettingsPage:
+    def test_saved_keys_never_shown_order_and_glossary_kept(self, client, services):
+        from api_helpers import send
+        from test_admin_reviews import _login, _staff
+
+        _login(client, _staff("boss@example.org", "superadmin").id)
+
+        saved = send(client, "PUT", "/api/v1/admin/settings/translation", {
+            "order": ["azure", "deepl"], "deepl_key": "secret:fx", "azure_key": "", "azure_region": "westeurope",
+            "glossary": [["Verein", "association"]]})
+        shown = client.get("/api/v1/admin/settings/translation").get_json()
+
+        assert saved.status_code == 200 and "deepl_key" in saved.get_json()["changed"]
+        assert [s["name"] for s in shown["services"]] == ["azure", "deepl"]
+        assert [s["key_set"] for s in shown["services"]] == [False, True]
+        assert "secret" not in str(shown) and shown["glossary"] == [["Verein", "association"]]
+
+    def test_only_with_the_credentials_permission(self, client):
+        from test_admin_reviews import _login, _staff
+
+        _login(client, _staff("treasurer@example.org", "treasurer").id)
+
+        assert client.get("/api/v1/admin/settings/translation").status_code == 403

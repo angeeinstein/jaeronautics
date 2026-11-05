@@ -1,26 +1,25 @@
 /**
- * The Markdown files of a version of a legal text -- the German one and,
- * if there is one, its English translation -- chosen to upload, and what was
- * wrong with them when the server refused them (``details.problems``). Used
- * for a preview, a draft, a correction (Admin › Legal texts) and a team's
- * rules (its leads' Rules page).
+ * The German Markdown file of a version of a legal text, chosen to upload --
+ * its English is made by machine once it is published
+ * (docs/legal-translation-plan.md) -- and what was wrong with it when the
+ * server refused it (``details.problems``). Used for a preview, a draft, a
+ * correction (Admin › Legal texts), a team's rules (its leads' Rules page)
+ * and *Replace with a file* in the editor.
  */
-import { Alert, FileInput, List, SimpleGrid } from '@mantine/core';
+import { Alert, FileInput, List } from '@mantine/core';
 
 import { ApiError } from '../../api/client';
 
 export interface ChosenFiles {
   german: File | null;
-  english: File | null;
 }
 
-export const NO_FILES: ChosenFiles = { german: null, english: null };
+export const NO_FILES: ChosenFiles = { german: null };
 
 /** The files as the upload endpoints take them. */
 export function formOf(files: ChosenFiles): { german: string } {
   const form = new FormData();
   if (files.german) form.append('german', files.german);
-  if (files.english) form.append('english', files.english);
   // openapi-fetch sends a FormData as it is, with its own Content-Type.
   return form as unknown as { german: string };
 }
@@ -52,27 +51,16 @@ export function LegalFiles({
   onChange: (files: ChosenFiles) => void;
 }) {
   return (
-    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-      <FileInput
-        label="German file"
-        accept=".md,text/markdown,text/plain"
-        placeholder="Choose a .md file"
-        clearable
-        value={value.german}
-        onChange={(file) => {
-          onChange({ ...value, german: file });
-        }}
-      />
-      <FileInput
-        label="English translation (optional)"
-        accept=".md,text/markdown,text/plain"
-        placeholder="Choose a .md file"
-        clearable
-        value={value.english}
-        onChange={(file) => {
-          onChange({ ...value, english: file });
-        }}
-      />
-    </SimpleGrid>
+    <FileInput
+      label="German file"
+      accept=".md,text/markdown,text/plain"
+      placeholder="Choose a .md file"
+      clearable
+      maw={480}
+      value={value.german}
+      onChange={(file) => {
+        onChange({ german: file });
+      }}
+    />
   );
 }

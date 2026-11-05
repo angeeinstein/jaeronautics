@@ -219,7 +219,7 @@ def admin_settings():
 #: A section of the settings, and what it needs beyond the general settings permission.
 SETTINGS_SECTIONS = {
     "general": None, "email": None, "credit": None, "billing": Permission.SETTINGS_CREDENTIALS,
-    "forum": Permission.SETTINGS_CREDENTIALS,
+    "forum": Permission.SETTINGS_CREDENTIALS, "translation": Permission.SETTINGS_CREDENTIALS,
     "health": Permission.SYSTEM_UPDATE, "updates": Permission.SYSTEM_UPDATE, "backup": Permission.SYSTEM_BACKUP,
     "devices": Permission.DEVICES_MANAGE,
 }
@@ -235,7 +235,8 @@ def admin_settings_email_moved(old):
     return redirect(url_for("admin.admin_settings_section", section="email") + "#" + EMAIL_TABS[old])
 
 
-@admin_bp.route("/admin/settings/<any(general, email, billing, credit, forum, health, updates, backup, devices)"
+@admin_bp.route("/admin/settings/<any(general, email, billing, credit, forum, translation, health, updates, backup,"
+                " devices)"
                 ":section>", methods=["GET"])
 @login_required
 @requires(Permission.SETTINGS_GENERAL)

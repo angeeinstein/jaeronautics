@@ -81,6 +81,7 @@
     "/admin/settings/billing",
     "/admin/settings/credit",
     "/admin/settings/forum",
+    "/admin/settings/translation",
     "/admin/settings/devices",
     "/admin/settings/devices/pair",
     "/admin/settings/devices/firmware",

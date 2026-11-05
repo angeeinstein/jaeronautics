@@ -31,12 +31,10 @@ function session(overrides: Partial<Schemas['EditorOut']> = {}): Schemas['Editor
     team_name: null,
     mode: 'draft',
     german: { title: 'Statuten', revision: null, body: '## § 1 Name\n\nDer Verein heißt.' },
-    english: null,
     edit_count: 3,
     edited_at: null,
     in_force: {
       german: { title: 'Statuten', revision: null, body: '## § 1 Name\n\nDer Verein hieß.' },
-      english: null,
       validity: 'Gültig ab 17.03.2019',
     },
     opened_snapshot_id: 21,
@@ -47,7 +45,6 @@ function session(overrides: Partial<Schemas['EditorOut']> = {}): Schemas['Editor
     pdf_url: '/admin/legal/waiting.pdf?document=statutes&record=7',
     markdown_url: '/admin/legal/waiting.md?document=statutes&record=7',
     lock: MINE,
-    english_markdown_url: null,
     back_url: '/admin/legal',
     may_publish: true,
     approved_by: null,
@@ -106,9 +103,8 @@ describe('the editor', () => {
       { timeout: 4000 },
     );
     const sent = calls.find((call) => call.method === 'PUT');
-    expect(await sent?.clone().json()).toMatchObject({
-      german: { title: 'Statuten neu' },
-      english: null,
+    expect(await sent?.clone().json()).toEqual({
+      german: { title: 'Statuten neu', revision: null, body: '## § 1 Name\n\nDer Verein heißt.' },
       edit_count: 3,
     });
     expect(await screen.findByText(/^Saved/)).toBeInTheDocument();
@@ -150,7 +146,7 @@ describe('the editor', () => {
   it('an earlier state put back', async () => {
     const { calls } = show({
       [`GET ${API}/snapshots/20`]: {
-        body: { german: { title: 'Statuten', revision: null, body: 'Früher.' }, english: null },
+        body: { german: { title: 'Statuten', revision: null, body: 'Früher.' } },
       },
     });
 
@@ -166,19 +162,45 @@ describe('the editor', () => {
     expect(calls.some((call) => new URL(call.url).pathname === `${API}/snapshots/20`)).toBe(true);
   });
 
-  it('an English translation added', async () => {
-    show();
+  it('the English, made by machine from the German as written', async () => {
+    const { calls } = show({
+      [`POST ${API}/english`]: {
+        body: { title: 'Statutes', html: '<p>The association is called.</p>', unavailable: null },
+      },
+    });
 
-    await userEvent.click(await screen.findByRole('tab', { name: 'English (none)' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Add an English translation' }));
+    await screen.findByRole('textbox', { name: 'Title' });
+    await userEvent.click(screen.getByRole('radio', { name: 'English' }));
 
-    expect(await screen.findByRole('textbox', { name: 'English text, Markdown' })).toBeInTheDocument();
+    expect(await screen.findByText('The association is called.', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.getByText(/Made by machine from the German/)).toBeInTheDocument();
+    const sent = calls.find((call) => new URL(call.url).pathname === `${API}/english`);
+    expect(await sent?.clone().json()).toMatchObject({ title: 'Statuten' });
+  });
+
+  it('says so when no translation service answers', async () => {
+    show({
+      [`POST ${API}/english`]: {
+        body: {
+          title: '',
+          html: '',
+          unavailable: 'No translation service is set up (Settings › Translation).',
+        },
+      },
+    });
+
+    await screen.findByRole('textbox', { name: 'Title' });
+    await userEvent.click(screen.getByRole('radio', { name: 'English' }));
+
+    expect(
+      await screen.findByText(/No translation service is set up/, {}, { timeout: 5000 }),
+    ).toBeInTheDocument();
   });
 
   it('replaced with a file, as a change undo takes back', async () => {
     const { calls } = show({
       [`POST ${API}/file`]: {
-        body: { german: { title: 'Statuten', revision: 'Rev 2', body: 'Aus der Datei.' }, english: null },
+        body: { german: { title: 'Statuten', revision: 'Rev 2', body: 'Aus der Datei.' } },
       },
     });
 

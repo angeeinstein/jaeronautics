@@ -31,7 +31,11 @@ function settingsChildren(me: Me): NavItem[] {
   // backups with system.backup.
   const children = [page('General', 'general'), page('Email', 'email'), page('Credit', 'credit')];
   if (can(me, 'settings.credentials')) {
-    children.push(page('Membership fee', 'billing'), page('Forum', 'forum'));
+    children.push(
+      page('Membership fee', 'billing'),
+      page('Forum', 'forum'),
+      page('Translation', 'translation'),
+    );
   }
   if (can(me, 'devices.manage')) children.push(page('Devices', 'devices'));
   if (can(me, 'system.update')) children.push(page('System health', 'health'), page('Updates', 'updates'));

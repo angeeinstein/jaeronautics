@@ -1355,7 +1355,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Keep a new version as a draft: its Markdown file, and its English translation if there is one. */
+        /** Keep a new version as a draft: its German Markdown file (the English is made by machine once */
         post: operations["admin_legal_upload"];
         delete?: never;
         options?: never;
@@ -1440,7 +1440,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** A new text as the PDF it will be, from its Markdown file (and its English translation), */
+        /** A new text as the PDF it will be, from its German Markdown file, checked as the build checks */
         post: operations["admin_legal_preview"];
         delete?: never;
         options?: never;
@@ -2309,6 +2309,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/settings/translation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The translation services, their order, DeepL's characters this month, and the glossary. */
+        get: operations["admin_settings_translation"];
+        /** Save them. A changed glossary is used from the next translation on. */
+        put: operations["admin_settings_translation_save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/translation/{name}/try": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Translate one sentence with this service only: whether its key works. Nothing is kept. */
+        post: operations["admin_settings_translation_try"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/settings/updates": {
         parameters: {
             query?: never;
@@ -2799,7 +2834,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** One language as written -- saved or not -- rendered as its page will be, and checked. */
+        /** The German as written -- saved or not -- rendered as its page will be, and checked. */
         post: operations["legal_draft_check"];
         delete?: never;
         options?: never;
@@ -2824,6 +2859,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/legal/drafts/{record_id}/english": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The editor's *English* view: the German as written, translated paragraph by paragraph -- */
+        post: operations["legal_draft_english"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/legal/drafts/{record_id}/file": {
         parameters: {
             query?: never;
@@ -2833,7 +2885,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** *Replace with a file*: the text of uploaded files -- checked as an upload is -- for the editor to put */
+        /** *Replace with a file*: the text of an uploaded German file -- checked as an upload is -- for the */
         post: operations["legal_draft_read_file"];
         delete?: never;
         options?: never;
@@ -5152,12 +5204,6 @@ export interface components {
              */
             body?: string;
             /**
-             * Language
-             * @default de
-             * @enum {string}
-             */
-            language?: "de" | "en";
-            /**
              * Revision
              * @default null
              */
@@ -5394,13 +5440,10 @@ export interface components {
         };
         /** ContentOut */
         ContentOut: {
-            english: components["schemas"]["TextOut"] | null;
             german: components["schemas"]["TextOut"];
         };
         /** CorrectIn */
         CorrectIn: {
-            /** @default null */
-            english?: components["schemas"]["TextIn"] | null;
             german: components["schemas"]["TextIn"];
         };
         /** CorrectionIn */
@@ -6423,9 +6466,6 @@ export interface components {
              * Format: date
              */
             effective_from: string;
-            english: components["schemas"]["TextOut"] | null;
-            /** English Markdown Url */
-            english_markdown_url: string | null;
             german: components["schemas"]["TextOut"];
             in_force: components["schemas"]["InForceTextOut"] | null;
             lock: components["schemas"]["LockOut"];
@@ -6479,6 +6519,21 @@ export interface components {
         EmailOut: {
             /** Email */
             email: string;
+        };
+        /**
+         * EnglishOut
+         * @description The German as written, in English by machine -- as members will read it once published.
+         */
+        EnglishOut: {
+            /** Html */
+            html: string;
+            /** Title */
+            title: string;
+            /**
+             * Unavailable
+             * @default null
+             */
+            unavailable?: string | null;
         };
         /** EraseIn */
         EraseIn: {
@@ -7259,7 +7314,6 @@ export interface components {
          * @description The version in force, for the comparison.
          */
         InForceTextOut: {
-            english: components["schemas"]["TextOut"] | null;
             german: components["schemas"]["TextOut"];
             /** Validity */
             validity: string;
@@ -7494,6 +7548,11 @@ export interface components {
             is_translation: boolean;
             /** Language */
             language: string;
+            /**
+             * Machine Translated
+             * @default false
+             */
+            machine_translated?: boolean;
             /** Others */
             others: components["schemas"]["OtherVersionOut"][];
             /** Pdf Has English */
@@ -9278,11 +9337,6 @@ export interface components {
              * Format: date
              */
             effective_from: string;
-            /**
-             * English Markdown Url
-             * @default null
-             */
-            english_markdown_url?: string | null;
             /** Has English */
             has_english: boolean;
             /**
@@ -9350,8 +9404,6 @@ export interface components {
         SaveIn: {
             /** Edit Count */
             edit_count: number;
-            /** @default null */
-            english?: components["schemas"]["TextIn"] | null;
             german: components["schemas"]["TextIn"];
         };
         /** SavedOut */
@@ -10550,6 +10602,71 @@ export interface components {
              */
             reference?: string | null;
         };
+        /** TranslationIn */
+        TranslationIn: {
+            /**
+             * Azure Key
+             * @default null
+             */
+            azure_key?: string | null;
+            /**
+             * Azure Region
+             * @default
+             */
+            azure_region?: string;
+            /**
+             * Deepl Key
+             * @default null
+             */
+            deepl_key?: string | null;
+            /** Forget */
+            forget?: ("deepl" | "azure")[];
+            /** Glossary */
+            glossary?: string[][];
+            /** Order */
+            order: ("deepl" | "azure")[];
+        };
+        /**
+         * TranslationOut
+         * @description The services that make the legal texts' English, in the order they are tried, and the glossary.
+         */
+        TranslationOut: {
+            /** Azure Region */
+            azure_region: string;
+            /**
+             * Deepl Limit
+             * @default null
+             */
+            deepl_limit?: number | null;
+            /**
+             * Deepl Used
+             * @default null
+             */
+            deepl_used?: number | null;
+            /** Glossary */
+            glossary: string[][];
+            /** Services */
+            services: components["schemas"]["TranslationServiceOut"][];
+        };
+        /** TranslationServiceOut */
+        TranslationServiceOut: {
+            /** Key Set */
+            key_set: boolean;
+            /** Label */
+            label: string;
+            /**
+             * Name
+             * @enum {string}
+             */
+            name: "deepl" | "azure";
+        };
+        /** TranslationTryOut */
+        TranslationTryOut: {
+            /** Message */
+            message: string;
+            /** Ok */
+            ok: boolean;
+        };
         /** TreasurerIn */
         TreasurerIn: {
             /** User Id */
@@ -10606,11 +10723,6 @@ export interface components {
              * Format: date
              */
             effective_from: string;
-            /**
-             * English Markdown Url
-             * @default null
-             */
-            english_markdown_url?: string | null;
             /** Has English */
             has_english: boolean;
             /**
@@ -15832,8 +15944,6 @@ export interface operations {
             content: {
                 "multipart/form-data": {
                     /** Format: binary */
-                    english?: string;
-                    /** Format: binary */
                     german: string;
                 };
             };
@@ -16133,8 +16243,6 @@ export interface operations {
             content: {
                 "multipart/form-data": {
                     /** Format: binary */
-                    english?: string;
-                    /** Format: binary */
                     german: string;
                 };
             };
@@ -16199,8 +16307,6 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": {
-                    /** Format: binary */
-                    english?: string;
                     /** Format: binary */
                     german: string;
                 };
@@ -19436,6 +19542,162 @@ export interface operations {
             };
         };
     };
+    admin_settings_translation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_settings_translation_save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TranslationIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsSavedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_settings_translation_try: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationTryOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     admin_updates: {
         parameters: {
             query?: {
@@ -21058,6 +21320,68 @@ export interface operations {
             };
         };
     };
+    legal_draft_english: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnglishOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     legal_draft_read_file: {
         parameters: {
             query?: never;
@@ -21070,8 +21394,6 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": {
-                    /** Format: binary */
-                    english?: string;
                     /** Format: binary */
                     german: string;
                 };
@@ -24853,8 +25175,6 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": {
-                    /** Format: binary */
-                    english?: string;
                     /** Format: binary */
                     german: string;
                 };

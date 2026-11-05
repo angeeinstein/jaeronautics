@@ -3309,15 +3309,6 @@
             "title": "Body",
             "type": "string"
           },
-          "language": {
-            "default": "de",
-            "enum": [
-              "de",
-              "en"
-            ],
-            "title": "Language",
-            "type": "string"
-          },
           "revision": {
             "anyOf": [
               {
@@ -4113,23 +4104,12 @@
       "ContentOut": {
         "additionalProperties": false,
         "properties": {
-          "english": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TextOut"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "german": {
             "$ref": "#/components/schemas/TextOut"
           }
         },
         "required": [
-          "german",
-          "english"
+          "german"
         ],
         "title": "ContentOut",
         "type": "object"
@@ -4137,17 +4117,6 @@
       "CorrectIn": {
         "additionalProperties": false,
         "properties": {
-          "english": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TextIn"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          },
           "german": {
             "$ref": "#/components/schemas/TextIn"
           }
@@ -7168,27 +7137,6 @@
             "title": "Effective From",
             "type": "string"
           },
-          "english": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TextOut"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "english_markdown_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "English Markdown Url"
-          },
           "german": {
             "$ref": "#/components/schemas/TextOut"
           },
@@ -7285,7 +7233,6 @@
           "team_name",
           "mode",
           "german",
-          "english",
           "edit_count",
           "edited_at",
           "in_force",
@@ -7293,7 +7240,6 @@
           "snapshots",
           "pdf_url",
           "markdown_url",
-          "english_markdown_url",
           "back_url",
           "may_publish",
           "approved_by",
@@ -7350,6 +7296,38 @@
           "email"
         ],
         "title": "EmailOut",
+        "type": "object"
+      },
+      "EnglishOut": {
+        "additionalProperties": false,
+        "description": "The German as written, in English by machine -- as members will read it once published.",
+        "properties": {
+          "html": {
+            "title": "Html",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unavailable": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Unavailable"
+          }
+        },
+        "required": [
+          "title",
+          "html"
+        ],
+        "title": "EnglishOut",
         "type": "object"
       },
       "EraseIn": {
@@ -9726,16 +9704,6 @@
         "additionalProperties": false,
         "description": "The version in force, for the comparison.",
         "properties": {
-          "english": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TextOut"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "german": {
             "$ref": "#/components/schemas/TextOut"
           },
@@ -9746,7 +9714,6 @@
         },
         "required": [
           "german",
-          "english",
           "validity"
         ],
         "title": "InForceTextOut",
@@ -10397,6 +10364,11 @@
           "language": {
             "title": "Language",
             "type": "string"
+          },
+          "machine_translated": {
+            "default": false,
+            "title": "Machine Translated",
+            "type": "boolean"
           },
           "others": {
             "items": {
@@ -15842,18 +15814,6 @@
             "title": "Effective From",
             "type": "string"
           },
-          "english_markdown_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "English Markdown Url"
-          },
           "has_english": {
             "title": "Has English",
             "type": "boolean"
@@ -16012,17 +15972,6 @@
           "edit_count": {
             "title": "Edit Count",
             "type": "integer"
-          },
-          "english": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TextIn"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
           },
           "german": {
             "$ref": "#/components/schemas/TextIn"
@@ -19650,6 +19599,186 @@
         "title": "TransferIn",
         "type": "object"
       },
+      "TranslationIn": {
+        "additionalProperties": false,
+        "properties": {
+          "azure_key": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Azure Key"
+          },
+          "azure_region": {
+            "default": "",
+            "maxLength": 40,
+            "title": "Azure Region",
+            "type": "string"
+          },
+          "deepl_key": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Deepl Key"
+          },
+          "forget": {
+            "items": {
+              "enum": [
+                "deepl",
+                "azure"
+              ],
+              "type": "string"
+            },
+            "title": "Forget",
+            "type": "array"
+          },
+          "glossary": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "maxItems": 200,
+            "title": "Glossary",
+            "type": "array"
+          },
+          "order": {
+            "items": {
+              "enum": [
+                "deepl",
+                "azure"
+              ],
+              "type": "string"
+            },
+            "title": "Order",
+            "type": "array"
+          }
+        },
+        "required": [
+          "order"
+        ],
+        "title": "TranslationIn",
+        "type": "object"
+      },
+      "TranslationOut": {
+        "additionalProperties": false,
+        "description": "The services that make the legal texts' English, in the order they are tried, and the glossary.",
+        "properties": {
+          "azure_region": {
+            "title": "Azure Region",
+            "type": "string"
+          },
+          "deepl_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Deepl Limit"
+          },
+          "deepl_used": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Deepl Used"
+          },
+          "glossary": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Glossary",
+            "type": "array"
+          },
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/TranslationServiceOut"
+            },
+            "title": "Services",
+            "type": "array"
+          }
+        },
+        "required": [
+          "services",
+          "azure_region",
+          "glossary"
+        ],
+        "title": "TranslationOut",
+        "type": "object"
+      },
+      "TranslationServiceOut": {
+        "additionalProperties": false,
+        "properties": {
+          "key_set": {
+            "title": "Key Set",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "enum": [
+              "deepl",
+              "azure"
+            ],
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "key_set"
+        ],
+        "title": "TranslationServiceOut",
+        "type": "object"
+      },
+      "TranslationTryOut": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "message"
+        ],
+        "title": "TranslationTryOut",
+        "type": "object"
+      },
       "TreasurerIn": {
         "additionalProperties": false,
         "properties": {
@@ -19816,18 +19945,6 @@
             "format": "date",
             "title": "Effective From",
             "type": "string"
-          },
-          "english_markdown_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "English Markdown Url"
           },
           "has_english": {
             "title": "Has English",
@@ -26885,10 +27002,6 @@
             "multipart/form-data": {
               "schema": {
                 "properties": {
-                  "english": {
-                    "format": "binary",
-                    "type": "string"
-                  },
                   "german": {
                     "format": "binary",
                     "type": "string"
@@ -26955,7 +27068,7 @@
             "description": "Not possible in the current state."
           }
         },
-        "summary": "Keep a new version as a draft: its Markdown file, and its English translation if there is one.",
+        "summary": "Keep a new version as a draft: its German Markdown file (the English is made by machine once",
         "tags": [
           "Admin"
         ],
@@ -27269,10 +27382,6 @@
             "multipart/form-data": {
               "schema": {
                 "properties": {
-                  "english": {
-                    "format": "binary",
-                    "type": "string"
-                  },
                   "german": {
                     "format": "binary",
                     "type": "string"
@@ -27340,7 +27449,7 @@
             "description": "Not possible in the current state."
           }
         },
-        "summary": "A new text as the PDF it will be, from its Markdown file (and its English translation),",
+        "summary": "A new text as the PDF it will be, from its German Markdown file, checked as the build checks",
         "tags": [
           "Admin"
         ],
@@ -27367,10 +27476,6 @@
             "multipart/form-data": {
               "schema": {
                 "properties": {
-                  "english": {
-                    "format": "binary",
-                    "type": "string"
-                  },
                   "german": {
                     "format": "binary",
                     "type": "string"
@@ -31504,6 +31609,196 @@
         ]
       }
     },
+    "/api/v1/admin/settings/translation": {
+      "get": {
+        "operationId": "admin_settings_translation",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "The translation services, their order, DeepL's characters this month, and the glossary.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      },
+      "put": {
+        "operationId": "admin_settings_translation_save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranslationIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSavedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Save them. A changed glossary is used from the next translation on.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/translation/{name}/try": {
+      "post": {
+        "operationId": "admin_settings_translation_try",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationTryOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Translate one sentence with this service only: whether its key works. Nothing is kept.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      }
+    },
     "/api/v1/admin/settings/updates": {
       "get": {
         "operationId": "admin_updates",
@@ -33437,7 +33732,7 @@
             "description": "Not possible in the current state."
           }
         },
-        "summary": "One language as written -- saved or not -- rendered as its page will be, and checked.",
+        "summary": "The German as written -- saved or not -- rendered as its page will be, and checked.",
         "tags": [
           "Legal"
         ]
@@ -33524,6 +33819,87 @@
         ]
       }
     },
+    "/api/v1/legal/drafts/{record_id}/english": {
+      "post": {
+        "operationId": "legal_draft_english",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnglishOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "The editor's *English* view: the German as written, translated paragraph by paragraph --",
+        "tags": [
+          "Legal"
+        ]
+      }
+    },
     "/api/v1/legal/drafts/{record_id}/file": {
       "post": {
         "operationId": "legal_draft_read_file",
@@ -33542,10 +33918,6 @@
             "multipart/form-data": {
               "schema": {
                 "properties": {
-                  "english": {
-                    "format": "binary",
-                    "type": "string"
-                  },
                   "german": {
                     "format": "binary",
                     "type": "string"
@@ -33612,7 +33984,7 @@
             "description": "Not possible in the current state."
           }
         },
-        "summary": "*Replace with a file*: the text of uploaded files -- checked as an upload is -- for the editor to put",
+        "summary": "*Replace with a file*: the text of an uploaded German file -- checked as an upload is -- for the",
         "tags": [
           "Legal"
         ]
@@ -38649,10 +39021,6 @@
             "multipart/form-data": {
               "schema": {
                 "properties": {
-                  "english": {
-                    "format": "binary",
-                    "type": "string"
-                  },
                   "german": {
                     "format": "binary",
                     "type": "string"

@@ -63,9 +63,9 @@ function Upload({ slug, data }: { slug: string; data: RulesOut }) {
     <Panel icon={IconUpload} title="Upload a file">
       <Stack gap="md">
         <Text size="sm" c="dimmed">
-          The Markdown file of your new rules, and its English translation if there is one. It is kept as a
-          draft, with its PDF to pass round in the team; the association publishes it, and you are told when
-          it does.
+          The German Markdown file of your new rules (the English is made by machine once they are published).
+          It is kept as a draft, with its PDF to pass round in the team; the association publishes it, and you
+          are told when it does.
         </Text>
         <Problems problems={problems} title="Not taken, because of:" />
         <LegalFiles
@@ -165,11 +165,6 @@ function Waiting({ slug, data }: { slug: string; data: RulesOut }) {
                   {text.markdown_url ? (
                     <Anchor href={text.markdown_url} download size="sm">
                       Markdown
-                    </Anchor>
-                  ) : null}
-                  {text.english_markdown_url ? (
-                    <Anchor href={text.english_markdown_url} download size="sm">
-                      Markdown (en)
                     </Anchor>
                   ) : null}
                   <PdfLink href={text.pdf_url}>PDF</PdfLink>
