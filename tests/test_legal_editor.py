@@ -31,20 +31,20 @@ def _template(team=None):
     return render_template("legal/template.md", day=get_membership_today().isoformat(), team=team)
 
 
-def _content(body="§ 1 Name.", title="Statuten", english=None):
-    return {"title": title, "revision": None, "body": body}, english
+def _content(body="§ 1 Name.", title="Statuten"):
+    return {"title": title, "revision": None, "body": body}
 
 
 class TestStarting:
-    def test_from_the_version_in_force_with_its_translation(self, boss, texts):  # noqa: F811
+    def test_from_the_version_in_force_its_german_only(self, boss, texts):  # noqa: F811
         texts("membership-terms", "2026-10-04", "§ 1 Alt.", title="Mitgliedschaftsbedingungen")
         texts("membership-terms", "2026-10-04", "§ 1 Old.", language="en", title="Membership Terms")
 
         record = editor.start_draft(boss, "membership-terms")
         db.session.commit()
 
-        assert record.status == "draft" and "§ 1 Alt." in record.body
-        assert editor.content(record)["english"]["body"].strip() == "§ 1 Old."
+        # The English is made by machine once it is published (docs/legal-translation-plan.md).
+        assert record.status == "draft" and "§ 1 Alt." in record.body and record.translations == []
 
     def test_from_the_template_when_nothing_is_in_force(self, boss):  # noqa: F811
         record = editor.start_draft(boss, "statutes", template=_template())
@@ -66,21 +66,19 @@ class TestStarting:
 
 class TestSaving:
     def test_as_written_and_counted(self, boss):  # noqa: F811
-        record = editor.start_draft(boss, "statutes")
-        german, _ = _content("§ 1 Neu.")
+        record = editor.start_draft(boss, "statutes", template=_template())
 
-        editor.save(boss, record, german, {"title": "Statutes", "revision": None, "body": "§ 1 New."}, 0)
+        editor.save(boss, record, _content("§ 1 Neu."), 0)
         db.session.commit()
 
         assert record.body == "§ 1 Neu." and record.edit_count == 1
-        assert editor.content(record)["english"]["body"] == "§ 1 New."
 
     def test_never_over_somebody_elses_save(self, boss):  # noqa: F811
         record = editor.start_draft(boss, "statutes")
-        editor.save(boss, record, *_content("Erster."), 0)
+        editor.save(boss, record, _content("Erster."), 0)
 
         with pytest.raises(ConflictError, match="Somebody else"):
-            editor.save(boss, record, *_content("Zweiter."), 0)
+            editor.save(boss, record, _content("Zweiter."), 0)
 
     def test_two_saves_at_the_same_moment_one_is_refused(self, boss):  # noqa: F811
         record = editor.start_draft(boss, "statutes", template=_template())
@@ -91,30 +89,20 @@ class TestSaving:
                            .values(edit_count=1).execution_options(synchronize_session=False))
 
         with pytest.raises(ConflictError, match="Somebody else"):
-            editor.save(boss, record, *_content("Zu spät."), 0)
+            editor.save(boss, record, _content("Zu spät."), 0)
 
     def test_what_is_saved_is_what_is_rendered(self, boss):  # noqa: F811
         record = editor.start_draft(boss, "statutes", template=_template())
         db.session.commit()
         assert "Zuerst." not in str(legal.render(legal.record(record.id))["html"])
 
-        editor.save(boss, record, *_content("## § 1 Name\n\nZuerst."), 0)
+        editor.save(boss, record, _content("## § 1 Name\n\nZuerst."), 0)
         db.session.commit()
         assert "Zuerst." in str(legal.render(legal.record(record.id))["html"])
 
-        editor.save(boss, record, *_content("## § 1 Name\n\nDanach."), 1)
+        editor.save(boss, record, _content("## § 1 Name\n\nDanach."), 1)
         db.session.commit()
         assert "Danach." in str(legal.render(legal.record(record.id))["html"])
-
-    def test_the_translation_removed(self, boss):  # noqa: F811
-        record = editor.start_draft(boss, "statutes")
-        editor.save(boss, record, _content()[0], {"title": "Statutes", "revision": None, "body": "x"}, 0)
-        db.session.commit()
-
-        editor.save(boss, record, _content()[0], None, 1)
-        db.session.commit()
-
-        assert db.session.query(LegalTextVersion).filter_by(language="en").count() == 0
 
 
 class TestEarlierStates:
@@ -123,7 +111,7 @@ class TestEarlierStates:
         first = editor.open_session(boss, record)
         assert editor.open_session(boss, record).id == first.id
 
-        editor.save(boss, record, *_content("Geändert."), 0)
+        editor.save(boss, record, _content("Geändert."), 0)
         second = editor.open_session(boss, record)
 
         assert second.id != first.id and editor.snapshot(record, first.id).content["german"]["body"] != "Geändert."
@@ -131,7 +119,7 @@ class TestEarlierStates:
     def test_only_the_last_twenty(self, boss):  # noqa: F811
         record = editor.start_draft(boss, "statutes")
         for count in range(25):
-            editor.save(boss, record, *_content(f"Stand {count}."), count)
+            editor.save(boss, record, _content(f"Stand {count}."), count)
             editor.open_session(boss, record)
         db.session.commit()
 
@@ -155,7 +143,7 @@ class TestChecking:
 
     def test_publishing_refuses_a_text_the_checks_refuse(self, boss):  # noqa: F811
         record = editor.start_draft(boss, "statutes")
-        editor.save(boss, record, {"title": "", "revision": None, "body": "x"}, None, 0)
+        editor.save(boss, record, {"title": "", "revision": None, "body": "x"}, 0)
         db.session.commit()
 
         with pytest.raises(ValidationError):
@@ -168,22 +156,10 @@ class TestCorrecting:
         db.session.commit()
         _publish(boss, record)
 
-        editor.correct(boss, editor.editable(boss, record.id), *_content("§ 1 Name."))
+        editor.correct(boss, editor.editable(boss, record.id), _content("§ 1 Name."))
         db.session.commit()
 
         assert "Nmae" not in str(legal.render(legal.current_version("statutes"))["html"])
-
-    def test_the_translation_taken_out_is_removed(self, boss):  # noqa: F811
-        record = legal_uploads.upload_draft(boss, _file(), _file(title="Statutes", body="§ 1 Name.", language="en"))
-        db.session.commit()
-        _publish(boss, record)
-
-        editor.correct(boss, editor.editable(boss, record.id), *_content("§ 1 Name."))
-        db.session.commit()
-
-        assert legal.translation(legal.current_version("statutes")) is None
-        [entry] = db.session.query(AuditLog).filter_by(event_type="legal_text_corrected").all()
-        assert entry.before_state["english"]["title"] == "Statutes"
 
 
 class TestWho:
@@ -215,7 +191,7 @@ class TestWho:
     def test_only_a_publisher_corrects(self, boss, rocket):  # noqa: F811
         team, lead = rocket
         record = editor.start_draft(lead, legal.TEAM_RULES, team.slug, "template", _template(team))
-        editor.save(lead, record, {"title": "Teamordnung", "revision": None, "body": "§ 1 Regeln."}, None, 0)
+        editor.save(lead, record, {"title": "Teamordnung", "revision": None, "body": "§ 1 Regeln."}, 0)
         editor.release(lead, record)  # the lead closed the editor
         db.session.commit()
         _publish(boss, record)
@@ -240,6 +216,43 @@ class TestWho:
         assert client.get("/api/v1/admin/legal").get_json()["may_publish"] is False
 
 
+class TestTheEnglishView:
+    def test_the_german_as_written_in_english_only_new_blocks_sent(self, client, boss, monkeypatch):  # noqa: F811
+        from aeronautics_members.services import translation
+
+        sent = []
+
+        def fake(blocks, as_html=True):
+            sent.extend(blocks)
+            return [f"EN:{block}" for block in blocks]
+
+        monkeypatch.setattr(translation, "_by_a_service", lambda blocks, as_html, current, only=None:
+                            (fake(blocks, as_html), "deepl"))
+        monkeypatch.setattr(translation, "configured", lambda current=None: ["deepl"])
+        record = editor.start_draft(boss, "statutes", template=_template())
+        db.session.commit()
+        _login(client, boss.id)
+        text = {"title": "Statuten", "body": "## § 1 Name\n\nEins.\n\n## § 2 Zweck\n\nZwei."}
+
+        first = send(client, "POST", f"/api/v1/legal/drafts/{record.id}/english", text).get_json()
+        text["body"] = text["body"].replace("Zwei.", "Zwei, geändert.")
+        sent.clear()
+        send(client, "POST", f"/api/v1/legal/drafts/{record.id}/english", text)
+
+        assert first["title"] == "EN:Statuten" and "EN:<p>Eins.</p>" in first["html"]
+        assert sent == ["<p>Zwei, geändert.</p>\n"]
+
+    def test_says_when_no_service_is_set_up(self, client, boss):  # noqa: F811
+        record = editor.start_draft(boss, "statutes", template=_template())
+        db.session.commit()
+        _login(client, boss.id)
+
+        answer = send(client, "POST", f"/api/v1/legal/drafts/{record.id}/english",
+                      {"title": "Statuten", "body": "## § 1 Name\n\nEins."}).get_json()
+
+        assert answer["html"] == "" and "No translation service" in answer["unavailable"]
+
+
 class TestTheApi:
     def test_start_open_save_check(self, client, boss):  # noqa: F811
         _login(client, boss.id)
@@ -252,14 +265,14 @@ class TestTheApi:
         assert opened["mode"] == "draft" and opened["edit_count"] == 0 and opened["snapshots"]
 
         saved = send(client, "PUT", f"/api/v1/legal/drafts/{record_id}", {
-            "german": {"title": "Statuten", "body": "## § 1 Name\n\nNeu."}, "english": None, "edit_count": 0})
+            "german": {"title": "Statuten", "body": "## § 1 Name\n\nNeu."}, "edit_count": 0})
         assert saved.get_json()["edit_count"] == 1
         stale = send(client, "PUT", f"/api/v1/legal/drafts/{record_id}", {
             "german": {"title": "Statuten", "body": "Alt."}, "edit_count": 0})
         assert stale.status_code == 409 and stale.get_json()["error"]["code"] == "legal_draft_changed"
 
         checked = send(client, "POST", f"/api/v1/legal/drafts/{record_id}/check",
-                       {"language": "de", "title": "Statuten", "body": "## § 1 Name\n\nNeu."}).get_json()
+                       {"title": "Statuten", "body": "## § 1 Name\n\nNeu."}).get_json()
         assert checked["problems"] == [] and checked["contents"][0]["label"] == "§ 1 Name"
 
         snapshot = opened["snapshots"][0]["id"]
@@ -279,20 +292,17 @@ class TestTheApi:
 
 class TestAsAFile:
     def test_downloaded_with_its_front_matter_and_taken_back_as_it_is(self, client, boss):  # noqa: F811
-        record = legal_uploads.upload_draft(boss, _file(body="§ 1 Name.", extra='approved_by: "Vorstand"\n'),
-                                            _file(title="Statutes", body="§ 1 Name (en).", language="en"))
+        record = legal_uploads.upload_draft(boss, _file(body="§ 1 Name.", extra='approved_by: "Vorstand"\n'))
         db.session.commit()
         _login(client, boss.id)
 
         german = client.get(f"/admin/legal/waiting.md?document=statutes&record={record.id}")
-        english = client.get(f"/admin/legal/waiting.md?document=statutes&record={record.id}&language=en")
 
         assert german.status_code == 200 and german.mimetype == "text/markdown"
         assert 'filename="statutes-de-' in german.headers["Content-Disposition"]
         text = german.get_data(as_text=True)
         assert text.startswith("---\n") and 'approved_by: "Vorstand"' in text and "§ 1 Name." in text
-        assert "§ 1 Name (en)." in english.get_data(as_text=True)
-        again = legal_uploads.upload_draft(boss, (german.data, "x.md"), (english.data, "y.md"))
+        again = legal_uploads.upload_draft(boss, (german.data, "x.md"))
         assert again.body.strip() == "§ 1 Name." and again.approved_by == "Vorstand"
 
     def test_a_file_in_legal_as_it_is(self, client, boss, texts):  # noqa: F811
@@ -325,7 +335,7 @@ class TestAsAFile:
                            data={"german": (io.BytesIO(data), "anything.md")},
                            content_type="multipart/form-data").get_json()
 
-        assert read["german"]["body"].strip() == "§ 1 Aus der Datei." and read["english"] is None
+        assert read["german"]["body"].strip() == "§ 1 Aus der Datei."
         assert "Aus der Datei" not in record.body  # put in by the editor, then saved
         assert db.session.query(LegalTextSnapshot).filter_by(record_id=record.id).count() == 1
 
@@ -365,7 +375,7 @@ class TestTheLock:
         editor.take_lock(boss, record)
 
         with pytest.raises(ConflictError, match="Somebody else is editing"):
-            editor.save(other, record, *_content("Nicht ich."), 0)
+            editor.save(other, record, _content("Nicht ich."), 0)
 
     def test_free_again_once_the_holders_editor_goes_quiet(self, boss, two):  # noqa: F811
         from datetime import datetime
@@ -416,7 +426,7 @@ class TestTheLock:
 
     def test_no_publishing_while_somebody_edits(self, boss, two):  # noqa: F811
         record, other = two
-        editor.save(other, record, *_content("## § 1 Name\n\nText."), 0)
+        editor.save(other, record, _content("## § 1 Name\n\nText."), 0)
         db.session.commit()
 
         with pytest.raises(ConflictError, match="editing this draft now"):

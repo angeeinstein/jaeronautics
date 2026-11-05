@@ -101,14 +101,11 @@ def template(team=None):
     return response
 
 
-def markdown(german, language):
-    """A version's Markdown file, to download (``language``: de or en), or 404."""
+def markdown(german):
+    """A version's German Markdown file, to download."""
     from ..services import legal_editor
 
-    found = legal_editor.markdown_file(german, language) if language in legal.LANGUAGES else None
-    if found is None:
-        abort(404)
-    data, name = found
+    data, name = legal_editor.markdown_file(german)
     response = current_app.response_class(data, mimetype="text/markdown")
     response.headers["Content-Disposition"] = f'attachment; filename="{name}"'
     return response

@@ -1,7 +1,8 @@
 """Legal texts uploaded in the portal (docs/legal-texts-in-portal-plan.md).
 
 A version of one of the association's texts, or of a team's rules, is
-uploaded as a Markdown file -- the same file the preview takes, checked the
+uploaded as a Markdown file -- the German one: the English is made by machine
+once it is published (services/legal_translation.py) -- the same file the preview takes, checked the
 same way -- and kept as a draft (``LegalTextVersion``). Whoever may manage the
 legal texts (``Permission.LEGAL_TEXTS``) uploads any; a team's leads upload
 drafts of their own team's rules, and whoever may publish them
@@ -31,6 +32,7 @@ from ..db_models import LegalTextVersion, Member, Role, TeamMembership, User, db
 from ..permissions import Permission, roles_with
 from . import ConflictError, NotFoundError, ValidationError
 from . import legal_texts as legal
+from . import legal_translation
 from .audit import log_audit_event
 from .clock import get_membership_today, get_now_utc
 
@@ -93,10 +95,10 @@ def _team_of(slug):
 # --- Uploading a draft --------------------------------------------------------------------
 
 
-def upload_draft(actor, german_upload, english_upload=None, *, team=None):
-    """Keep uploaded files as a draft. ``team``: a team's leads uploading their own rules -- the
-    file must be that team's rules. Returns the German version's record."""
-    versions, bodies, problems = _checked(german_upload, english_upload)
+def upload_draft(actor, german_upload, *, team=None):
+    """Keep an uploaded German file as a draft. ``team``: a team's leads uploading their own rules --
+    the file must be that team's rules. Returns its record."""
+    versions, bodies, problems = _checked(german_upload)
     if problems or not versions:
         _invalid(problems or ["The German file is missing."])
     german = versions[0]
@@ -121,8 +123,7 @@ def upload_draft(actor, german_upload, english_upload=None, *, team=None):
     db.session.flush()
     log_audit_event("legal", "legal_text_uploaded", actor_user=actor, target_user=actor,
                     metadata={"document": german.slug, "team": german.team, "record": record.id,
-                              "title": german.title, "english": len(versions) == 2,
-                              "by_team_lead": team is not None})
+                              "title": german.title, "by_team_lead": team is not None})
     if team is not None:
         _tell_the_association(team, record)
     return record
@@ -192,14 +193,13 @@ def publish(actor, record_id, *, effective_from, approved_by=None, approved_on=N
                             code="legal_effective_taken")
 
     now = get_now_utc()
-    for row in [record, *record.translations]:
-        row.status = "published"
-        row.version = today
-        row.effective_from = effective_from
-        row.approved_by = approved_by
-        row.approved_on = approved_on
-        row.published_at = now
-        row.published_by = actor
+    # Only the German is published; its English is made by machine, at once in the background.
+    # A hand-made English draft goes (decided: replaced by the machine's).
+    legal_translation.drop_english(record)
+    record.status, record.version, record.effective_from = "published", today, effective_from
+    record.approved_by, record.approved_on = approved_by, approved_on
+    record.published_at, record.published_by = now, actor
+    legal_translation.queue(record, "published")
     told = tell_the_members(actor, record, summary) if tell else None
     log_audit_event("legal", "legal_text_published", actor_user=actor, target_user=actor,
                     metadata={"document": record.document, "team": record.team_slug, "record": record.id,
@@ -251,15 +251,14 @@ def why_not_correctable(record, now=None):
     return None
 
 
-def correct(actor, record_id, german_upload, english_upload=None, *, remove_english=False):
+def correct(actor, record_id, german_upload):
     """Replace a published version's text, while it may still be corrected. Its day, the day it
-    applies from and its approval stay; its translation is replaced only if a new one comes --
-    or removed, with ``remove_english`` (the editor, the translation taken out)."""
+    applies from and its approval stay; its English is made anew from it."""
     record = _german_record(record_id)
     reason = why_not_correctable(record)
     if reason is not None:
         raise ConflictError(f"This version can no longer be corrected. {reason}", code="legal_not_correctable")
-    versions, bodies, problems = _checked(german_upload, english_upload)
+    versions, bodies, problems = _checked(german_upload)
     if problems or not versions:
         _invalid(problems or ["The German file is missing."], action="corrected")
     german = versions[0]
@@ -270,28 +269,13 @@ def correct(actor, record_id, german_upload, english_upload=None, *, remove_engl
     now = get_now_utc()
     before = {"title": record.title, "revision": record.revision, "body": record.body}
     record.title, record.revision, record.body, record.corrected_at = german.title, german.revision, bodies[0], now
-    removed = None
-    if remove_english and len(versions) == 1:
-        removed = next(iter(record.translations), None)
-        if removed is not None:
-            before["english"] = {"title": removed.title, "revision": removed.revision, "body": removed.body}
-            record.translations.remove(removed)
-    if len(versions) == 2:
-        english = next(iter(record.translations), None)
-        if english is None:
-            english = LegalTextVersion(
-                document=record.document, team_slug=record.team_slug, language="en", translation_of=record,
-                status=record.status, version=record.version, effective_from=record.effective_from,
-                approved_by=record.approved_by, approved_on=record.approved_on, uploaded_at=now,
-                uploaded_by=actor, published_at=record.published_at, published_by=record.published_by,
-                title="", body="")
-            db.session.add(english)
-        english.title, english.revision, english.body = versions[1].title, versions[1].revision, bodies[1]
-        english.corrected_at = now
+    # The English of the wording before goes; the new one is made in the background.
+    legal_translation.drop_english(record)
+    legal_translation.queue(record, "corrected")
     log_audit_event("legal", "legal_text_corrected", actor_user=actor, target_user=actor,
                     before=before, after={"title": record.title, "revision": record.revision, "body": record.body},
                     metadata={"document": record.document, "team": record.team_slug, "record": record.id,
-                              "version": record.version.isoformat(), "english_removed": removed is not None})
+                              "version": record.version.isoformat()})
     return record
 
 

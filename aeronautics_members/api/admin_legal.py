@@ -77,7 +77,6 @@ class UpcomingVersionOut(Model):
     team: str | None = None
     #: Its Markdown file, to download: German, and the English one if there is one.
     markdown_url: str = ""
-    english_markdown_url: str | None = None
     #: Publishing emails the members unless unticked: the texts accepted at signup, a team's rules.
     tells_by_default: bool = False
     #: How many members that email would reach: all active ones, or the team's.
@@ -180,11 +179,8 @@ def admin_legal():
             record = db.session.get(LegalTextVersion, version.record_id) if version.record_id else None
             which = {"document": slug, "team": team, **({"record": version.record_id} if version.record_id
                                                          else {"version": version.version.isoformat()})}
-            has_english = legal.translation_any(version) is not None
             waiting.append(UpcomingVersionOut(
                 markdown_url=url_for("admin.admin_legal_waiting_markdown", **which),
-                english_markdown_url=url_for("admin.admin_legal_waiting_markdown", language="en", **which)
-                if has_english else None,
                 title=version.title, team_name=names.get(team, team) if team else None,
                 version=version.version, revision=version.revision,
                 status="draft" if version.status == "draft" else "scheduled",
@@ -223,16 +219,12 @@ def admin_legal():
 
 
 @endpoint("POST", "/admin/legal/preview", permissions=PERMISSIONS, tag=TAG,
-          uploads={"german": True, "english": False}, produces="application/pdf")
+          uploads={"german": True}, produces="application/pdf")
 def admin_legal_preview(files):
-    """A new text as the PDF it will be, from its Markdown file (and its English translation),
-    checked as the build checks it and not kept. What keeps it from being laid out is a 400
-    with ``details.problems``."""
-    uploads = [(files["german"].read(legal_pdf.PREVIEW_MAX_BYTES + 1), files["german"].filename)]
-    if files["english"] is not None:
-        uploads.append((files["english"].read(legal_pdf.PREVIEW_MAX_BYTES + 1), files["english"].filename))
+    """A new text as the PDF it will be, from its German Markdown file, checked as the build checks
+    it and not kept. What keeps it from being laid out is a 400 with ``details.problems``."""
     try:
-        data, problems, name = legal_pdf.preview(*uploads)
+        data, problems, name = legal_pdf.preview(_upload(files))
     except Exception:  # noqa: BLE001 -- a text WeasyPrint cannot lay out, said as such
         current_app.logger.exception("Could not make a preview PDF")
         data, problems = None, ["The PDF could not be made. See the log for why."]
@@ -294,19 +286,18 @@ class UploadedOut(Model):
     record_id: int
 
 
-def _uploads(files):
-    uploads = [(files["german"].read(legal_pdf.PREVIEW_MAX_BYTES + 1), files["german"].filename)]
-    if files.get("english") is not None:
-        uploads.append((files["english"].read(legal_pdf.PREVIEW_MAX_BYTES + 1), files["english"].filename))
-    return uploads
+def _upload(files):
+    """The German file uploaded, ``(data, filename)``: the English is made by machine
+    (docs/legal-translation-plan.md)."""
+    return files["german"].read(legal_pdf.PREVIEW_MAX_BYTES + 1), files["german"].filename
 
 
 @endpoint("POST", "/admin/legal/drafts", response=UploadedOut, permissions=PERMISSIONS, tag=TAG,
-          uploads={"german": True, "english": False})
+          uploads={"german": True})
 def admin_legal_upload(files):
-    """Keep a new version as a draft: its Markdown file, and its English translation if there is one.
-    Checked as the preview checks it; what is wrong is a 400 with ``details.problems``."""
-    record = legal_uploads.upload_draft(current_user, *_uploads(files))
+    """Keep a new version as a draft: its German Markdown file (the English is made by machine once
+    it is published). Checked as the preview checks it; what is wrong is a 400 with ``details.problems``."""
+    record = legal_uploads.upload_draft(current_user, _upload(files))
     db.session.commit()
     return UploadedOut(record_id=record.id)
 
@@ -336,11 +327,11 @@ def admin_legal_publish(record_id, body):
 
 
 @endpoint("POST", "/admin/legal/versions/<int:record_id>/correct", response=UploadedOut, permissions=PUBLISHING,
-          tag=TAG, uploads={"german": True, "english": False})
+          tag=TAG, uploads={"german": True})
 def admin_legal_correct(record_id, files):
     """Replace a published version's text -- within 24 hours of publishing, while nobody has
     accepted it. The earlier wording is kept in the log."""
-    record = legal_uploads.correct(current_user, record_id, *_uploads(files))
+    record = legal_uploads.correct(current_user, record_id, _upload(files))
     db.session.commit()
     return UploadedOut(record_id=record.id)
 

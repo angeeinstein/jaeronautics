@@ -124,6 +124,8 @@ class Version:
     approved_by: str = None
     #: Kept in the database (LegalTextVersion.id) rather than in legal/; ``path`` is None.
     record_id: int = None
+    #: An English version made by machine (docs/legal-translation-plan.md): its body is HTML.
+    machine_translated: bool = False
     #: What changes when the text does: the file's mtime, or the record's correction.
     stamp: str = ""
 
@@ -227,10 +229,11 @@ def _from_record(record):
         slug=record.document, language=record.language, version=record.version,
         effective_from=record.effective_from, status=record.status, title=record.title, path=None,
         revision=record.revision, team=record.team_slug, approved_on=record.approved_on,
-        approved_by=record.approved_by, record_id=record.id,
-        # Changes with every save in the editor and every correction: the render cache follows.
+        approved_by=record.approved_by, record_id=record.id, machine_translated=bool(record.machine_translated),
+        # Changes with every save in the editor, every correction and every translation: the render
+        # cache follows.
         stamp=f"{(record.corrected_at or record.published_at or record.uploaded_at).isoformat()}"
-              f"#{record.edit_count or 0}",
+              f"#{record.edit_count or 0}#{record.source_hash or ''}",
     )
 
 
@@ -522,7 +525,42 @@ def render(version):
     key = (version.key, version.stamp)
     if key in _rendered:
         return _rendered[key]
+    if version.machine_translated:
+        rendered = _render_translated(body(version))
+    else:
+        kept, contents = _page_tokens(version)
+        rendered = {"html": Markup(_markdown.renderer.render(kept, _markdown.options, {})), "contents": contents}
+    _rendered[key] = rendered
+    return rendered
 
+
+_TRANSLATED_HEADING = re.compile(r'<(h[12])\s+id="([^"]+)"[^>]*>(.*?)</\1>', re.DOTALL)
+
+
+def _render_translated(html):
+    """An English version made by machine: its HTML as it was cleaned when it was made
+    (services/translation.clean_html), the contents from its headings, which kept their anchors."""
+    contents = [(anchor, re.sub(r"<[^>]+>", "", label).strip(), int(tag[1]))
+                for tag, anchor, label in _TRANSLATED_HEADING.findall(html)]
+    return {"html": Markup(html), "contents": contents}
+
+
+def blocks(version):
+    """The page of a version as its blocks -- each paragraph, heading, list, table, quote -- in
+    HTML, in their order: what is translated, one by one (services/legal_translation.py)."""
+    kept, _contents = _page_tokens(version)
+    found, start, depth = [], None, 0
+    for index, token in enumerate(kept):
+        if depth == 0:
+            start = index
+        depth += token.nesting
+        if depth == 0:
+            found.append(_markdown.renderer.render(kept[start:index + 1], _markdown.options, {}))
+    return found
+
+
+def _page_tokens(version):
+    """The tokens of a version's page, and its contents (``render``)."""
     tokens = _markdown.parse(body(version))
     contents, taken, kept = [], set(), []
     skip_until, title_dropped = None, False
@@ -550,13 +588,7 @@ def render(version):
             if align in ("left", "right", "center"):
                 token.attrSet("class", f"align-{align}")
         kept.append(token)
-
-    rendered = {
-        "html": Markup(_markdown.renderer.render(kept, _markdown.options, {})),
-        "contents": contents,
-    }
-    _rendered[key] = rendered
-    return rendered
+    return kept, contents
 
 
 #: Who approved a text, as the line under its title says it; anybody else is named in brackets.

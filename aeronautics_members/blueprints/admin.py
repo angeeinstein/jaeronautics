@@ -292,8 +292,8 @@ def admin_legal_editor(record_id):
 @login_required
 @requires(Permission.LEGAL_TEXTS)
 def admin_legal_waiting_markdown():
-    """A version not in force yet as its Markdown file -- German, or ``language=en`` -- front matter
-    included: to pass round, change elsewhere and upload again."""
+    """A version not in force yet as its German Markdown file, front matter included: to
+    pass round, change elsewhere and upload again."""
     from ..services import legal_texts as legal
 
     document = request.args.get("document", "")
@@ -303,7 +303,7 @@ def admin_legal_waiting_markdown():
     german = legal_pages.waiting_version(document, team_slug)
     if german is None:
         abort(404)
-    return legal_pages.markdown(german, request.args.get("language", "de"))
+    return legal_pages.markdown(german)
 
 
 @admin_bp.route("/admin/legal/waiting.pdf", methods=["GET"])

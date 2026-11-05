@@ -108,7 +108,7 @@ body { margin: 0; }
 <section class="part" id="{{ section.id }}" lang="en">
     <header class="cover" data-footer="{{ owner }} · {{ v.title }} (English translation) · Version of {{ v.version|date_display }}" data-page="Page" data-of="of">
         {{ brand() }}
-        <p class="notice">This is an English translation for convenience. It may contain mistakes. Where it differs from the German version before it, the German version applies.</p>
+        <p class="notice">{% if v.machine_translated %}This English translation was made by machine, for convenience{% else %}This is an English translation for convenience{% endif %}. It may contain mistakes. Where it differs from the German version before it, the German version applies.</p>
         <h1 class="doc-title">{{ v.title }}</h1>
         <p class="meta">{{ validity(v) }}</p>
     </header>

@@ -741,6 +741,8 @@ class ExternalWorkItem(db.Model):
     # it against the portal's records. One outstanding at a time: several
     # webhooks in a row make one fetch.
     KIND_STRIPE_BOOKS = "stripe_books"
+    # A published legal text's English, made by machine (services/legal_translation.py).
+    KIND_LEGAL_TRANSLATE = "legal_translate"
 
     STATUS_PENDING = "pending"
     STATUS_PROCESSING = "processing"

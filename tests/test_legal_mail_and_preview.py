@@ -231,7 +231,6 @@ class TestThePreview:
         (b"no front matter", None, None, "no front matter"),
         (_md(document="unknown"), None, None, 'document "unknown" is not a text there is'),
         (_md(language="en"), None, None, 'this file must be "de"'),
-        (_md(), _md(language="en", version="2026-10-06"), "2026-10-06.md", "must be the translation"),
     ])
     def test_what_ci_would_refuse_is_listed_instead(self, app, client, german, english, english_name, problem):
         _login(client, _staff("boss@example.org", "admin").id)
