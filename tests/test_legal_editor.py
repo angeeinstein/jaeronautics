@@ -9,7 +9,7 @@ import pytest
 
 from api_helpers import send
 from conftest import db
-from aeronautics_members.db_models import LegalTextSnapshot, LegalTextVersion
+from aeronautics_members.db_models import AuditLog, LegalTextSnapshot, LegalTextVersion
 from aeronautics_members.services import ConflictError, PermissionError_, ValidationError
 from aeronautics_members.services import legal_editor as editor
 from aeronautics_members.services import legal_texts as legal
@@ -79,6 +79,30 @@ class TestSaving:
         with pytest.raises(ConflictError, match="Somebody else"):
             editor.save(boss, record, *_content("Zweiter."), 0)
 
+    def test_two_saves_at_the_same_moment_one_is_refused(self, boss):  # noqa: F811
+        record = editor.start_draft(boss, "statutes", template=_template())
+        db.session.commit()
+        # Another request saved between this one loading the draft and saving it: the count in
+        # the database moved on, the one this request holds did not.
+        db.session.execute(db.update(LegalTextVersion).where(LegalTextVersion.id == record.id)
+                           .values(edit_count=1).execution_options(synchronize_session=False))
+
+        with pytest.raises(ConflictError, match="Somebody else"):
+            editor.save(boss, record, *_content("Zu spät."), 0)
+
+    def test_what_is_saved_is_what_is_rendered(self, boss):  # noqa: F811
+        record = editor.start_draft(boss, "statutes", template=_template())
+        db.session.commit()
+        assert "Zuerst." not in str(legal.render(legal.record(record.id))["html"])
+
+        editor.save(boss, record, *_content("## § 1 Name\n\nZuerst."), 0)
+        db.session.commit()
+        assert "Zuerst." in str(legal.render(legal.record(record.id))["html"])
+
+        editor.save(boss, record, *_content("## § 1 Name\n\nDanach."), 1)
+        db.session.commit()
+        assert "Danach." in str(legal.render(legal.record(record.id))["html"])
+
     def test_the_translation_removed(self, boss):  # noqa: F811
         record = editor.start_draft(boss, "statutes")
         editor.save(boss, record, _content()[0], {"title": "Statutes", "revision": None, "body": "x"}, 0)
@@ -145,6 +169,18 @@ class TestCorrecting:
         db.session.commit()
 
         assert "Nmae" not in str(legal.render(legal.current_version("statutes"))["html"])
+
+    def test_the_translation_taken_out_is_removed(self, boss):  # noqa: F811
+        record = legal_uploads.upload_draft(boss, _file(), _file(title="Statutes", body="§ 1 Name.", language="en"))
+        db.session.commit()
+        _publish(boss, record)
+
+        editor.correct(boss, editor.editable(boss, record.id), *_content("§ 1 Name."))
+        db.session.commit()
+
+        assert legal.translation(legal.current_version("statutes")) is None
+        [entry] = db.session.query(AuditLog).filter_by(event_type="legal_text_corrected").all()
+        assert entry.before_state["english"]["title"] == "Statutes"
 
 
 class TestWho:

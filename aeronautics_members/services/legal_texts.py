@@ -228,7 +228,9 @@ def _from_record(record):
         effective_from=record.effective_from, status=record.status, title=record.title, path=None,
         revision=record.revision, team=record.team_slug, approved_on=record.approved_on,
         approved_by=record.approved_by, record_id=record.id,
-        stamp=(record.corrected_at or record.published_at or record.uploaded_at).isoformat(),
+        # Changes with every save in the editor and every correction: the render cache follows.
+        stamp=f"{(record.corrected_at or record.published_at or record.uploaded_at).isoformat()}"
+              f"#{record.edit_count or 0}",
     )
 
 

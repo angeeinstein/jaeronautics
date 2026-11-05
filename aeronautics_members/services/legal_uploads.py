@@ -225,9 +225,10 @@ def why_not_correctable(record, now=None):
     return None
 
 
-def correct(actor, record_id, german_upload, english_upload=None):
+def correct(actor, record_id, german_upload, english_upload=None, *, remove_english=False):
     """Replace a published version's text, while it may still be corrected. Its day, the day it
-    applies from and its approval stay; its translation is replaced only if a new one comes."""
+    applies from and its approval stay; its translation is replaced only if a new one comes --
+    or removed, with ``remove_english`` (the editor, the translation taken out)."""
     record = _german_record(record_id)
     reason = why_not_correctable(record)
     if reason is not None:
@@ -243,6 +244,12 @@ def correct(actor, record_id, german_upload, english_upload=None):
     now = get_now_utc()
     before = {"title": record.title, "revision": record.revision, "body": record.body}
     record.title, record.revision, record.body, record.corrected_at = german.title, german.revision, bodies[0], now
+    removed = None
+    if remove_english and len(versions) == 1:
+        removed = next(iter(record.translations), None)
+        if removed is not None:
+            before["english"] = {"title": removed.title, "revision": removed.revision, "body": removed.body}
+            record.translations.remove(removed)
     if len(versions) == 2:
         english = next(iter(record.translations), None)
         if english is None:
@@ -258,7 +265,7 @@ def correct(actor, record_id, german_upload, english_upload=None):
     log_audit_event("legal", "legal_text_corrected", actor_user=actor, target_user=actor,
                     before=before, after={"title": record.title, "revision": record.revision, "body": record.body},
                     metadata={"document": record.document, "team": record.team_slug, "record": record.id,
-                              "version": record.version.isoformat()})
+                              "version": record.version.isoformat(), "english_removed": removed is not None})
     return record
 
 

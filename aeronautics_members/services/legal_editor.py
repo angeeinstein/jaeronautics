@@ -249,12 +249,20 @@ def save(actor, record, german, english, edit_count):
     between refuses this one. ``english`` None: no translation (an existing one is removed)."""
     if record.status != "draft":
         raise ConflictError("A published version is corrected, not saved.", code="legal_published_already")
-    if edit_count != record.edit_count:
-        raise ConflictError("Somebody else saved this draft meanwhile. Reload it to see their changes.",
-                            code="legal_draft_changed")
     german = _clean(german, "german")
     english = _clean(english, "english") if english is not None else None
     now = get_now_utc()
+    # Compared and counted up in one statement: of two saves at the same moment, only one
+    # finds the count it names; the other is refused, never overwriting it.
+    claimed = db.session.execute(
+        db.update(LegalTextVersion)
+        .where(LegalTextVersion.id == record.id, LegalTextVersion.edit_count == edit_count)
+        .values(edit_count=edit_count + 1, edited_at=now)
+        .execution_options(synchronize_session=False))
+    if claimed.rowcount != 1:
+        raise ConflictError("Somebody else saved this draft meanwhile. Reload it to see their changes.",
+                            code="legal_draft_changed")
+    db.session.refresh(record, ["edit_count", "edited_at"])
     record.title, record.revision, record.body = german["title"], german["revision"], german["body"]
     translation = _english(record)
     if english is None:
@@ -270,8 +278,7 @@ def save(actor, record, german, english, edit_count):
         translation.title, translation.revision, translation.body = (
             english["title"], english["revision"], english["body"])
         translation.edited_at = now
-    record.edited_at = now
-    record.edit_count += 1
+        translation.edit_count = (translation.edit_count or 0) + 1
     db.session.flush()
     return record
 
@@ -336,4 +343,5 @@ def correct(actor, record, german, english):
     files = [(as_file(record, "de", german), "draft.md")]
     if english is not None:
         files.append((as_file(record, "en", english), "draft.md"))
-    return legal_uploads.correct(actor, record.id, *files)
+    # The translation removed in the editor: removed, not kept as an upload without one would.
+    return legal_uploads.correct(actor, record.id, *files, remove_english=english is None)
