@@ -1915,6 +1915,10 @@ class LegalTextVersion(db.Model):
     lock_since = db.Column(db.DateTime, nullable=True)
     lock_seen_at = db.Column(db.DateTime, nullable=True)
     lock_typed_at = db.Column(db.DateTime, nullable=True)
+    #: An English version made by machine from its German one (docs/legal-translation-plan.md):
+    #: its body is the translated page as HTML, not Markdown; ``source_hash`` the German it was made from.
+    machine_translated = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    source_hash = db.Column(db.String(64), nullable=True)
 
     uploaded_by = db.relationship("User", foreign_keys=[uploaded_by_user_id])
     published_by = db.relationship("User", foreign_keys=[published_by_user_id])
@@ -1944,3 +1948,18 @@ class LegalTextSnapshot(db.Model):
     # Deleted with its draft, by the ORM as well as by the database.
     record = db.relationship("LegalTextVersion", backref=db.backref(
         "snapshots", cascade="all, delete-orphan", order_by="LegalTextSnapshot.id"))
+
+
+class Translation(db.Model):
+    """A text translated by machine, German to English, kept by the exact text it was made from
+    (services/translation.py): it is never sent to a translator again."""
+
+    __tablename__ = "translations"
+
+    #: Of the text, the target language, HTML or not, and the glossary it was made with.
+    source_hash = db.Column(db.String(64), primary_key=True)
+    source = db.Column(db.Text(length=4_000_000), nullable=False)
+    target = db.Column(db.Text(length=4_000_000), nullable=False)
+    #: deepl or azure.
+    service = db.Column(db.String(10), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
