@@ -296,7 +296,42 @@ def as_file(record, language, part):
               'status: "draft"']
     if part.get("revision"):
         lines.append(f"source_revision: {json.dumps(part['revision'])}")
+    if record.approved_by:
+        lines.append(f"approved_by: {json.dumps(record.approved_by)}")
+    if record.approved_on:
+        lines.append(f'approved_on: "{record.approved_on.isoformat()}"')
     return ("\n".join(lines) + "\n---\n\n" + (part.get("body") or "")).encode("utf-8")
+
+
+def read_file(actor, record, german_upload, english_upload=None):
+    """*Replace with a file* in the editor: uploaded files, checked as an upload is, read into
+    {"german": part, "english": part or None} -- None: the translation stays as it is. Must be the
+    same text. The draft's state before is kept as an earlier state; the editor puts the text in as a
+    change undo takes back, and saves it as any other."""
+    versions, bodies, problems = legal_uploads._checked(german_upload, english_upload)
+    if problems or not versions:
+        legal_uploads._invalid(problems or ["The German file is missing."], action="taken in")
+    if (versions[0].slug, versions[0].team) != (record.document, record.team_slug):
+        legal_uploads._invalid(["The file is a different text: the front matter must name the same document and "
+                                "team."], action="taken in")
+    open_session(actor, record)
+    parts = [{"title": v.title, "revision": v.revision, "body": text} for v, text in zip(versions, bodies)]
+    return {"german": parts[0], "english": parts[1] if len(parts) == 2 else None}
+
+
+def markdown_file(german, language="de"):
+    """``(data, filename)`` of a version's Markdown file -- German, or its English translation --
+    front matter included, as an upload takes it back; None when there is none. A file in legal/ as
+    it is; one kept in the portal as its fields and text make it."""
+    version = german if language == legal.AUTHORITATIVE else legal.translation_any(german)
+    if version is None:
+        return None
+    name = "-".join(part for part in (german.team, german.slug, language, german.version.isoformat()) if part) + ".md"
+    if version.path is not None:
+        return version.path.read_bytes(), name
+    record = db.session.get(LegalTextVersion, german.record_id)
+    part = content(record)["german" if language == legal.AUTHORITATIVE else "english"]
+    return as_file(record, language, part), name
 
 
 _ROLE = re.compile(r"^(German|English): ")

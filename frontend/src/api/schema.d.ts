@@ -2824,6 +2824,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/legal/drafts/{record_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** *Replace with a file*: the text of uploaded files -- checked as an upload is -- for the editor to put */
+        post: operations["legal_draft_read_file"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/legal/drafts/{record_id}/session": {
         parameters: {
             query?: never;
@@ -6389,8 +6406,12 @@ export interface components {
              */
             effective_from: string;
             english: components["schemas"]["TextOut"] | null;
+            /** English Markdown Url */
+            english_markdown_url: string | null;
             german: components["schemas"]["TextOut"];
             in_force: components["schemas"]["InForceTextOut"] | null;
+            /** Markdown Url */
+            markdown_url: string;
             /** May Publish */
             may_publish: boolean;
             /**
@@ -9208,8 +9229,18 @@ export interface components {
              * Format: date
              */
             effective_from: string;
+            /**
+             * English Markdown Url
+             * @default null
+             */
+            english_markdown_url?: string | null;
             /** Has English */
             has_english: boolean;
+            /**
+             * Markdown Url
+             * @default
+             */
+            markdown_url?: string;
             /** Pdf Url */
             pdf_url: string;
             /**
@@ -10526,8 +10557,18 @@ export interface components {
              * Format: date
              */
             effective_from: string;
+            /**
+             * English Markdown Url
+             * @default null
+             */
+            english_markdown_url?: string | null;
             /** Has English */
             has_english: boolean;
+            /**
+             * Markdown Url
+             * @default
+             */
+            markdown_url?: string;
             /**
              * Members To Tell
              * @default 0
@@ -20928,6 +20969,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SavedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    legal_draft_read_file: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    english?: string;
+                    /** Format: binary */
+                    german: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentOut"];
                 };
             };
             /** @description The input is not valid (see error.fields). */

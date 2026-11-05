@@ -7178,6 +7178,17 @@
               }
             ]
           },
+          "english_markdown_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "English Markdown Url"
+          },
           "german": {
             "$ref": "#/components/schemas/TextOut"
           },
@@ -7190,6 +7201,10 @@
                 "type": "null"
               }
             ]
+          },
+          "markdown_url": {
+            "title": "Markdown Url",
+            "type": "string"
           },
           "may_publish": {
             "title": "May Publish",
@@ -7274,6 +7289,8 @@
           "opened_snapshot_id",
           "snapshots",
           "pdf_url",
+          "markdown_url",
+          "english_markdown_url",
           "back_url",
           "may_publish",
           "approved_by",
@@ -15749,9 +15766,26 @@
             "title": "Effective From",
             "type": "string"
           },
+          "english_markdown_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English Markdown Url"
+          },
           "has_english": {
             "title": "Has English",
             "type": "boolean"
+          },
+          "markdown_url": {
+            "default": "",
+            "title": "Markdown Url",
+            "type": "string"
           },
           "pdf_url": {
             "title": "Pdf Url",
@@ -19707,9 +19741,26 @@
             "title": "Effective From",
             "type": "string"
           },
+          "english_markdown_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English Markdown Url"
+          },
           "has_english": {
             "title": "Has English",
             "type": "boolean"
+          },
+          "markdown_url": {
+            "default": "",
+            "title": "Markdown Url",
+            "type": "string"
           },
           "members_to_tell": {
             "default": 0,
@@ -33392,6 +33443,100 @@
           }
         },
         "summary": "Correct a published version as written in the editor: within 24 hours of publishing, while",
+        "tags": [
+          "Legal"
+        ]
+      }
+    },
+    "/api/v1/legal/drafts/{record_id}/file": {
+      "post": {
+        "operationId": "legal_draft_read_file",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "english": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "german": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "german"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "*Replace with a file*: the text of uploaded files -- checked as an upload is -- for the editor to put",
         "tags": [
           "Legal"
         ]

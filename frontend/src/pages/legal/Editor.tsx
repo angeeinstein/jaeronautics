@@ -21,6 +21,7 @@ import {
   Button,
   Group,
   List,
+  Menu,
   Modal,
   Popover,
   SegmentedControl,
@@ -38,6 +39,7 @@ import {
   IconArrowBackUp,
   IconArrowForwardUp,
   IconBold,
+  IconFileText,
   IconHeading,
   IconHelp,
   IconHistory,
@@ -53,7 +55,14 @@ import { api, ApiError, call, type Schemas } from '../../api/client';
 import { ConfirmButton } from '../../components/ConfirmButton';
 import { Changes } from '../../components/legal/Changes';
 import textClasses from '../../components/legal/LegalText.module.css';
-import { Problems } from '../../components/legal/LegalFiles';
+import {
+  formOf,
+  LegalFiles,
+  NO_FILES,
+  Problems,
+  problemsOf,
+  type ChosenFiles,
+} from '../../components/legal/LegalFiles';
 import {
   MarkdownEditor,
   prefixLines,
@@ -123,6 +132,7 @@ function Workspace({ data }: { data: EditorOut }) {
   const [editedAt, setEditedAt] = useState(data.edited_at ?? null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [replacing, setReplacing] = useState(false);
   const germanView = useRef<EditorView | null>(null);
   const englishView = useRef<EditorView | null>(null);
   // Only in handlers: a view is never read while drawing.
@@ -420,6 +430,37 @@ function Workspace({ data }: { data: EditorOut }) {
             >
               History
             </Button>
+            <Menu position="bottom-end" withinPortal>
+              <Menu.Target>
+                <Button variant="default" leftSection={<IconFileText size={16} />}>
+                  File
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Label>As saved</Menu.Label>
+                <Menu.Item component="a" href={data.markdown_url} download disabled={saving !== 'saved'}>
+                  Download Markdown
+                </Menu.Item>
+                {english && data.english_markdown_url ? (
+                  <Menu.Item
+                    component="a"
+                    href={data.english_markdown_url}
+                    download
+                    disabled={saving !== 'saved'}
+                  >
+                    Download Markdown (English)
+                  </Menu.Item>
+                ) : null}
+                <Menu.Divider />
+                <Menu.Item
+                  onClick={() => {
+                    setReplacing(true);
+                  }}
+                >
+                  Replace with a file…
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
             {saving === 'saved' ? <PdfLink href={data.pdf_url}>Preview PDF</PdfLink> : null}
             {correcting ? (
               <ConfirmButton
@@ -523,6 +564,23 @@ function Workspace({ data }: { data: EditorOut }) {
           </ul>
         </Stack>
       </Modal>
+      {replacing ? (
+        <ReplaceWithFile
+          recordId={data.record_id}
+          onClose={() => {
+            setReplacing(false);
+          }}
+          onRead={(content) => {
+            putBack({
+              german: partOf(content.german) ?? german,
+              // A file without its translation leaves the translation as it is.
+              english: partOf(content.english) ?? english,
+            });
+            setReplacing(false);
+            notifyDone('Replaced with the file. Undo takes it back.');
+          }}
+        />
+      ) : null}
       {publishing ? (
         <Publish
           text={{
@@ -544,6 +602,68 @@ function Workspace({ data }: { data: EditorOut }) {
         />
       ) : null}
     </>
+  );
+}
+
+/** The text replaced by uploaded files: checked as an upload is, put in as a change undo takes back. */
+function ReplaceWithFile({
+  recordId,
+  onClose,
+  onRead,
+}: {
+  recordId: number;
+  onClose: () => void;
+  onRead: (content: Schemas['ContentOut']) => void;
+}) {
+  const [files, setFiles] = useState<ChosenFiles>(NO_FILES);
+  const [problems, setProblems] = useState<string[]>([]);
+  const read = useMutation({
+    mutationFn: () =>
+      call(
+        api.POST('/api/v1/legal/drafts/{record_id}/file', {
+          params: { path: { record_id: recordId } },
+          body: formOf(files),
+        }),
+      ),
+    onSuccess: onRead,
+    onError: (error) => {
+      const listed = problemsOf(error);
+      if (listed) setProblems(listed);
+      else notifyFailed(error);
+    },
+  });
+  return (
+    <Modal opened onClose={onClose} title="Replace with a file" size="lg">
+      <Stack gap="md">
+        <Text size="sm" c="dimmed">
+          The whole text, as a Markdown file -- downloaded from here and changed, or written elsewhere. It is
+          checked as an upload is. Without an English file, the translation stays as it is. The draft as it is
+          now stays under History, and undo takes the change back.
+        </Text>
+        <Problems problems={problems} title="Not taken in, because of:" />
+        <LegalFiles
+          value={files}
+          onChange={(chosen) => {
+            setFiles(chosen);
+            setProblems([]);
+          }}
+        />
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!files.german}
+            loading={read.isPending}
+            onClick={() => {
+              read.mutate();
+            }}
+          >
+            Replace
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   );
 }
 

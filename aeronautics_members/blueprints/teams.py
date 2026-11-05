@@ -219,6 +219,18 @@ def team_rules_editor(slug, record_id):
     return app_shell()
 
 
+@teams_bp.route("/teams/<slug>/manage/rules/waiting.md", methods=["GET"])
+@login_required
+def team_rules_waiting_markdown(slug):
+    """The team's rules not in force yet as their Markdown file (``language=en``: the translation)."""
+    team = _team_or_404(slug)
+    _may(team, teams_service.TeamPermission.RULES)
+    german = legal_pages.waiting_version(legal.TEAM_RULES, team.slug)
+    if german is None:
+        abort(404)
+    return legal_pages.markdown(german, request.args.get("language", "de"))
+
+
 @teams_bp.route("/teams/<slug>/manage/rules/waiting.pdf", methods=["GET"])
 @login_required
 def team_rules_waiting_pdf(slug):

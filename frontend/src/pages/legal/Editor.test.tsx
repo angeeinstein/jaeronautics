@@ -36,6 +36,8 @@ function session(overrides: Partial<Schemas['EditorOut']> = {}): Schemas['Editor
       { id: 20, created_at: '2026-11-03T10:00:00Z', created_by: 'Lea Lead' },
     ],
     pdf_url: '/admin/legal/waiting.pdf?document=statutes&record=7',
+    markdown_url: '/admin/legal/waiting.md?document=statutes&record=7',
+    english_markdown_url: null,
     back_url: '/admin/legal',
     may_publish: true,
     approved_by: null,
@@ -159,6 +161,33 @@ describe('the editor', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add an English translation' }));
 
     expect(await screen.findByRole('textbox', { name: 'English text, Markdown' })).toBeInTheDocument();
+  });
+
+  it('replaced with a file, as a change undo takes back', async () => {
+    const { calls } = show({
+      [`POST ${API}/file`]: {
+        body: { german: { title: 'Statuten', revision: 'Rev 2', body: 'Aus der Datei.' }, english: null },
+      },
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'File' }));
+    expect(await screen.findByRole('menuitem', { name: 'Download Markdown' })).toHaveAttribute(
+      'href',
+      '/admin/legal/waiting.md?document=statutes&record=7',
+    );
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Replace with a file…' }));
+    const dialog = await screen.findByRole('dialog');
+    const [germanInput] = dialog.querySelectorAll<HTMLInputElement>('input[type="file"]');
+    await userEvent.upload(germanInput ?? dialog, new File(['---'], 'changed.md', { type: 'text/markdown' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Replace' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'German text, Markdown' })).toHaveTextContent(
+        'Aus der Datei.',
+      );
+    });
+    expect(screen.getByRole('textbox', { name: 'Revision (optional)' })).toHaveValue('Rev 2');
+    expect(calls.some((call) => new URL(call.url).pathname === `${API}/file`)).toBe(true);
   });
 
   it('no Publish for somebody who may only write', async () => {

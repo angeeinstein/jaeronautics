@@ -162,6 +162,16 @@ function Waiting({ slug, data }: { slug: string; data: RulesOut }) {
                       Delete
                     </ConfirmButton>
                   ) : null}
+                  {text.markdown_url ? (
+                    <Anchor href={text.markdown_url} download size="sm">
+                      Markdown
+                    </Anchor>
+                  ) : null}
+                  {text.english_markdown_url ? (
+                    <Anchor href={text.english_markdown_url} download size="sm">
+                      Markdown (en)
+                    </Anchor>
+                  ) : null}
                   <PdfLink href={text.pdf_url}>PDF</PdfLink>
                 </Group>
               </li>

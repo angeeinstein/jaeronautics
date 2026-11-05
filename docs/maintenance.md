@@ -572,6 +572,14 @@ count is refused ("Somebody else saved this draft meanwhile"). Undo and redo;
 *History* an earlier state (`legal_text_snapshots`: one per editing session,
 the last 20) -- both as a change undo takes back, saved like any other.
 Correcting a published version: the same page, saved with *Save correction*.
+*File* in the editor downloads the draft as saved as its Markdown file (German,
+and English when there is a translation), front matter included -- the file an
+upload takes back -- and *Replace with a file* reads uploaded files into the
+editor (checked as an upload is; without an English file the translation
+stays), keeping the state before under *History*; undo takes it back. Every
+row under *Not in force yet* (and on a team's Rules page) has its *Markdown*
+too, a file in `legal/` as it is. So a draft kept in the portal can be handed
+to someone -- or an AI agent -- who cannot reach the server, and taken back.
 
 Starting, copying in, uploading, publishing, correcting and deleting are in
 the log (category *legal*); a save is not. *Download a template* gives a Markdown file with every front matter

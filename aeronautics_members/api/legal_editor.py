@@ -123,6 +123,9 @@ class EditorOut(Model):
     snapshots: list[SnapshotOut]
     #: Its PDF, as saved (``?prepare=1`` first).
     pdf_url: str
+    #: Its Markdown files as saved, to download: German, and English when there is a translation.
+    markdown_url: str
+    english_markdown_url: str | None
     #: Where the list of texts is: Admin › Legal texts, or the team's Rules page.
     back_url: str
     may_publish: bool
@@ -159,9 +162,12 @@ def _editor_out(record, opened):
     if admin or team is None:
         pdf_url = url_for("admin.admin_legal_waiting_pdf", document=record.document, team=record.team_slug,
                           record=record.id)
+        markdown_url = url_for("admin.admin_legal_waiting_markdown", document=record.document,
+                               team=record.team_slug, record=record.id)
         back_url = "/admin/legal"
     else:
         pdf_url = url_for("teams.team_rules_waiting_pdf", slug=team.slug, record=record.id)
+        markdown_url = url_for("teams.team_rules_waiting_markdown", slug=team.slug, record=record.id)
         back_url = f"/teams/{team.slug}/manage/rules"
     if record.status != "draft":
         pdf_url = (url_for("teams.team_rules_pdf", slug=record.team_slug) if record.team_slug
@@ -173,7 +179,8 @@ def _editor_out(record, opened):
         edited_at=record.edited_at, in_force=in_force_out, opened_snapshot_id=opened.id,
         snapshots=[SnapshotOut(id=s.id, created_at=s.created_at, created_by=_person(s.created_by))
                    for s in reversed(record.snapshots)],
-        pdf_url=pdf_url, back_url=back_url,
+        pdf_url=pdf_url, back_url=back_url, markdown_url=markdown_url,
+        english_markdown_url=f"{markdown_url}&language=en" if content["english"] else None,
         may_publish=current_user.can(Permission.LEGAL_TEXTS) and current_user.can(Permission.LEGAL_PUBLISH),
         approved_by=record.approved_by, approved_on=record.approved_on, effective_from=record.effective_from,
         tells_by_default=legal_uploads.tells_by_default(record.document, record.team_slug),
@@ -246,6 +253,20 @@ def legal_draft_snapshot(record_id, snapshot_id):
     record = editor.editable(current_user, record_id)
     kept = editor.snapshot(record, snapshot_id).content
     return ContentOut(german=_text(kept["german"]), english=_text(kept.get("english")))
+
+
+@endpoint("POST", "/legal/drafts/<int:record_id>/file", response=ContentOut, tag=TAG,
+          uploads={"german": True, "english": False})
+def legal_draft_read_file(record_id, files):
+    """*Replace with a file*: the text of uploaded files -- checked as an upload is -- for the editor to put
+    in; ``english`` None: the translation stays. The draft as it was is kept as an earlier state.
+    What is wrong is a 400 with ``details.problems``."""
+    from .admin_legal import _uploads
+
+    record = editor.editable(current_user, record_id)
+    read = editor.read_file(current_user, record, *_uploads(files))
+    db.session.commit()
+    return ContentOut(german=_text(read["german"]), english=_text(read["english"]))
 
 
 class CorrectIn(Model):

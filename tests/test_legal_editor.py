@@ -5,6 +5,8 @@ never over somebody else's save; its earlier states kept per session; one
 language checked and rendered as written; a correction within the 24 hours;
 who may do what -- and publishing refusing a text the checks refuse.
 """
+import io
+
 import pytest
 
 from api_helpers import send
@@ -271,3 +273,67 @@ class TestTheApi:
 
         assert started["editor_url"].startswith("/teams/rocket/manage/rules/drafts/")
         assert client.get(started["editor_url"]).status_code == 200
+
+
+class TestAsAFile:
+    def test_downloaded_with_its_front_matter_and_taken_back_as_it_is(self, client, boss):  # noqa: F811
+        record = legal_uploads.upload_draft(boss, _file(body="§ 1 Name.", extra='approved_by: "Vorstand"\n'),
+                                            _file(title="Statutes", body="§ 1 Name (en).", language="en"))
+        db.session.commit()
+        _login(client, boss.id)
+
+        german = client.get(f"/admin/legal/waiting.md?document=statutes&record={record.id}")
+        english = client.get(f"/admin/legal/waiting.md?document=statutes&record={record.id}&language=en")
+
+        assert german.status_code == 200 and german.mimetype == "text/markdown"
+        assert 'filename="statutes-de-' in german.headers["Content-Disposition"]
+        text = german.get_data(as_text=True)
+        assert text.startswith("---\n") and 'approved_by: "Vorstand"' in text and "§ 1 Name." in text
+        assert "§ 1 Name (en)." in english.get_data(as_text=True)
+        again = legal_uploads.upload_draft(boss, (german.data, "x.md"), (english.data, "y.md"))
+        assert again.body.strip() == "§ 1 Name." and again.approved_by == "Vorstand"
+
+    def test_a_file_in_legal_as_it_is(self, client, boss, texts):  # noqa: F811
+        day = get_membership_today().isoformat()
+        texts("privacy-policy", day, "§ 1 Datei.", status="draft", title="Datenschutz")
+        _login(client, boss.id)
+
+        response = client.get(f"/admin/legal/waiting.md?document=privacy-policy&version={day}")
+
+        assert response.status_code == 200 and "§ 1 Datei." in response.get_data(as_text=True)
+
+    def test_for_a_lead_their_rules_only(self, client, boss, rocket, switched_on):  # noqa: F811
+        team, lead = rocket
+        record = editor.start_draft(lead, legal.TEAM_RULES, team.slug, "template", _template(team))
+        db.session.commit()
+        _login(client, lead.id)
+
+        assert client.get(f"/teams/rocket/manage/rules/waiting.md?record={record.id}").status_code == 200
+        # Not through the admins' address: sent away, not given the file.
+        assert client.get(f"/admin/legal/waiting.md?document=team-rules&team=rocket&record={record.id}") \
+            .status_code in (302, 403)
+
+    def test_replaced_with_a_file_the_state_before_kept(self, client, boss):  # noqa: F811
+        record = editor.start_draft(boss, "statutes", template=_template())
+        db.session.commit()
+        _login(client, boss.id)
+        data, _name = _file(body="§ 1 Aus der Datei.")
+
+        read = client.post(f"/api/v1/legal/drafts/{record.id}/file",
+                           data={"german": (io.BytesIO(data), "anything.md")},
+                           content_type="multipart/form-data").get_json()
+
+        assert read["german"]["body"].strip() == "§ 1 Aus der Datei." and read["english"] is None
+        assert "Aus der Datei" not in record.body  # put in by the editor, then saved
+        assert db.session.query(LegalTextSnapshot).filter_by(record_id=record.id).count() == 1
+
+    def test_never_a_different_text(self, client, boss):  # noqa: F811
+        record = editor.start_draft(boss, "statutes", template=_template())
+        db.session.commit()
+        _login(client, boss.id)
+        data, _name = _file("legal-notice", "Impressum")
+
+        refused = client.post(f"/api/v1/legal/drafts/{record.id}/file", data={"german": (io.BytesIO(data), "x.md")},
+                              content_type="multipart/form-data")
+
+        assert refused.status_code == 400 and "different text" in refused.get_json()["error"]["details"]["problems"][0]

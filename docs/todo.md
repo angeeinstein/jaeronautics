@@ -36,28 +36,6 @@ update's warning of local changes only for the portal's own files).
 
 ## Open
 
-### Legal texts: a draft as a Markdown file, out and back in
-
-- **Added:** 2026-11-05
-- **What:** two small additions for passing a draft back and forth -- to the
-  association's helpers, an AI agent, or Claude, who cannot reach the live
-  server's database:
-  - **Download as Markdown** on every draft (Admin › Legal texts, *Not in
-    force yet*; a team's Rules page) and in the editor: the German file and,
-    if there is one, the English one, front matter included -- the same file
-    an upload takes, so it goes straight back in.
-  - **Replace with a file** in the editor: an uploaded file goes into the
-    draft being edited instead of starting a new draft. The draft's state
-    before is kept in *History*, and undo takes it back; the file is checked
-    as an upload is.
-- **Where:** `frontend/src/pages/admin/LegalTexts.tsx`,
-  `frontend/src/pages/teams/manage/Rules.tsx`,
-  `frontend/src/pages/legal/Editor.tsx`; the file from
-  `services/legal_editor.as_file`.
-- **Why:** the maintainer asked whether, once a draft is copied into the
-  portal, Claude can still prepare changes to it, or whether a Markdown file
-  has to be handed over: it has to, and these make it one click each way.
-
 ### Legal texts editor: one person edits a draft at a time
 
 - **Added:** 2026-11-05

@@ -101,6 +101,19 @@ def template(team=None):
     return response
 
 
+def markdown(german, language):
+    """A version's Markdown file, to download (``language``: de or en), or 404."""
+    from ..services import legal_editor
+
+    found = legal_editor.markdown_file(german, language) if language in legal.LANGUAGES else None
+    if found is None:
+        abort(404)
+    data, name = found
+    response = current_app.response_class(data, mimetype="text/markdown")
+    response.headers["Content-Disposition"] = f'attachment; filename="{name}"'
+    return response
+
+
 def waiting_version(document, team_slug):
     """The German version a waiting PDF asks for: ``record`` (uploaded in the portal) or
     ``version`` (a file in legal/); None if there is no such one."""

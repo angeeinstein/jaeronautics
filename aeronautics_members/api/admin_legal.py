@@ -75,6 +75,9 @@ class UpcomingVersionOut(Model):
     #: Which text, for *Edit* on a draft file in legal/ (copied into the portal first).
     document: str = ""
     team: str | None = None
+    #: Its Markdown file, to download: German, and the English one if there is one.
+    markdown_url: str = ""
+    english_markdown_url: str | None = None
     #: Publishing emails the members unless unticked: the texts accepted at signup, a team's rules.
     tells_by_default: bool = False
     #: How many members that email would reach: all active ones, or the team's.
@@ -175,7 +178,13 @@ def admin_legal():
     ]:
         for version in legal.waiting(slug, team=team):
             record = db.session.get(LegalTextVersion, version.record_id) if version.record_id else None
+            which = {"document": slug, "team": team, **({"record": version.record_id} if version.record_id
+                                                         else {"version": version.version.isoformat()})}
+            has_english = legal.translation_any(version) is not None
             waiting.append(UpcomingVersionOut(
+                markdown_url=url_for("admin.admin_legal_waiting_markdown", **which),
+                english_markdown_url=url_for("admin.admin_legal_waiting_markdown", language="en", **which)
+                if has_english else None,
                 title=version.title, team_name=names.get(team, team) if team else None,
                 version=version.version, revision=version.revision,
                 status="draft" if version.status == "draft" else "scheduled",
