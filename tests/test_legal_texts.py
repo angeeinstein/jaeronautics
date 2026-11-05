@@ -148,6 +148,15 @@ class TestTheFilesAreChecked:
 
 
 class TestRendering:
+    def test_a_columns_alignment_is_a_class_not_an_inline_style(self, texts):
+        # The pages' security policy blocks style attributes (content_security.py).
+        texts("statutes", "2019-03-17", "| A | B | C |\n|---|---:|:---:|\n| 1 | 2 | 3 |\n")
+
+        html = str(legal.render(legal.current_version("statutes", today=date(2026, 1, 1)))["html"])
+
+        assert "style=" not in html
+        assert '<td class="align-right">2</td>' in html and '<td class="align-center">3</td>' in html
+
     def test_front_matter_is_not_shown_and_paragraphs_get_anchors(self, texts):
         texts("statutes", "2019-03-17", "# Statuten des Vereins\n\n## §1. Name\n\nText.\n\n## Schluss\n",
               title="Statuten")

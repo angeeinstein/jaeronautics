@@ -1909,9 +1909,16 @@ class LegalTextVersion(db.Model):
     #: Copied from a draft file in legal/ ("privacy-policy/de/2026-10-08.md"): that file
     #: is no longer listed.
     imported_from = db.Column(db.String(255), nullable=True)
+    #: Who edits it in the editor now (services/legal_editor.py, "The lock"): since when, the
+    #: editor's last sign of life, and the last typing. Others see it read-only meanwhile.
+    lock_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    lock_since = db.Column(db.DateTime, nullable=True)
+    lock_seen_at = db.Column(db.DateTime, nullable=True)
+    lock_typed_at = db.Column(db.DateTime, nullable=True)
 
     uploaded_by = db.relationship("User", foreign_keys=[uploaded_by_user_id])
     published_by = db.relationship("User", foreign_keys=[published_by_user_id])
+    lock_user = db.relationship("User", foreign_keys=[lock_user_id])
     # Deleted with its German version, by the ORM as well as by the database.
     translation_of = db.relationship("LegalTextVersion", remote_side=[id], backref=db.backref(
         "translations", cascade="all, delete-orphan"))

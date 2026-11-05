@@ -36,39 +36,6 @@ update's warning of local changes only for the portal's own files).
 
 ## Open
 
-### Legal texts editor: one person edits a draft at a time
-
-- **Added:** 2026-11-05
-- **What:** a lock on a draft in the editor (`frontend/src/pages/legal/Editor.tsx`,
-  `services/legal_editor.py`, `api/legal_editor.py`). The first person to open
-  a draft holds it; anyone else who opens it sees it read-only -- text,
-  Preview, Changes, History -- with a note at the top: "Anna Berger is
-  editing this (since 14:02)".
-  - **Freed by itself:** the holder's editor tells the server every 30
-    seconds that it is still there; with the tab closed, the connection lost
-    or the laptop asleep, the draft is free about a minute later. Nobody
-    unlocks anything by hand.
-  - **Taken over:** after 10 minutes without typing, the others get *Take
-    over*; the earlier holder's editor turns read-only and says who took
-    over. What they typed is saved already (autosave).
-  - **When the holder leaves,** the read-only editor says it is free and
-    switches to editing with a click, without a reload.
-  - **Corrections** in the 24 hours after publishing use the same lock (two
-    publishers correcting at once: today the later one wins, both logged).
-  - **The save check stays** (`edit_count`, compared and raised in one
-    UPDATE) as the safety net behind the lock.
-- **Where:** columns on `legal_text_versions` (who holds it, last sign of
-  life, last typing) and a migration; an endpoint the editor calls every 30
-  seconds; the editor's read-only mode (`MarkdownEditor` has `readOnly`).
-- **Why:** the maintainer: editing and then "not being allowed to save is
-  also not so nice"; better to know before typing. A hard lock without
-  expiry was ruled out: a laptop closed with a draft open would block it
-  until an admin unlocked it. Real simultaneous editing (as in Google Docs)
-  ruled out too: the texts change about once a year.
-- **Open questions:** the two numbers -- free about a minute after the tab
-  closes, take-over after 10 minutes without typing -- were suggested, not
-  yet confirmed.
-
 ### TDT's rules 2026.2: publish once the board approves (waiting)
 
 - **Added:** 2026-11-04

@@ -43,6 +43,15 @@
   vertical-align: top;
 }
 
+/* A column aligned in the Markdown (|---:| or |:---:|): a class, as the security policy wants. */
+.text :global(.align-right) {
+  text-align: right;
+}
+
+.text :global(.align-center) {
+  text-align: center;
+}
+
 .layout {
   display: grid;
   gap: var(--mantine-spacing-lg);

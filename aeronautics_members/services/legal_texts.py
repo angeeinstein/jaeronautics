@@ -542,6 +542,13 @@ def render(version):
             if token.tag == "h1":
                 token.attrSet("class", "legal-part")
             contents.append((anchor, label, int(token.tag[1])))
+        if token.type in ("th_open", "td_open") and token.attrGet("style"):
+            # A table column aligned right or centred: a class, not the inline style markdown-it
+            # writes -- the pages' security policy blocks style attributes.
+            align = str(token.attrGet("style")).removeprefix("text-align:").strip()
+            token.attrs.pop("style", None)
+            if align in ("left", "right", "center"):
+                token.attrSet("class", f"align-{align}")
         kept.append(token)
 
     rendered = {

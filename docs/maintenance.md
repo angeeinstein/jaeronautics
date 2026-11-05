@@ -572,6 +572,17 @@ count is refused ("Somebody else saved this draft meanwhile"). Undo and redo;
 *History* an earlier state (`legal_text_snapshots`: one per editing session,
 the last 20) -- both as a change undo takes back, saved like any other.
 Correcting a published version: the same page, saved with *Save correction*.
+**One person edits a draft at a time:** whoever opens it first holds it
+(`lock_user_id` and its times on `legal_text_versions`), and their editor says
+so every 30 seconds; anyone else sees it read-only, with "Anna Berger is
+editing this draft (since 14:02)". The draft is free again at once when the
+holder leaves the editor, or about a minute after their editor stops (the tab
+closed, the laptop asleep) -- *Edit* then takes it, loading it as it is. After
+10 minutes without typing the others get *Take over* (logged as
+`legal_draft_taken_over`); the earlier holder's editor turns read-only and
+says so -- what they wrote is saved already. Saving, correcting and
+publishing are refused while somebody else holds it; the save count stays
+behind the lock as a safety net.
 *File* in the editor downloads the draft as saved as its Markdown file (German,
 and English when there is a translation), front matter included -- the file an
 upload takes back -- and *Replace with a file* reads uploaded files into the

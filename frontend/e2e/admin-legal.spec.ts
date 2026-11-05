@@ -95,6 +95,46 @@ test.describe('legal texts', () => {
     await expect(draft).toHaveCount(0);
   });
 
+  test("one person edits a draft at a time: the team's lead sees the admin editing it", async ({
+    page,
+    browser,
+    isMobile,
+  }) => {
+    test.skip(isMobile, 'two browsers once is enough');
+    test.slow();
+    await page.goto('/admin/legal');
+    const panel = page.getByRole('region', { name: 'Write a new version', exact: true });
+    await panel.getByLabel('Text', { exact: true }).click();
+    await page.getByRole('option', { name: /Teamordnung · Rocket/ }).click();
+    await panel.getByRole('button', { name: 'Write' }).click();
+    await page.waitForURL(/\/admin\/legal\/drafts\/\d+$/);
+    const recordId = /drafts\/(\d+)$/.exec(page.url())?.[1] ?? '';
+
+    // The lead, in a browser of their own, opens the same draft from the team's side.
+    const lead = await (await browser.newContext()).newPage();
+    await signIn(lead, 'active@example.org');
+    await lead.goto(`/teams/rocket-team/manage/rules/drafts/${recordId}`);
+    await expect(lead.getByText(/is editing this draft \(since/)).toBeVisible();
+    await expect(lead.getByRole('textbox', { name: 'Title' })).toHaveAttribute('readonly');
+
+    // The admin leaves: the lead's editor learns it at its next look, and may edit.
+    await page.goto('/admin/legal');
+    await expect(lead.getByText('Nobody is editing this draft now')).toBeVisible({ timeout: 45_000 });
+    await lead.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(lead.getByRole('textbox', { name: 'Title' })).not.toHaveAttribute('readonly');
+    await lead.goto('/teams/rocket-team/manage/rules');
+    await lead.context().close();
+
+    const draft = page
+      .getByRole('region', { name: 'Not in force yet', exact: true })
+      .getByRole('listitem')
+      .filter({ hasText: 'Uploaded' })
+      .filter({ hasText: 'Rocket' });
+    await page.reload();
+    await draft.first().getByRole('button', { name: 'Delete' }).click();
+    await draft.first().getByRole('button', { name: 'Yes, delete' }).click();
+  });
+
   test('on a phone nothing sticks out of the page', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'phones only');
     await page.goto('/admin/legal');

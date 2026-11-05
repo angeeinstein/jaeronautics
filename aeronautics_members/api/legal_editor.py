@@ -102,6 +102,27 @@ class InForceTextOut(Model):
     validity: str
 
 
+class LockOut(Model):
+    """Who edits the draft now: one person at a time; the others see it read-only."""
+
+    #: This person holds it: they write, and their editor gives a sign of life every 30 seconds.
+    mine: bool
+    #: Nobody holds it: *Edit* takes it.
+    free: bool
+    #: Who does, when somebody else does.
+    holder: str | None
+    since: UtcDateTime | None
+    #: The holder has not typed for 10 minutes: *Take over* is offered.
+    can_take_over: bool
+
+
+def _lock_out(record):
+    state = editor.lock_state(record, current_user)
+    return LockOut(mine=state["mine"], free=state["free"],
+                   holder=_person(state["holder"]) if state["holder"] not in (None, True) else None,
+                   since=state["since"], can_take_over=state["can_take_over"])
+
+
 class EditorOut(Model):
     record_id: int
     document: str
@@ -132,6 +153,8 @@ class EditorOut(Model):
     approved_by: str | None
     approved_on: date | None
     effective_from: date
+    #: Who edits it now; not this person: read-only.
+    lock: LockOut
     #: Publishing emails the members unless unticked, and how many it would reach.
     tells_by_default: bool = False
     members_to_tell: int = 0
@@ -183,6 +206,7 @@ def _editor_out(record, opened):
         english_markdown_url=f"{markdown_url}&language=en" if content["english"] else None,
         may_publish=current_user.can(Permission.LEGAL_TEXTS) and current_user.can(Permission.LEGAL_PUBLISH),
         approved_by=record.approved_by, approved_on=record.approved_on, effective_from=record.effective_from,
+        lock=_lock_out(record),
         tells_by_default=legal_uploads.tells_by_default(record.document, record.team_slug),
         members_to_tell=legal_uploads.members_to_tell(record.document, record.team_slug)
         if record.status == "draft" and current_user.can(Permission.LEGAL_PUBLISH) else 0)
@@ -190,8 +214,10 @@ def _editor_out(record, opened):
 
 @endpoint("POST", "/legal/drafts/<int:record_id>/session", response=EditorOut, tag=TAG)
 def legal_draft_session(record_id):
-    """Start an editing session: the draft as it is now, kept as an earlier state to go back to."""
+    """Start an editing session: the draft as it is now, kept as an earlier state to go back to. When
+    nobody else is editing it, this person holds it from now on; otherwise they see it read-only."""
     record = editor.editable(current_user, record_id)
+    editor.take_lock(current_user, record)
     opened = editor.open_session(current_user, record)
     db.session.commit()
     return _editor_out(record, opened)
@@ -267,6 +293,36 @@ def legal_draft_read_file(record_id, files):
     read = editor.read_file(current_user, record, *_uploads(files))
     db.session.commit()
     return ContentOut(german=_text(read["german"]), english=_text(read["english"]))
+
+
+class LockIn(Model):
+    #: look: who has it; beat: the holder's sign of life; take: *Edit* once it is free;
+    #: take_over: once the holder has not typed for 10 minutes.
+    action: Literal["look", "beat", "take", "take_over"] = "look"
+    #: With beat: typed since the last one.
+    typed: bool = False
+
+
+@endpoint("POST", "/legal/drafts/<int:record_id>/lock", response=LockOut, body=LockIn, tag=TAG)
+def legal_draft_lock(record_id, body):
+    """Who edits the draft now -- every 30 seconds from the editor: the holder's sign of life, or the
+    others asking whether it is free. Taking it, the editor loads the draft again."""
+    record = editor.editable(current_user, record_id)
+    if body.action == "beat":
+        editor.beat(current_user, record, typed=body.typed)
+    elif body.action in ("take", "take_over"):
+        editor.take_lock(current_user, record, take_over=body.action == "take_over")
+    db.session.commit()
+    return _lock_out(record)
+
+
+@endpoint("DELETE", "/legal/drafts/<int:record_id>/lock", response=LockOut, tag=TAG)
+def legal_draft_unlock(record_id):
+    """The holder leaves the editor: the draft is free at once (else a minute later by itself)."""
+    record = editor.editable(current_user, record_id)
+    editor.release(current_user, record)
+    db.session.commit()
+    return _lock_out(record)
 
 
 class CorrectIn(Model):

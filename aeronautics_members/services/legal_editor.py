@@ -12,6 +12,14 @@ A draft is started from the version in force, from the template, or by
 uploading (services/legal_uploads.py). A draft file in legal/ is copied into
 the portal the first time it is edited; the file is no longer listed.
 
+**The lock.** One person edits a draft at a time: whoever opens it first
+holds it, and anyone else sees it read-only, told who is editing it and
+since when. The holder's editor gives a sign of life every 30 seconds; when
+it stops -- the tab closed, the connection lost, the laptop asleep -- the
+draft is free again after ``LOCK_GONE_AFTER``, without anybody unlocking it.
+After ``TAKE_OVER_AFTER`` without typing, the others may take it over. Saving,
+correcting and publishing need it (the save check stays behind it).
+
 Who: whoever may write legal texts (``Permission.LEGAL_TEXTS``) any draft; a
 team's leads (``TeamPermission.RULES``) the drafts of their team's rules,
 also one an admin started. Publishing and correcting need
@@ -21,6 +29,7 @@ also one an admin started. Publishing and correcting need
 import json
 import re
 import tempfile
+from datetime import timedelta
 
 from .. import legal_pdf
 from ..db_models import LegalTextSnapshot, LegalTextVersion, db
@@ -30,6 +39,11 @@ from . import legal_texts as legal
 from . import legal_uploads
 from .audit import log_audit_event
 from .clock import get_membership_today, get_now_utc
+
+#: The editor gives a sign of life every 30 seconds: two missed, and the draft is free.
+LOCK_GONE_AFTER = timedelta(seconds=75)
+#: Without typing this long, the holder may be taken over.
+TAKE_OVER_AFTER = timedelta(minutes=10)
 
 #: Earlier states kept per draft; the oldest go first.
 SNAPSHOTS_KEPT = 20
@@ -222,6 +236,91 @@ def _tell_if_a_lead(actor, record):
 # --- Editing -------------------------------------------------------------------------------
 
 
+# --- The lock --------------------------------------------------------------------------------
+
+
+def _now():
+    """Now, as the lock's columns keep it: UTC without a zone, as the database stores any moment."""
+    return get_now_utc().replace(tzinfo=None)
+
+
+def _plain(moment):
+    return moment.replace(tzinfo=None) if moment is not None and moment.tzinfo is not None else moment
+
+
+def lock_state(record, user, now=None):
+    """{"mine", "free", "holder" (a user, not this one), "since", "can_take_over"}."""
+    now = now or _now()
+    seen = _plain(record.lock_seen_at)
+    if record.lock_user_id is None or seen is None or now - seen > LOCK_GONE_AFTER:
+        return {"mine": False, "free": True, "holder": None, "since": None, "can_take_over": False}
+    mine = record.lock_user_id == user.id
+    typed = _plain(record.lock_typed_at or record.lock_since) or seen
+    return {"mine": mine, "free": False, "holder": None if mine else record.lock_user,
+            "since": record.lock_since, "can_take_over": not mine and now - typed >= TAKE_OVER_AFTER}
+
+
+def held_by_another(record, user):
+    """The person editing the draft now, when it is not ``user``; else None."""
+    state = lock_state(record, user)
+    return None if state["free"] or state["mine"] else (state["holder"] or True)
+
+
+def take_lock(actor, record, *, take_over=False, typed=False, now=None):
+    """Hold the draft: when it is free, the holder's editor has gone quiet, or ``actor`` holds it
+    already -- with ``take_over``, also when the holder has not typed for ``TAKE_OVER_AFTER``.
+    One statement, so two people taking it at once cannot both have it. True when ``actor`` holds it."""
+    now = now or _now()
+    column = LegalTextVersion
+    gone = now - LOCK_GONE_AFTER
+    takeable = db.or_(column.lock_user_id.is_(None), column.lock_user_id == actor.id,
+                      column.lock_seen_at.is_(None), column.lock_seen_at < gone)
+    if take_over:
+        takeable = db.or_(takeable, db.func.coalesce(column.lock_typed_at, column.lock_since) < now - TAKE_OVER_AFTER)
+    before = record.lock_user_id
+    kept = db.and_(column.lock_user_id == actor.id, column.lock_seen_at >= gone)
+    taken = db.session.execute(
+        db.update(column).where(column.id == record.id, takeable)
+        .values(lock_user_id=actor.id, lock_seen_at=now,
+                lock_since=db.case((kept, column.lock_since), else_=now),
+                lock_typed_at=now if typed else db.case((kept, column.lock_typed_at), else_=now))
+        .execution_options(synchronize_session=False))
+    db.session.refresh(record, ["lock_user_id", "lock_since", "lock_seen_at", "lock_typed_at"])
+    if taken.rowcount == 1 and take_over and before not in (None, actor.id):
+        log_audit_event("legal", "legal_draft_taken_over", actor_user=actor, target_user=actor,
+                        metadata={"record": record.id, "from_user": before})
+    return taken.rowcount == 1
+
+
+def beat(actor, record, *, typed=False, now=None):
+    """The holder's sign of life (and whether they typed since the last one). False: somebody took
+    the draft over meanwhile."""
+    now = now or _now()
+    values = {"lock_seen_at": now, **({"lock_typed_at": now} if typed else {})}
+    kept = db.session.execute(
+        db.update(LegalTextVersion).where(LegalTextVersion.id == record.id,
+                                          LegalTextVersion.lock_user_id == actor.id)
+        .values(**values).execution_options(synchronize_session=False))
+    db.session.refresh(record, ["lock_user_id", "lock_since", "lock_seen_at", "lock_typed_at"])
+    return kept.rowcount == 1
+
+
+def release(actor, record):
+    """The holder leaves: the draft is free at once."""
+    db.session.execute(
+        db.update(LegalTextVersion).where(LegalTextVersion.id == record.id,
+                                          LegalTextVersion.lock_user_id == actor.id)
+        .values(lock_user_id=None, lock_since=None, lock_seen_at=None, lock_typed_at=None)
+        .execution_options(synchronize_session=False))
+    db.session.refresh(record, ["lock_user_id", "lock_since", "lock_seen_at", "lock_typed_at"])
+
+
+def _require_lock(actor, record):
+    if not take_lock(actor, record, typed=True):
+        raise ConflictError("Somebody else is editing this draft now; what you changed is not saved.",
+                            code="legal_draft_locked")
+
+
 def open_session(actor, record):
     """An editing session starts: the draft's state is kept, unless the last kept one is the same.
     Returns that snapshot -- what *Discard changes* goes back to."""
@@ -251,6 +350,7 @@ def save(actor, record, german, english, edit_count):
         raise ConflictError("A published version is corrected, not saved.", code="legal_published_already")
     german = _clean(german, "german")
     english = _clean(english, "english") if english is not None else None
+    _require_lock(actor, record)
     now = get_now_utc()
     # Compared and counted up in one statement: of two saves at the same moment, only one
     # finds the count it names; the other is refused, never overwriting it.
@@ -375,6 +475,7 @@ def correct(actor, record, german, english):
     """A published version corrected in the editor: as an upload would correct it."""
     german = _clean(german, "german")
     english = _clean(english, "english") if english is not None else None
+    _require_lock(actor, record)
     files = [(as_file(record, "de", german), "draft.md")]
     if english is not None:
         files.append((as_file(record, "en", english), "draft.md"))

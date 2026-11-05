@@ -10,7 +10,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab, redo, undo } from
 import { markdown } from '@codemirror/lang-markdown';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search';
-import { EditorSelection, EditorState } from '@codemirror/state';
+import { Compartment, EditorSelection, EditorState } from '@codemirror/state';
 import {
   drawSelection,
   EditorView,
@@ -80,6 +80,8 @@ export function MarkdownEditor({
   readOnly?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
+  // Read-only or not, switched without making the editor anew (somebody else editing it, then not).
+  const editable = useRef(new Compartment());
   const changed = useRef(onChange);
   useLayoutEffect(() => {
     changed.current = onChange;
@@ -103,7 +105,7 @@ export function MarkdownEditor({
           markdown(),
           syntaxHighlighting(highlighting),
           EditorView.lineWrapping,
-          EditorState.readOnly.of(readOnly),
+          editable.current.of([EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)]),
           EditorView.contentAttributes.of({ 'aria-label': label, lang, spellcheck: 'true' }),
           theme,
           // Its styles go into a <style> tag: the security policy allows it with the page's nonce.
@@ -123,7 +125,16 @@ export function MarkdownEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <div ref={host} className={classes.editor} />;
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: editable.current.reconfigure([
+        EditorState.readOnly.of(readOnly),
+        EditorView.editable.of(!readOnly),
+      ]),
+    });
+  }, [readOnly, viewRef]);
+
+  return <div ref={host} className={classes.editor} data-read-only={readOnly || undefined} />;
 }
 
 /** The whole text replaced, as one change that undo takes back. */

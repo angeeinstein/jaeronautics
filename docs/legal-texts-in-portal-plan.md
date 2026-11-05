@@ -129,6 +129,13 @@ Decided 2026-11-04.
   version in force, paragraph by paragraph -- added underlined green,
   removed struck through red (the `diff` library, in the browser). For
   whoever approves a change.
+- **One person at a time** (decided 2026-11-05): whoever opens a draft holds
+  it; the others see it read-only, told who is editing it and since when. It
+  is free again when the holder leaves, or about a minute after their editor
+  goes quiet (a sign of life every 30 seconds), and may be taken over after 10
+  minutes without typing. A hard lock without expiry was ruled out (a laptop
+  closed with a draft open would block it), and so was editing together
+  (the texts change about once a year).
 - **Correcting** a published version within its 24 hours opens the same
   editor, without autosave: the correction is saved with a button that asks
   twice, and goes into the log with the earlier wording.

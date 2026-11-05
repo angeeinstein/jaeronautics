@@ -175,8 +175,11 @@ def publish(actor, record_id, *, effective_from, approved_by=None, approved_on=N
         raise ValidationError("Too long.", details={"fields": {"summary": f"At most {SUMMARY_MAX} characters."}})
     if tell is None:
         tell = tells_by_default(record.document, record.team_slug)
-    from .legal_editor import problems_of
+    from .legal_editor import held_by_another, problems_of
 
+    if held_by_another(record, actor):
+        raise ConflictError("Somebody is editing this draft now. Publish it once they are done.",
+                            code="legal_draft_locked")
     problems = problems_of(record)
     if problems:
         _invalid(problems, action="published")

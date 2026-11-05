@@ -12,6 +12,11 @@
  * an earlier state -- both as a change undo takes back. Correcting a
  * published version: the same, saved with a button instead.
  *
+ * One person edits a draft at a time: whoever opens it first holds it, and
+ * the editor says so to the server every 30 seconds; anyone else sees it
+ * read-only, with who is editing it and since when, and can edit once it is
+ * free -- or take it over when its holder has not typed for 10 minutes.
+ *
  * Data: POST /api/v1/legal/drafts/<id>/session, PUT .../<id>, POST .../check,
  * GET .../snapshots/<id>, POST .../correct (aeronautics_members/api/legal_editor.py).
  */
@@ -75,7 +80,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { PdfLink } from '../../components/PdfLink';
 import { Pill } from '../../components/Pill';
 import { EmptyState, ErrorState, LoadingState } from '../../components/States';
-import { formatDateTime } from '../../lib/format';
+import { formatDateTime, formatTime } from '../../lib/format';
 import { notifyDone, notifyFailed } from '../../lib/notify';
 import { Publish } from '../admin/LegalTexts';
 import classes from './Editor.module.css';
@@ -95,6 +100,8 @@ type Saving = 'saved' | 'unsaved' | 'saving' | 'conflict' | 'failed';
 
 const SAVE_AFTER_MS = 2000;
 const CHECK_AFTER_MS = 500;
+/** The holder's sign of life, and the others asking whether it is free. */
+const LOCK_EVERY_MS = 30_000;
 
 export function Editor() {
   const { recordId = '' } = useParams();
@@ -111,14 +118,21 @@ export function Editor() {
   });
   if (session.isPending) return <LoadingState />;
   if (session.isError) return <ErrorState error={session.error} onRetry={() => void session.refetch()} />;
-  return <Workspace key={id} data={session.data} />;
+  // Taking the draft over loads it again, as it is now: a new workspace.
+  return (
+    <Workspace
+      key={`${String(id)}-${String(session.dataUpdatedAt)}`}
+      data={session.data}
+      onReload={() => void session.refetch()}
+    />
+  );
 }
 
 function partOf(text: Schemas['TextOut'] | null | undefined): Part | null {
   return text ? { title: text.title, revision: text.revision, body: text.body } : null;
 }
 
-function Workspace({ data }: { data: EditorOut }) {
+function Workspace({ data, onReload }: { data: EditorOut; onReload: () => void }) {
   const navigate = useNavigate();
   const wide = useMediaQuery('(min-width: 62em)', true);
   const correcting = data.mode === 'correcting';
@@ -133,6 +147,10 @@ function Workspace({ data }: { data: EditorOut }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [replacing, setReplacing] = useState(false);
+  const [lock, setLock] = useState(data.lock);
+  // Taken over while writing here: by whom.
+  const [lostTo, setLostTo] = useState<string | null>(null);
+  const readOnly = !lock.mine;
   const germanView = useRef<EditorView | null>(null);
   const englishView = useRef<EditorView | null>(null);
   // Only in handlers: a view is never read while drawing.
@@ -148,6 +166,11 @@ function Workspace({ data }: { data: EditorOut }) {
   const timer = useRef<number | undefined>(undefined);
   const inFlight = useRef(false);
   const saveRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const typedSinceBeat = useRef(false);
+  const mine = useRef(lock.mine);
+  useLayoutEffect(() => {
+    mine.current = lock.mine;
+  }, [lock.mine]);
 
   const save = useCallback(async () => {
     window.clearTimeout(timer.current);
@@ -169,6 +192,13 @@ function Workspace({ data }: { data: EditorOut }) {
         timer.current = window.setTimeout(() => void saveRef.current(), SAVE_AFTER_MS);
       }
     } catch (error) {
+      if (error instanceof ApiError && error.code === 'legal_draft_locked') {
+        // Taken over meanwhile: read-only from now on; the next look says by whom.
+        setLostTo('Somebody else');
+        setLock((now) => ({ ...now, mine: false }));
+        setSaving('unsaved');
+        return;
+      }
       setSaving(error instanceof ApiError && error.code === 'legal_draft_changed' ? 'conflict' : 'failed');
       if (!(error instanceof ApiError && error.code === 'legal_draft_changed')) notifyFailed(error);
     } finally {
@@ -181,6 +211,7 @@ function Workspace({ data }: { data: EditorOut }) {
 
   const changed = useCallback(() => {
     changes.current += 1;
+    typedSinceBeat.current = true;
     setSaving((now) => (now === 'conflict' ? now : 'unsaved'));
     if (correcting) return;
     window.clearTimeout(timer.current);
@@ -205,6 +236,65 @@ function Workspace({ data }: { data: EditorOut }) {
     },
     [],
   );
+
+  // The lock: the holder's sign of life every 30 seconds -- the others asking whether it is free --
+  // and leaving frees it at once (else the server frees it a minute later by itself).
+  useEffect(() => {
+    const path = { params: { path: { record_id: data.record_id } } };
+    const ask = async (action: 'take' | 'beat' | 'look') => {
+      const typed = typedSinceBeat.current;
+      typedSinceBeat.current = false;
+      try {
+        const now = await call(
+          api.POST('/api/v1/legal/drafts/{record_id}/lock', { ...path, body: { action, typed } }),
+        );
+        if (action !== 'look' && !now.mine) {
+          setLostTo(now.holder ?? 'Somebody else');
+          window.clearTimeout(timer.current);
+        }
+        setLock(now);
+      } catch {
+        // The next one asks again; the server keeps the lock a minute.
+      }
+    };
+    const leave = () => {
+      if (mine.current) {
+        // Best effort: unanswered, the server frees it a minute later by itself.
+        api
+          .DELETE('/api/v1/legal/drafts/{record_id}/lock', { ...path, keepalive: true })
+          .catch(() => undefined);
+      }
+    };
+    // Held already (taken when the session started): said again, which also takes it back after a remount.
+    if (mine.current) void ask('take');
+    const every = window.setInterval(() => void ask(mine.current ? 'beat' : 'look'), LOCK_EVERY_MS);
+    window.addEventListener('pagehide', leave);
+    return () => {
+      window.clearInterval(every);
+      window.removeEventListener('pagehide', leave);
+      leave();
+    };
+  }, [data.record_id]);
+
+  const take = useMutation({
+    mutationFn: (action: 'take' | 'take_over') =>
+      call(
+        api.POST('/api/v1/legal/drafts/{record_id}/lock', {
+          params: { path: { record_id: data.record_id } },
+          body: { action, typed: false },
+        }),
+      ),
+    onSuccess: (now) => {
+      if (now.mine) {
+        notifyDone('You are editing it now.');
+        onReload();
+      } else {
+        setLock(now);
+        notifyFailed(new ApiError(409, 'legal_draft_locked', 'Somebody else is editing it already.'));
+      }
+    },
+    onError: notifyFailed,
+  });
 
   const setPart = (which: Language, part: Partial<Part>) => {
     if (which === 'de') setGerman((now) => ({ ...now, ...part }));
@@ -291,6 +381,7 @@ function Workspace({ data }: { data: EditorOut }) {
             <TextInput
               label="Title"
               required
+              readOnly={readOnly}
               maxLength={200}
               value={active.title}
               onChange={(event) => {
@@ -300,6 +391,7 @@ function Workspace({ data }: { data: EditorOut }) {
             <TextInput
               label="Revision (optional)"
               placeholder="Version 2026.2"
+              readOnly={readOnly}
               maxLength={100}
               value={active.revision ?? ''}
               onChange={(event) => {
@@ -308,6 +400,7 @@ function Workspace({ data }: { data: EditorOut }) {
             />
           </SimpleGrid>
           <Toolbar
+            disabled={readOnly}
             view={() => viewOf(language)}
             onUndo={() => {
               undoIn(viewOf(language));
@@ -324,6 +417,7 @@ function Workspace({ data }: { data: EditorOut }) {
           viewRef={germanView}
           label="German text, Markdown"
           lang="de"
+          readOnly={readOnly}
           onChange={(body) => {
             setPart('de', { body });
           }}
@@ -336,11 +430,12 @@ function Workspace({ data }: { data: EditorOut }) {
             viewRef={englishView}
             label="English text, Markdown"
             lang="en"
+            readOnly={readOnly}
             onChange={(body) => {
               setPart('en', { body });
             }}
           />
-          <Group justify="flex-end" mt="xs">
+          <Group justify="flex-end" mt="xs" hidden={readOnly}>
             <ConfirmButton
               size="xs"
               confirmLabel="Yes, remove it"
@@ -361,6 +456,7 @@ function Workspace({ data }: { data: EditorOut }) {
           </Text>
           <Button
             variant="default"
+            disabled={readOnly}
             onClick={() => {
               setEnglish({ title: '', revision: german.revision, body: '' });
               changed();
@@ -414,6 +510,7 @@ function Workspace({ data }: { data: EditorOut }) {
             <SaveState saving={saving} editedAt={editedAt} correcting={correcting} />
             <Button
               variant="default"
+              disabled={readOnly}
               loading={loadState.isPending && loadState.variables === data.opened_snapshot_id}
               onClick={() => {
                 loadState.mutate(data.opened_snapshot_id);
@@ -453,6 +550,7 @@ function Workspace({ data }: { data: EditorOut }) {
                 ) : null}
                 <Menu.Divider />
                 <Menu.Item
+                  disabled={readOnly}
                   onClick={() => {
                     setReplacing(true);
                   }}
@@ -466,7 +564,7 @@ function Workspace({ data }: { data: EditorOut }) {
               <ConfirmButton
                 confirmLabel="Yes, replace the text"
                 loading={correct.isPending}
-                disabled={saving === 'saved'}
+                disabled={saving === 'saved' || readOnly}
                 onConfirm={() => {
                   correct.mutate();
                 }}
@@ -475,7 +573,7 @@ function Workspace({ data }: { data: EditorOut }) {
               </ConfirmButton>
             ) : data.may_publish ? (
               <Button
-                disabled={saving !== 'saved'}
+                disabled={saving !== 'saved' || readOnly}
                 onClick={() => {
                   setPublishing(true);
                 }}
@@ -486,6 +584,43 @@ function Workspace({ data }: { data: EditorOut }) {
           </Group>
         }
       />
+      {readOnly ? (
+        <Alert
+          color={lostTo ? 'red' : lock.free ? 'brand' : 'yellow'}
+          variant="light"
+          mb="md"
+          title={
+            lostTo
+              ? `${lostTo} took over this draft`
+              : lock.free
+                ? 'Nobody is editing this draft now'
+                : `${lock.holder ?? 'Somebody'} is editing this draft${lock.since ? ` (since ${formatTime(lock.since)})` : ''}`
+          }
+        >
+          <Group justify="space-between" gap="sm">
+            <Text size="sm">
+              {lostTo
+                ? 'What you wrote until your last save is kept. You see the draft read-only now.'
+                : lock.free
+                  ? 'Edit it to make changes: it loads as it is now.'
+                  : lock.can_take_over
+                    ? 'They have not typed for 10 minutes: you may take it over.'
+                    : 'You see it read-only. It is free again once they leave the editor.'}
+            </Text>
+            {lock.free || lock.can_take_over ? (
+              <Button
+                size="xs"
+                loading={take.isPending}
+                onClick={() => {
+                  take.mutate(lock.free ? 'take' : 'take_over');
+                }}
+              >
+                {lock.free ? 'Edit' : 'Take over'}
+              </Button>
+            ) : null}
+          </Group>
+        </Alert>
+      ) : null}
       {saving === 'conflict' ? (
         <Alert color="red" variant="light" title="Somebody else saved this draft meanwhile" mb="md">
           Your changes since are not saved. Copy what you need, then reload the page to see theirs.
@@ -552,6 +687,7 @@ function Workspace({ data }: { data: EditorOut }) {
                 <Button
                   size="xs"
                   variant="default"
+                  disabled={readOnly}
                   loading={loadState.isPending && loadState.variables === snapshot.id}
                   onClick={() => {
                     loadState.mutate(snapshot.id);
@@ -687,7 +823,9 @@ function Toolbar({
   view,
   onUndo,
   onRedo,
+  disabled = false,
 }: {
+  disabled?: boolean;
   /** The view written in, asked for on a click. */
   view: () => EditorView | null;
   onUndo: () => void;
@@ -695,7 +833,7 @@ function Toolbar({
 }) {
   const tool = (label: string, icon: React.ReactNode, run: () => void) => (
     <Tooltip label={label} key={label}>
-      <ActionIcon variant="default" size="lg" aria-label={label} onClick={run}>
+      <ActionIcon variant="default" size="lg" aria-label={label} onClick={run} disabled={disabled}>
         {icon}
       </ActionIcon>
     </Tooltip>

@@ -7202,6 +7202,9 @@
               }
             ]
           },
+          "lock": {
+            "$ref": "#/components/schemas/LockOut"
+          },
           "markdown_url": {
             "title": "Markdown Url",
             "type": "string"
@@ -7295,7 +7298,8 @@
           "may_publish",
           "approved_by",
           "approved_on",
-          "effective_from"
+          "effective_from",
+          "lock"
         ],
         "title": "EditorOut",
         "type": "object"
@@ -10513,6 +10517,78 @@
           "valid"
         ],
         "title": "LinkOut",
+        "type": "object"
+      },
+      "LockIn": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "default": "look",
+            "enum": [
+              "look",
+              "beat",
+              "take",
+              "take_over"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "typed": {
+            "default": false,
+            "title": "Typed",
+            "type": "boolean"
+          }
+        },
+        "title": "LockIn",
+        "type": "object"
+      },
+      "LockOut": {
+        "additionalProperties": false,
+        "description": "Who edits the draft now: one person at a time; the others see it read-only.",
+        "properties": {
+          "can_take_over": {
+            "title": "Can Take Over",
+            "type": "boolean"
+          },
+          "free": {
+            "title": "Free",
+            "type": "boolean"
+          },
+          "holder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Holder"
+          },
+          "mine": {
+            "title": "Mine",
+            "type": "boolean"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          }
+        },
+        "required": [
+          "mine",
+          "free",
+          "holder",
+          "since",
+          "can_take_over"
+        ],
+        "title": "LockOut",
         "type": "object"
       },
       "LogEntry": {
@@ -33542,6 +33618,146 @@
         ]
       }
     },
+    "/api/v1/legal/drafts/{record_id}/lock": {
+      "delete": {
+        "operationId": "legal_draft_unlock",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LockOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "The holder leaves the editor: the draft is free at once (else a minute later by itself).",
+        "tags": [
+          "Legal"
+        ]
+      },
+      "post": {
+        "operationId": "legal_draft_lock",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LockIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LockOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Who edits the draft now -- every 30 seconds from the editor: the holder's sign of life, or the",
+        "tags": [
+          "Legal"
+        ]
+      }
+    },
     "/api/v1/legal/drafts/{record_id}/session": {
       "post": {
         "operationId": "legal_draft_session",
@@ -33597,7 +33813,7 @@
             "description": "Not possible in the current state."
           }
         },
-        "summary": "Start an editing session: the draft as it is now, kept as an earlier state to go back to.",
+        "summary": "Start an editing session: the draft as it is now, kept as an earlier state to go back to. When",
         "tags": [
           "Legal"
         ]
