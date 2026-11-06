@@ -46,6 +46,10 @@ AZURE_ENDPOINT = "https://api.cognitive.microsofttranslator.com"
 #: British English: the association is in Austria, and its texts read as European ones.
 TARGET = "EN-GB"
 TIMEOUT_SECONDS = 30
+#: Told to DeepL with every text, not translated and not counted: what the texts are, and that the
+#: English is gender-neutral -- the German says "sein Verhalten" of a member, the English "their".
+CONTEXT = ("Legal texts of a student association in Austria: statutes, rules, terms, privacy policy. "
+           "Formal British English. Gender-neutral: a member or person is 'they', 'their', never 'he' or 'his'.")
 #: Texts per request: DeepL takes 50 at a time.
 BATCH = 50
 GLOSSARY_MAX = 200
@@ -153,7 +157,9 @@ def _fingerprint(glossary):
 
 
 def _key(text, as_html, glossary):
-    return hashlib.sha256(f"{TARGET}|{int(as_html)}|{_fingerprint(glossary)}|{text}".encode()).hexdigest()
+    # The context is part of it: when it changes, what was translated is translated anew.
+    return hashlib.sha256(f"{TARGET}|{int(as_html)}|{_fingerprint(glossary)}|{CONTEXT}|{text}".encode()
+                          ).hexdigest()
 
 
 def translate(texts, *, as_html=True):
@@ -302,7 +308,7 @@ def _deepl_glossary(current):
 
 def _deepl(texts, as_html, current):
     key = current["deepl_key"]
-    data = {"text": texts, "source_lang": "DE", "target_lang": TARGET}
+    data = {"text": texts, "source_lang": "DE", "target_lang": TARGET, "context": CONTEXT}
     if as_html:
         data["tag_handling"] = "html"
     glossary_id = _deepl_glossary(current)

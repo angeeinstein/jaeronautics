@@ -36,6 +36,12 @@ be live translated from German."
 - **No corrections by hand** to the English (decided): a **glossary** under
   Settings keeps terms right -- Verein → association, Vorstand → board,
   Generalversammlung → general assembly, and so on.
+- **Gender-neutral English:** the German says "sein Verhalten" of a member;
+  DeepL is told, as context with every text (not translated, not counted),
+  that the English uses "they/their". Azure has no such setting.
+- **A paragraph's own number** (`i)`, `a)`, `3)`) is taken off before
+  translating and put back as written: DeepL wrote some as `(i)` and left
+  others (first test, 06.11.).
 - **The texts from before:** published English versions (04.10.) stay as
   they are, accepted alongside their German. The hand-made English drafts
   of 08.10. are replaced by the machine translation when published (decided).
@@ -44,7 +50,9 @@ be live translated from German."
 
 ## The services
 
-- **DeepL API** (Free: 500,000 characters a month; a key ending `:fx` is a
+- **DeepL API** (Free: 500,000 characters a month -- the account set up in
+  November 2026 shows 1,000,000 instead, possibly once rather than monthly;
+  a key ending `:fx` is a
   Free key, sent to `api-free.deepl.com`) and **Azure AI Translator** (free
   tier: 2,000,000 a month; key and region). Both can be set up at once, like
   the email accounts: one is used first, the other is the **fallback** when
@@ -53,8 +61,9 @@ be live translated from German."
 - Settings › Translation (`settings.credentials`): the keys (shown only as
   set), which goes first, *Try it* per service, DeepL's characters used this
   month, and the glossary. DeepL takes the glossary as a glossary of its own
-  (made anew when it changes); Azure as its dynamic dictionary, for the
-  words as written.
+  (made anew when it changes; DeepL is asked which it holds, so none is
+  left over -- a Free account takes only a few); Azure as its dynamic
+  dictionary, for the words as written.
 - The texts are public and hold no personal data: the privacy policy does
   not change.
 

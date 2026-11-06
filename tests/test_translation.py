@@ -238,3 +238,32 @@ class TestTheSettingsPage:
         _login(client, _staff("treasurer@example.org", "treasurer").id)
 
         assert client.get("/api/v1/admin/settings/translation").status_code == 403
+
+
+def test_a_paragraphs_own_number_kept_as_written(services, monkeypatch):
+    # DeepL wrote some "i)" as "(i)" and left others: the number no longer goes to it.
+    from types import SimpleNamespace
+
+    from aeronautics_members.services import legal_translation
+
+    _set_up()
+    monkeypatch.setattr(legal_translation.legal, "blocks", lambda _german: [
+        "<p>iii) mit Räumen sorgsam umzugehen;</p>\n", "<p>(b) Text.</p>\n", "<h2>§ 1 Geltung</h2>\n",
+        "<p>Ein Satz.</p>\n"])
+
+    sent = []
+
+    def deepl(url, *, data=None, headers=None, method="POST"):  # the text back as it went
+        if url.endswith("/v2/translate"):
+            sent.append(data)
+            return {"translations": [{"text": text} for text in data["text"]]}
+        return services(url, data=data, headers=headers, method=method)
+
+    monkeypatch.setattr(translation, "_call", deepl)
+
+    _title, english = legal_translation.translate_version(SimpleNamespace(title="Teamordnung"))
+
+    assert sent[0]["text"][:2] == ["<p>mit Räumen sorgsam umzugehen;</p>\n", "<p>Text.</p>\n"]
+    assert sent[0]["context"] == translation.CONTEXT
+    assert english == ("<p>iii) mit Räumen sorgsam umzugehen;</p>\n<p>(b) Text.</p>\n"
+                       "<h2>§ 1 Geltung</h2>\n<p>Ein Satz.</p>\n")

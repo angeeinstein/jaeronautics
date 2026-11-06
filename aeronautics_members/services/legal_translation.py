@@ -10,10 +10,13 @@ English page says there is no English of this version yet.
 
 The page is translated block by block (``legal_texts.blocks``), each kept by
 its exact text, so a version that differs from the last in one paragraph
-costs that paragraph.
+costs that paragraph. A paragraph's own number -- ``i)``, ``a)``, ``3)`` --
+is taken off before and put back after: a translator writes some of them as
+``(i)`` and leaves others, so they would no longer match.
 """
 
 import hashlib
+import re
 
 from ..db_models import ExternalWorkItem, LegalTextVersion, db
 from . import legal_texts as legal
@@ -28,11 +31,29 @@ def source_hash(record):
                           ).hexdigest()
 
 
+#: A paragraph that starts with its own number: ``<p>iii) …``, ``<p>(a) …``, ``<li>2) …``.
+_NUMBERED = re.compile(r"^(\s*<(?:p|li)>)(\(?(?:[ivxlcdm]{1,6}|[a-z]|\d{1,3})\))[ \t]+", re.IGNORECASE)
+_OPENING = re.compile(r"^\s*<(?:p|li)>")
+
+
 def translate_version(german):
     """``(title, html)``: a German Version's title and page in English."""
-    english_blocks = translation.translate(legal.blocks(german))
+    blocks, numbers = [], []
+    for block in legal.blocks(german):
+        numbered = _NUMBERED.match(block)
+        numbers.append(numbered.group(2) if numbered else None)
+        blocks.append(numbered.group(1) + block[numbered.end():] if numbered else block)
+    english_blocks = [_numbered(english, number)
+                      for english, number in zip(translation.translate(blocks), numbers)]
     [title] = translation.translate([german.title], as_html=False)
     return title, "".join(english_blocks)
+
+
+def _numbered(english, number):
+    if not number:
+        return english
+    opening = _OPENING.match(english)
+    return f"{opening.group(0)}{number} {english[opening.end():]}" if opening else f"{number} {english}"
 
 
 def english_of(record):
