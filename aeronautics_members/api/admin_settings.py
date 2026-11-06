@@ -376,8 +376,9 @@ class TranslationTryOut(Model):
 @endpoint("POST", "/admin/settings/translation/<name>/try", response=TranslationTryOut,
           permissions=CREDENTIALS, tag=TAG)
 def admin_settings_translation_try(name):
-    """Translate one sentence with this service only: whether its key works. The sentence is not
-    kept; DeepL's glossary id, made on the way, is."""
+    """Translate one sentence with this service only: whether its key works.
+
+    The sentence is not kept; DeepL's glossary id, made on the way, is."""
     from ..services import ValidationError
     from ..services import translation
 

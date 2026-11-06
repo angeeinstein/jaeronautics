@@ -31790,7 +31790,7 @@
             "description": "Not possible in the current state."
           }
         },
-        "summary": "Translate one sentence with this service only: whether its key works. Nothing is kept.",
+        "summary": "Translate one sentence with this service only: whether its key works.",
         "tags": [
           "Admin"
         ],

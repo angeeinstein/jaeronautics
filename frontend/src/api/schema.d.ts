@@ -2336,7 +2336,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Translate one sentence with this service only: whether its key works. Nothing is kept. */
+        /** Translate one sentence with this service only: whether its key works. */
         post: operations["admin_settings_translation_try"];
         delete?: never;
         options?: never;
