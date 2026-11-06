@@ -37,6 +37,8 @@ class FakeServices:
             return {"glossary_id": made}
         if url.endswith("/v2/usage"):
             return {"character_count": 1234, "character_limit": 500000}
+        if service == "deepl" and data.get("glossary_id") and data["glossary_id"] not in self.glossaries:
+            raise translation._ServiceError("error 404 (Glossary not found)")
         if service == "deepl":
             return {"translations": [{"text": f"[DeepL] {text}"} for text in data["text"]]}
         return [{"translations": [{"text": f"[Azure] {item['Text']}"}]} for item in data]
@@ -129,6 +131,26 @@ class TestTheGlossary:
         assert services.glossaries.keys() == mine | {"g-theirs"} and len(mine) == 1
         sent = [call for call in services.calls if call[0].endswith("/v2/translate")]
         assert [call[1]["glossary_id"] for call in sent] == [next(iter(mine))] * 2
+
+    def test_another_installations_glossary_left_alone(self, services, app):
+        # The test server with the same key: its glossaries have its address in their name.
+        _set_up()
+        theirs = f"{translation.GLOSSARY_NAME} test.example.org 0123456789abcdef"
+        services.glossaries = {"g-test": theirs}
+
+        translation.translate(["<p>Eins.</p>"])
+
+        assert services.glossaries["g-test"] == theirs and len(services.glossaries) == 2
+        [mine] = [name for name in services.glossaries.values() if name != theirs]
+        assert mine.startswith(translation._glossary_prefix() + " ")
+
+    def test_a_glossary_gone_at_deepl_made_anew(self, services):
+        _set_up()
+        translation.translate(["<p>Eins.</p>"])
+        services.glossaries.clear()  # deleted at DeepL; the setting still has its id
+
+        assert translation.translate(["<p>Zwei.</p>"]) == ["[DeepL] <p>Zwei.</p>"]
+        assert len(services.glossaries) == 1
 
     def test_azure_gets_the_english_in_place_not_to_be_translated(self, services):
         _set_up(deepl="", azure="azure-key")

@@ -20,6 +20,7 @@ import json
 import re
 from html.parser import HTMLParser
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from flask import current_app
@@ -263,7 +264,18 @@ def _deepl_headers(key):
     return {"Authorization": f"DeepL-Auth-Key {key}"}
 
 
-def _deepl_glossary(current):
+def _glossary_prefix():
+    """This installation's glossaries at DeepL: the portal's address in their name, so a test server
+    with the same key leaves the live server's alone."""
+    site = urlparse(current_app.config.get("PUBLIC_BASE_URL") or "").hostname or "portal"
+    return f"{GLOSSARY_NAME} {site}"
+
+
+#: A glossary made before the address was in the name (the first days on the test server).
+_UNNAMED_GLOSSARY = re.compile(rf"{re.escape(GLOSSARY_NAME)}( [0-9a-f]{{16}})?")
+
+
+def _deepl_glossary(current, fresh=False):
     """DeepL's glossary id for the glossary as it is now: made anew when it changed.
 
     The id is kept in a setting, but DeepL is also asked which glossaries it holds: one of this
@@ -277,16 +289,17 @@ def _deepl_glossary(current):
         kept = json.loads(get_settings_map([DEEPL_GLOSSARY_KEY]).get(DEEPL_GLOSSARY_KEY) or "{}")
     except ValueError:
         kept = {}
-    if kept.get("fingerprint") == fingerprint and kept.get("key") == key_tag and kept.get("id"):
+    if not fresh and kept.get("fingerprint") == fingerprint and kept.get("key") == key_tag and kept.get("id"):
         return kept["id"]
-    base, headers, wanted = _deepl_base(key), _deepl_headers(key), f"{GLOSSARY_NAME} {fingerprint}"
+    ours = _glossary_prefix()
+    base, headers, wanted = _deepl_base(key), _deepl_headers(key), f"{ours} {fingerprint}"
     glossary_id = None
     try:
         held = (_call(f"{base}/v2/glossaries", headers=headers, method="GET") or {}).get("glossaries") or []
         for glossary in held:
             name = str(glossary.get("name") or "")
-            if not name.startswith(GLOSSARY_NAME):
-                continue  # not this portal's
+            if not (name.startswith(f"{ours} ") or _UNNAMED_GLOSSARY.fullmatch(name)):
+                continue  # another installation's (the test server's, with the same key), or not this portal's
             if name == wanted and glossary_id is None:
                 glossary_id = glossary.get("glossary_id")
                 continue
@@ -314,7 +327,14 @@ def _deepl(texts, as_html, current):
     glossary_id = _deepl_glossary(current)
     if glossary_id:
         data["glossary_id"] = glossary_id
-    answer = _call(f"{_deepl_base(key)}/v2/translate", headers=_deepl_headers(key), data=data)
+    try:
+        answer = _call(f"{_deepl_base(key)}/v2/translate", headers=_deepl_headers(key), data=data)
+    except _ServiceError as exc:
+        if not glossary_id or "glossary" not in str(exc).lower():
+            raise
+        # The glossary kept is gone at DeepL (deleted by hand, or the account changed): made anew.
+        data["glossary_id"] = _deepl_glossary(current, fresh=True)
+        answer = _call(f"{_deepl_base(key)}/v2/translate", headers=_deepl_headers(key), data=data)
     made = [item.get("text", "") for item in (answer or {}).get("translations", [])]
     if len(made) != len(texts):
         raise _ServiceError("an answer of the wrong length")

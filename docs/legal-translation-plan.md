@@ -62,7 +62,9 @@ be live translated from German."
   set), which goes first, *Try it* per service, DeepL's characters used this
   month, and the glossary. DeepL takes the glossary as a glossary of its own
   (made anew when it changes; DeepL is asked which it holds, so none is
-  left over -- a Free account takes only a few); Azure as its dynamic
+  left over -- a Free account takes only a few; each installation's carry
+  its address in their name, so the test and live servers may share a key);
+  Azure as its dynamic
   dictionary, for the words as written.
 - The texts are public and hold no personal data: the privacy policy does
   not change.
