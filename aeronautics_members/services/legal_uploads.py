@@ -258,6 +258,12 @@ def correct(actor, record_id, german_upload):
     reason = why_not_correctable(record)
     if reason is not None:
         raise ConflictError(f"This version can no longer be corrected. {reason}", code="legal_not_correctable")
+    from .legal_editor import held_by_another
+
+    # Whoever has it open in the editor holds it: a file does not correct it under their hands.
+    if held_by_another(record, actor):
+        raise ConflictError("Somebody is correcting this version in the editor now. Try again once they "
+                            "are done.", code="legal_draft_locked")
     versions, bodies, problems = _checked(german_upload)
     if problems or not versions:
         _invalid(problems or ["The German file is missing."], action="corrected")

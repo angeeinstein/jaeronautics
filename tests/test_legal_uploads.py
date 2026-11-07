@@ -17,6 +17,7 @@ from aeronautics_members.services import ConflictError, ValidationError
 from aeronautics_members.services import legal_texts as legal
 from aeronautics_members.services import legal_uploads, teams
 from aeronautics_members.services.clock import get_membership_today, get_now_utc
+from aeronautics_members import legal_pdf
 from test_admin_reviews import _login, _staff
 from test_legal_texts import legal_dir, texts  # noqa: F401 -- fixtures
 from test_teams_flow import switched_on  # noqa: F401 -- fixture
@@ -117,6 +118,21 @@ class TestUploadingAndPublishing:
 
         assert db.session.query(LegalTextVersion).filter_by(language="en").count() == 0
 
+    def test_announced_for_a_later_day_its_pdf_has_its_translation(self, boss, monkeypatch):
+        from aeronautics_members.services import outbox, translation
+
+        monkeypatch.setattr(translation, "translate",
+                            lambda sent, as_html=True: [f"{text} [en]" for text in sent])
+        later = get_membership_today() + timedelta(days=30)
+        record = legal_uploads.upload_draft(boss, _file())
+        db.session.commit()
+        _publish(boss, record, effective_from=later)
+        outbox.process_pending()
+
+        [german] = legal.announced("statutes")
+
+        assert [part.language for part in legal_pdf.parts(german)] == ["de", "en"]
+
     def test_not_from_a_day_gone(self, boss):
         record = legal_uploads.upload_draft(boss, _file())
         db.session.commit()
@@ -158,6 +174,21 @@ class TestCorrecting:
         assert "Name." in str(legal.render(version)["html"]) and "Nmae" not in str(legal.render(version)["html"])
         [entry] = db.session.query(AuditLog).filter_by(event_type="legal_text_corrected").all()
         assert "Nmae" in entry.before_state["body"]
+
+    def test_not_with_a_file_while_somebody_corrects_it_in_the_editor(self, boss):
+        from aeronautics_members.services import legal_editor
+
+        record = legal_uploads.upload_draft(boss, _file(body="§ 1 Nmae."))
+        db.session.commit()
+        _publish(boss, record)
+        other = _staff("other@example.org", "superadmin")
+        assert legal_editor.take_lock(other, record)
+        db.session.commit()
+
+        with pytest.raises(ConflictError) as refused:
+            legal_uploads.correct(boss, record.id, _file(body="§ 1 Name."))
+
+        assert refused.value.code == "legal_draft_locked"
 
     def test_not_once_somebody_accepted_it(self, boss):
         record = legal_uploads.upload_draft(boss, _file())
