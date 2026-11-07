@@ -36,13 +36,6 @@ update's warning of local changes only for the portal's own files).
 
 ## Open
 
-### Legal texts: the English translated by machine
-
-- **Added:** 2026-11-05
-- **Being built** on `claude/legal-translation`; the plan with everything
-  decided is `docs/legal-translation-plan.md`. This item goes when it is
-  merged.
-
 ### Machine English: a list that continues a sentence ("undertakes to, i) to …")
 
 - **Added:** 2026-11-07
