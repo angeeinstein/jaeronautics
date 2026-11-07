@@ -5,7 +5,8 @@
  * it; the texts in force, a correction within 24 hours while nobody has
  * accepted it, the versions not in force yet, making every PDF again, and
  * what is wrong with the files in legal/ (the versions from before, which
- * stay as they are). Data: GET /api/v1/admin/legal
+ * stay as they are); a published version's English made again or removed.
+ * Data: GET /api/v1/admin/legal
  * (aeronautics_members/api/admin_legal.py).
  */
 import {
@@ -53,6 +54,12 @@ import classes from './LegalTexts.module.css';
 type LegalOut = Schemas['LegalOut'];
 type Waiting = LegalOut['waiting'][number];
 type InForceText = LegalOut['in_force'][number];
+type EnglishState = NonNullable<InForceText['english']>;
+/** A version published here: what its English is, and the dialog to make it again or remove it. */
+type WithEnglish = Pick<InForceText, 'title' | 'record_id' | 'english' | 'english_problem'>;
+
+/** While an English is being made, the page asks again this often. */
+const MAKING_EVERY_MS = 3000;
 
 const legalQuery = {
   queryKey: ['admin', 'legal'] as const,
@@ -160,6 +167,103 @@ function NewVersion({ data }: { data: LegalOut }) {
   );
 }
 
+function englishLine(state: EnglishState, problem: string | null | undefined) {
+  switch (state) {
+    case 'machine':
+      return 'English made by machine';
+    case 'hand':
+      return 'English by hand';
+    case 'making':
+      return problem ? `English being made; the last try failed: ${problem}` : 'English being made…';
+    case 'failed':
+      return `No English: the translation gave up${problem ? ` (${problem})` : ''}`;
+    case 'none':
+      return 'No English';
+  }
+}
+
+/** The line under a version published here, saying what its English is. */
+function EnglishText({ text }: { text: WithEnglish }) {
+  if (!text.english) return null;
+  return (
+    <Text size="sm" c={text.english === 'failed' ? 'var(--ja-danger)' : 'dimmed'}>
+      {englishLine(text.english, text.english_problem)}
+    </Text>
+  );
+}
+
+/** A published version's English made again from the German, from scratch -- or taken away. */
+function English({ text, onClose }: { text: WithEnglish; onClose: () => void }) {
+  const refresh = useRefresh();
+  const recordId = text.record_id ?? 0;
+  const path = { params: { path: { record_id: recordId } } };
+  const again = useMutation({
+    mutationFn: () => call(api.POST('/api/v1/admin/legal/versions/{record_id}/english', path)),
+    onSuccess: async () => {
+      notifyDone('The English is being made.');
+      onClose();
+      await refresh();
+    },
+    onError: notifyFailed,
+  });
+  const remove = useMutation({
+    mutationFn: () => call(api.DELETE('/api/v1/admin/legal/versions/{record_id}/english', path)),
+    onSuccess: async () => {
+      notifyDone('English removed.');
+      onClose();
+      await refresh();
+    },
+    onError: notifyFailed,
+  });
+  const has = text.english === 'machine' || text.english === 'hand' || text.english === 'making';
+  return (
+    <Modal opened onClose={onClose} title={`English: ${text.title}`}>
+      <Stack gap="md">
+        {text.english ? <Text>{englishLine(text.english, text.english_problem)}.</Text> : null}
+        <Text size="sm" c="dimmed">
+          Translate again makes it anew from the German, with the glossary as it is now; nothing translated
+          before is used. Remove takes it away: the English page then says there is none, and it is not made
+          again by itself.
+        </Text>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Cancel
+          </Button>
+          {has ? (
+            <ConfirmButton
+              confirmLabel="Yes, remove it"
+              loading={remove.isPending}
+              onConfirm={() => {
+                remove.mutate();
+              }}
+            >
+              Remove the English
+            </ConfirmButton>
+          ) : null}
+          <ConfirmButton
+            confirmLabel="Yes, translate"
+            loading={again.isPending}
+            onConfirm={() => {
+              again.mutate();
+            }}
+          >
+            {has ? 'Translate again' : 'Translate'}
+          </ConfirmButton>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
+/** *English* on a version published here, for whoever may publish. */
+function EnglishButton({ onOpen }: { onOpen: () => void }) {
+  return (
+    <Button size="xs" variant="subtle" onClick={onOpen}>
+      English
+    </Button>
+  );
+}
+
 /** A published version's wording replaced: within 24 hours, while nobody has accepted it. */
 function Correct({ text, onClose }: { text: InForceText; onClose: () => void }) {
   const refresh = useRefresh();
@@ -222,6 +326,7 @@ function Correct({ text, onClose }: { text: InForceText; onClose: () => void }) 
 function InForce({ data }: { data: LegalOut }) {
   const navigate = useNavigate();
   const [correcting, setCorrecting] = useState<InForceText | null>(null);
+  const [english, setEnglish] = useState<WithEnglish | null>(null);
   return (
     <Panel icon={IconScale} title="In force" flush>
       <ul className={classes.list}>
@@ -235,6 +340,7 @@ function InForce({ data }: { data: LegalOut }) {
               <Text size="sm" c="dimmed" lang="de">
                 {text.validity}
               </Text>
+              <EnglishText text={text} />
             </Stack>
             <Group gap="sm">
               {text.correctable && data.may_publish && text.record_id != null ? (
@@ -258,6 +364,13 @@ function InForce({ data }: { data: LegalOut }) {
                     With a file
                   </Button>
                 </>
+              ) : null}
+              {data.may_publish && text.english ? (
+                <EnglishButton
+                  onOpen={() => {
+                    setEnglish(text);
+                  }}
+                />
               ) : null}
               <PdfLink href={text.pdf_url}>PDF</PdfLink>
             </Group>
@@ -284,6 +397,14 @@ function InForce({ data }: { data: LegalOut }) {
           text={correcting}
           onClose={() => {
             setCorrecting(null);
+          }}
+        />
+      ) : null}
+      {english ? (
+        <English
+          text={english}
+          onClose={() => {
+            setEnglish(null);
           }}
         />
       ) : null}
@@ -468,6 +589,7 @@ function NotInForce({ data }: { data: LegalOut }) {
   const refresh = useRefresh();
   const edit = useEditDraft((recordId) => `/admin/legal/drafts/${String(recordId)}`);
   const [publishing, setPublishing] = useState<Waiting | null>(null);
+  const [english, setEnglish] = useState<WithEnglish | null>(null);
   const remove = useMutation({
     mutationFn: (recordId: number) =>
       call(
@@ -498,7 +620,7 @@ function NotInForce({ data }: { data: LegalOut }) {
                         {text.uploaded_at ? ` ${formatDateTime(text.uploaded_at)}` : ''}
                         {text.uploaded_by ? ` by ${text.uploaded_by}` : ''}
                         {text.revision ? ` · ${text.revision}` : ''}
-                        {text.has_english ? ' · with English' : ''}
+                        {text.has_english && !text.english ? ' · with English' : ''}
                       </Text>
                       {text.status === 'draft' ? (
                         <Pill tone="neutral">Draft</Pill>
@@ -506,6 +628,7 @@ function NotInForce({ data }: { data: LegalOut }) {
                         <Pill tone="info">{`From ${formatDate(text.effective_from)}`}</Pill>
                       )}
                     </Group>
+                    <EnglishText text={text} />
                   </Stack>
                   <Group gap="sm">
                     {text.status === 'draft' ? (
@@ -544,6 +667,13 @@ function NotInForce({ data }: { data: LegalOut }) {
                         </ConfirmButton>
                       </>
                     ) : null}
+                    {data.may_publish && text.english ? (
+                      <EnglishButton
+                        onOpen={() => {
+                          setEnglish(text);
+                        }}
+                      />
+                    ) : null}
                     {text.markdown_url ? (
                       <Anchor href={text.markdown_url} download size="sm">
                         Markdown
@@ -571,6 +701,14 @@ function NotInForce({ data }: { data: LegalOut }) {
           text={publishing}
           onClose={() => {
             setPublishing(null);
+          }}
+        />
+      ) : null}
+      {english ? (
+        <English
+          text={english}
+          onClose={() => {
+            setEnglish(null);
           }}
         />
       ) : null}
@@ -672,8 +810,16 @@ function Files({ data }: { data: LegalOut }) {
   );
 }
 
+function making(data: LegalOut | undefined) {
+  return [...(data?.in_force ?? []), ...(data?.waiting ?? [])].some((text) => text.english === 'making');
+}
+
 export function LegalTexts() {
-  const legal = useQuery(legalQuery);
+  // While an English is being made, asked again until it is there.
+  const legal = useQuery({
+    ...legalQuery,
+    refetchInterval: (query) => (making(query.state.data) ? MAKING_EVERY_MS : false),
+  });
   return (
     <>
       <PageHeader

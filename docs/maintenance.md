@@ -476,6 +476,60 @@ is the fallback --, *Try it*, DeepL's characters this month, and the
 made anew when it changes; Azure the English word in place for the German as
 written. The English is never corrected by hand -- the glossary keeps terms
 right. Published English from before (the files of 04.10.2026) stays as it is.
+A paragraph's own number (`i)`) is taken off before and put back after; a
+paragraph ending in "," or ":" goes together with the paragraphs that finish
+its sentence, as one text.
+
+**A version's English, again or away:** on Admin → Legal Texts, each version
+published in the portal says what its English is -- made by machine, by hand
+(uploaded before), being made, given up (with why), or none -- and, for
+whoever may publish (`legal.publish`), *English* offers **Translate again**
+(made anew from the German with the glossary as it is now; nothing kept is
+used, so the services are asked again) and **Remove the English** (its English
+page then says there is none; nothing makes it again by itself but *Translate
+again* or a correction). Both are in the log. The page asks again every few
+seconds while an English is being made. Saving a key under Settings ›
+Translation makes the English that waits for one at once.
+
+### Setting up a translation service
+
+Either one is enough; both make the other a fallback. Keys go only into
+Settings › Translation -- never into a chat, an email or the repository.
+*Try it* translates one sentence with the key as saved.
+
+**DeepL API** (better legal English; British English):
+
+1. Sign up at deepl.com for **DeepL API Free** -- the *API* plan, not the
+   translator app's subscription (asks for a card; not charged on Free).
+2. *Account* → **API Keys & Limits** → create a key, copy it. A Free key
+   ends in `:fx`; the portal then uses `api-free.deepl.com` by itself.
+3. Settings › Translation → DeepL → paste it → *Save* → *Try it*.
+4. The characters used are shown under the key. The test and live servers
+   may share one key: each makes and cleans up only its own glossaries at
+   DeepL (named with its address). An account made in November 2026 showed
+   1,000,000 characters "for its lifetime" rather than per month.
+
+**Azure AI Translator** (2 million characters a month free; one English,
+`en`):
+
+1. portal.azure.com, with the association's Microsoft 365 admin account; a
+   subscription is needed (Pay-As-You-Go: a card at sign-up, nothing charged
+   on the free tier -- past its 2 million it refuses, it does not bill).
+2. Search **Translator** → *Create*: the subscription, a resource group
+   (`rg-jaeronautics-prod`), **region West Europe**, a name
+   (`jaeronautics-translator`), pricing tier **Free F0** (one per
+   subscription) → *Review + create* → *Create*. Network: all networks
+   (the portal's server calls it over the internet); identity: none.
+3. The resource → *Resource Management* → **Keys and Endpoint**: copy
+   **KEY 1** (KEY 2 is for renewing without a gap) and **Location/Region**
+   (`westeurope`; empty for a *Global* resource). The endpoint is not
+   needed: the portal uses Azure's global address.
+4. Settings › Translation → Azure AI Translator → the key and the region →
+   *Save* → *Try it*.
+
+A key is renewed by making a new one there, saving it here, then deleting
+the old one. *Remove the key* takes a service away; with none left, new
+English waits (and is made once a key is saved).
 
 **Changing a text:** upload the new version on Admin → Legal Texts and
 publish it (below) -- in German; the English is made by machine.

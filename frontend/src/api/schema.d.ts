@@ -1465,6 +1465,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/legal/versions/{record_id}/english": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make a published version's English again, from scratch, in the background. */
+        post: operations["admin_legal_translate_again"];
+        /** Take a published version's English away; its English page then says there is none. */
+        delete: operations["admin_legal_remove_english"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/logs": {
         parameters: {
             query?: never;
@@ -7286,6 +7304,16 @@ export interface components {
              * Format: date
              */
             effective_from: string;
+            /**
+             * English
+             * @default null
+             */
+            english?: ("machine" | "hand" | "making" | "failed" | "none") | null;
+            /**
+             * English Problem
+             * @default null
+             */
+            english_problem?: string | null;
             /** Page Url */
             page_url: string;
             /** Pdf Url */
@@ -10723,6 +10751,16 @@ export interface components {
              * Format: date
              */
             effective_from: string;
+            /**
+             * English
+             * @default null
+             */
+            english?: ("machine" | "hand" | "making" | "failed" | "none") | null;
+            /**
+             * English Problem
+             * @default null
+             */
+            english_problem?: string | null;
             /** Has English */
             has_english: boolean;
             /**
@@ -10841,6 +10879,19 @@ export interface components {
         UploadedOut: {
             /** Record Id */
             record_id: number;
+        };
+        /** VersionEnglishOut */
+        VersionEnglishOut: {
+            /**
+             * English
+             * @enum {string}
+             */
+            english: "machine" | "hand" | "making" | "failed" | "none";
+            /**
+             * English Problem
+             * @default null
+             */
+            english_problem?: string | null;
         };
         /** VersionOut */
         VersionOut: {
@@ -16329,6 +16380,122 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_legal_translate_again: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionEnglishOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_legal_remove_english: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionEnglishOut"];
                 };
             };
             /** @description Not signed in. */

@@ -9631,6 +9631,37 @@
             "title": "Effective From",
             "type": "string"
           },
+          "english": {
+            "anyOf": [
+              {
+                "enum": [
+                  "machine",
+                  "hand",
+                  "making",
+                  "failed",
+                  "none"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English"
+          },
+          "english_problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English Problem"
+          },
           "page_url": {
             "title": "Page Url",
             "type": "string"
@@ -19946,6 +19977,37 @@
             "title": "Effective From",
             "type": "string"
           },
+          "english": {
+            "anyOf": [
+              {
+                "enum": [
+                  "machine",
+                  "hand",
+                  "making",
+                  "failed",
+                  "none"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English"
+          },
+          "english_problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English Problem"
+          },
           "has_english": {
             "title": "Has English",
             "type": "boolean"
@@ -20264,6 +20326,39 @@
           "record_id"
         ],
         "title": "UploadedOut",
+        "type": "object"
+      },
+      "VersionEnglishOut": {
+        "additionalProperties": false,
+        "properties": {
+          "english": {
+            "enum": [
+              "machine",
+              "hand",
+              "making",
+              "failed",
+              "none"
+            ],
+            "title": "English",
+            "type": "string"
+          },
+          "english_problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English Problem"
+          }
+        },
+        "required": [
+          "english"
+        ],
+        "title": "VersionEnglishOut",
         "type": "object"
       },
       "VersionOut": {
@@ -27553,6 +27648,154 @@
           }
         },
         "summary": "Replace a published version's text -- within 24 hours of publishing, while nobody has",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "legal.texts",
+          "legal.publish"
+        ]
+      }
+    },
+    "/api/v1/admin/legal/versions/{record_id}/english": {
+      "delete": {
+        "operationId": "admin_legal_remove_english",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionEnglishOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Take a published version's English away; its English page then says there is none.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "legal.texts",
+          "legal.publish"
+        ]
+      },
+      "post": {
+        "operationId": "admin_legal_translate_again",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionEnglishOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Make a published version's English again, from scratch, in the background.",
         "tags": [
           "Admin"
         ],

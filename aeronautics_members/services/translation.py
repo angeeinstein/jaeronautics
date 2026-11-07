@@ -185,6 +185,15 @@ def translate(texts, *, as_html=True):
     return [known.get(key, text) for text, key in zip(texts, keys)]
 
 
+def forget(texts, *, as_html=True):
+    """The kept translations of ``texts`` forgotten: asked for again next time. Returns how many."""
+    glossary = settings()["glossary"]
+    keys = list({_key(text, as_html, glossary) for text in texts})
+    if not keys:
+        return 0
+    return db.session.execute(db.delete(Translation).where(Translation.source_hash.in_(keys))).rowcount
+
+
 def _by_a_service(texts, as_html, current, only=None):
     services = [only] if only else configured(current)
     if not services:

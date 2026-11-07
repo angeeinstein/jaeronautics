@@ -243,6 +243,82 @@ describe('a version uploaded here', () => {
   });
 });
 
+describe('the English of a version published here', () => {
+  function published(english: NonNullable<LegalOut['in_force'][number]['english']>, problem?: string) {
+    return legal({
+      in_force: legal().in_force.map((text) => ({
+        ...text,
+        record_id: 3,
+        english,
+        english_problem: problem ?? null,
+      })),
+    });
+  }
+
+  it('says what it is', async () => {
+    show({ [API]: { body: published('failed', 'DeepL: error 500') } });
+    const inForce = await screen.findByRole('region', { name: 'In force' });
+
+    expect(inForce).toHaveTextContent('No English: the translation gave up (DeepL: error 500)');
+  });
+
+  it('is translated again, asked twice', async () => {
+    const { calls } = show({
+      [API]: { body: published('machine') },
+      [`POST ${API}/versions/3/english`]: { body: { english: 'making', english_problem: null } },
+    });
+    const inForce = await screen.findByRole('region', { name: 'In force' });
+    expect(inForce).toHaveTextContent('English made by machine');
+
+    await userEvent.click(within(inForce).getByRole('button', { name: 'English' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Translate again' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Yes, translate' }));
+
+    await waitFor(() => {
+      expect(
+        calls.some(
+          (call) => call.method === 'POST' && new URL(call.url).pathname === `${API}/versions/3/english`,
+        ),
+      ).toBe(true);
+    });
+  });
+
+  it('is removed, asked twice', async () => {
+    const { calls } = show({
+      [API]: { body: published('hand') },
+      [`DELETE ${API}/versions/3/english`]: { body: { english: 'none', english_problem: null } },
+    });
+    const inForce = await screen.findByRole('region', { name: 'In force' });
+
+    await userEvent.click(within(inForce).getByRole('button', { name: 'English' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Remove the English' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Yes, remove it' }));
+
+    await waitFor(() => {
+      expect(calls.some((call) => call.method === 'DELETE')).toBe(true);
+    });
+  });
+
+  it('without one, only Translate is offered', async () => {
+    show({ [API]: { body: published('none') } });
+    const inForce = await screen.findByRole('region', { name: 'In force' });
+
+    await userEvent.click(within(inForce).getByRole('button', { name: 'English' }));
+    const dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).getByRole('button', { name: 'Translate' })).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Remove the English' })).not.toBeInTheDocument();
+  });
+
+  it('not offered to whoever may not publish, nor for a file in legal/', async () => {
+    show({ [API]: { body: { ...published('machine'), may_publish: false } } });
+    const inForce = await screen.findByRole('region', { name: 'In force' });
+    expect(within(inForce).queryByRole('button', { name: 'English' })).not.toBeInTheDocument();
+  });
+});
+
 describe('the editor', () => {
   it('a new version is written from the version in force', async () => {
     const { calls } = show({
