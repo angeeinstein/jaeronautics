@@ -64,8 +64,10 @@ function Head({ text, order }: { text: LegalTextData; order: 1 | 2 }) {
     <Stack gap="sm">
       {text.is_translation ? (
         <Alert color="brand" variant="light" lang="en">
-          This is an English translation for convenience. It may contain mistakes. Where it differs from the
-          German version, the German version applies.{' '}
+          {text.machine_translated
+            ? 'This English translation was made by machine, for convenience.'
+            : 'This is an English translation for convenience.'}{' '}
+          It may contain mistakes. Where it differs from the German version, the German version applies.{' '}
           <Anchor component={AppLink} to={text.german_url} size="sm">
             Read the German version
           </Anchor>

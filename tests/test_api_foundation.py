@@ -252,7 +252,7 @@ class TestFiles:
         operation = openapi.build()["paths"]["/api/v1/admin/legal/preview"]["post"]
 
         form = operation["requestBody"]["content"]["multipart/form-data"]["schema"]
-        assert form["required"] == ["german"] and form["properties"]["english"]["format"] == "binary"
+        assert form["required"] == ["german"] and form["properties"]["german"]["format"] == "binary"
         assert operation["responses"]["200"]["content"] == {
             "application/pdf": {"schema": {"type": "string", "format": "binary"}}}
         assert "400" in operation["responses"]

@@ -868,9 +868,8 @@ class RulesWaitingOut(Model):
     uploaded_by: str | None = None
     #: A draft uploaded in the portal: the leads may delete it.
     deletable: bool = False
-    #: Its Markdown file, to download: German, and the English one if there is one.
+    #: Its Markdown file, to download.
     markdown_url: str = ""
-    english_markdown_url: str | None = None
 
 
 class TeamRulesOut(Model):
@@ -900,11 +899,8 @@ def _rules_out(team):
     for version in legal.waiting(legal.TEAM_RULES, team=team.slug):
         record = db.session.get(LegalTextVersion, version.record_id) if version.record_id else None
         which = {"record": record.id} if record else {"version": version.version.isoformat()}
-        has_english = legal.translation_any(version) is not None
         waiting.append(RulesWaitingOut(
             markdown_url=url_for("teams.team_rules_waiting_markdown", slug=team.slug, **which),
-            english_markdown_url=url_for("teams.team_rules_waiting_markdown", slug=team.slug, language="en",
-                                         **which) if has_english else None,
             title=version.title, status="draft" if version.status == "draft" else "scheduled",
             version=version.version, effective_from=version.effective_from,
             has_english=legal.translation_any(version) is not None,
@@ -925,15 +921,15 @@ def team_rules_manage(slug):
 
 
 @endpoint("POST", "/teams/<slug>/manage/rules/drafts", response=RulesUploadedOut, tag=TAG,
-          uploads={"german": True, "english": False})
+          uploads={"german": True})
 def team_rules_upload(slug, files):
     """Upload a draft of the team's rules, and its English translation if there is one. The
     association's admins are told and publish it. What is wrong is a 400 with ``details.problems``."""
     from ..services import legal_uploads
-    from .admin_legal import _uploads
+    from .admin_legal import _upload
 
     team = _managed(slug, P.RULES)
-    record = legal_uploads.upload_draft(current_user, *_uploads(files), team=team)
+    record = legal_uploads.upload_draft(current_user, _upload(files), team=team)
     _commit()
     return RulesUploadedOut(record_id=record.id, **_rules_out(team).model_dump())
 

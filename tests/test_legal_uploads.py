@@ -74,21 +74,85 @@ class TestUploadingAndPublishing:
         assert legal.current_version("statutes").record_id == record.id
         assert [v.version.isoformat() for v in legal.versions("statutes")][-1] == "2019-03-17"
 
-    def test_with_its_translation(self, boss):
-        record = legal_uploads.upload_draft(
-            boss, _file(), _file(title="Statutes", body="§ 1 Name (English).", language="en"))
+    def test_its_english_is_made_by_machine_and_kept_with_it(self, boss, monkeypatch):
+        from aeronautics_members.services import outbox, translation
+
+        monkeypatch.setattr(translation, "translate",
+                            lambda sent, as_html=True: [f"{text} [en]" for text in sent])
+        record = legal_uploads.upload_draft(boss, _file(body="## § 1 Name\n\nDer Verein heißt."))
+        db.session.commit()
+        _publish(boss, record)
+        assert legal.translation(legal.current_version("statutes")) is None  # until the job has run
+
+        outbox.process_pending()
+
+        english = legal.translation(legal.current_version("statutes"))
+        assert english is not None and english.machine_translated and english.title == "Statuten [en]"
+        html = str(legal.render(english)["html"])
+        assert '<h2 id="paragraph-1">§ 1 Name</h2>' in html and "<p>Der Verein heißt.</p>" in html
+        assert html.count("[en]") == 2  # each block on its own
+        assert legal.render(english)["contents"] == [("paragraph-1", "§ 1 Name", 2)]
+
+    def test_no_service_the_job_is_tried_again(self, boss):
+        from aeronautics_members.db_models import ExternalWorkItem
+        from aeronautics_members.services import outbox
+
+        record = legal_uploads.upload_draft(boss, _file())
         db.session.commit()
         _publish(boss, record)
 
-        english = legal.translation(legal.current_version("statutes"))
-        assert english is not None and "English" in str(legal.render(english)["html"])
+        outbox.process_pending()
 
-    def test_announced_for_a_later_day_its_pdf_has_its_translation(self, boss):
+        [item] = db.session.query(ExternalWorkItem).filter_by(kind="legal_translate").all()
+        assert item.status == "pending" and "No translation service" in (item.last_error or "")
+        assert legal.translation(legal.current_version("statutes")) is None
+
+    def test_given_up_it_is_made_once_a_key_is_saved(self, client, boss, monkeypatch):
+        # Published before a service was set up: its tries ran out. Saving a key brings it back.
+        from aeronautics_members.db_models import ExternalWorkItem
+        from aeronautics_members.services import outbox, translation
+
+        record = legal_uploads.upload_draft(boss, _file())
+        db.session.commit()
+        _publish(boss, record)
+        [item] = db.session.query(ExternalWorkItem).filter_by(kind="legal_translate").all()
+        item.status, item.attempts = ExternalWorkItem.STATUS_FAILED, 5
+        db.session.commit()
+        _login(client, boss.id)
+
+        saved = send(client, "PUT", "/api/v1/admin/settings/translation", {
+            "order": ["deepl", "azure"], "deepl_key": "secret:fx", "azure_key": "", "azure_region": "",
+            "glossary": []})
+        db.session.expire_all()
+
+        assert saved.status_code == 200
+        assert item.status == ExternalWorkItem.STATUS_PENDING and item.attempts == 0
+        monkeypatch.setattr(translation, "translate",
+                            lambda sent, as_html=True: [f"{text} [en]" for text in sent])
+        outbox.process_pending()
+        assert legal.translation(legal.current_version("statutes")).machine_translated
+
+    def test_a_hand_made_english_draft_goes_when_it_is_published(self, boss):
+        record = legal_uploads.upload_draft(boss, _file())
+        db.session.add(LegalTextVersion(document="statutes", language="en", translation_of=record, status="draft",
+                                        version=record.version, effective_from=record.effective_from,
+                                        title="Statutes", body="Hand-made.", uploaded_at=record.uploaded_at))
+        db.session.commit()
+
+        _publish(boss, record)
+
+        assert db.session.query(LegalTextVersion).filter_by(language="en").count() == 0
+
+    def test_announced_for_a_later_day_its_pdf_has_its_translation(self, boss, monkeypatch):
+        from aeronautics_members.services import outbox, translation
+
+        monkeypatch.setattr(translation, "translate",
+                            lambda sent, as_html=True: [f"{text} [en]" for text in sent])
         later = get_membership_today() + timedelta(days=30)
-        record = legal_uploads.upload_draft(
-            boss, _file(), _file(title="Statutes", body="§ 1 Name (English).", language="en"))
+        record = legal_uploads.upload_draft(boss, _file())
         db.session.commit()
         _publish(boss, record, effective_from=later)
+        outbox.process_pending()
 
         [german] = legal.announced("statutes")
 
@@ -183,7 +247,7 @@ class TestCorrecting:
 
 class TestDeleting:
     def test_a_draft(self, boss):
-        record = legal_uploads.upload_draft(boss, _file(), _file(language="en", title="Statutes"))
+        record = legal_uploads.upload_draft(boss, _file())
         db.session.commit()
 
         legal_uploads.delete_draft(boss, record.id)
@@ -257,10 +321,8 @@ class TestATeamsRules:
         assert legal_uploads.why_not_correctable(record) is not None
 
 
-def _upload(client, path, german, english=None):
+def _upload(client, path, german):
     data = {"german": (io.BytesIO(german[0]), german[1])}
-    if english is not None:
-        data["english"] = (io.BytesIO(english[0]), english[1])
     return client.post(path, data=data, content_type="multipart/form-data")
 
 
@@ -268,11 +330,11 @@ class TestTheAdminsPage:
     def test_upload_publish_and_it_is_in_force(self, client, boss):
         _login(client, boss.id)
 
-        uploaded = _upload(client, "/api/v1/admin/legal/drafts", _file(), _file(language="en", title="Statutes"))
+        uploaded = _upload(client, "/api/v1/admin/legal/drafts", _file())
         record_id = uploaded.get_json()["record_id"]
         [waiting] = [item for item in client.get("/api/v1/admin/legal").get_json()["waiting"]
                      if item["record_id"] == record_id]
-        assert waiting["status"] == "draft" and waiting["has_english"] and f"record={record_id}" in waiting["pdf_url"]
+        assert waiting["status"] == "draft" and f"record={record_id}" in waiting["pdf_url"]
 
         published = send(client, "POST", f"/api/v1/admin/legal/drafts/{record_id}/publish", {
             "effective_from": get_membership_today().isoformat(), "approved_by": "Generalversammlung",

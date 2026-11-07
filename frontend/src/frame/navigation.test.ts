@@ -68,6 +68,7 @@ describe('the admin sidebar', () => {
       '/admin/settings/credit',
       '/admin/settings/billing',
       '/admin/settings/forum',
+      '/admin/settings/translation',
       '/admin/settings/devices',
       '/admin/settings/health',
       '/admin/settings/updates',

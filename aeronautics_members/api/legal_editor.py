@@ -98,7 +98,6 @@ class InForceTextOut(Model):
     """The version in force, for the comparison."""
 
     german: TextOut
-    english: TextOut | None
     validity: str
 
 
@@ -133,7 +132,6 @@ class EditorOut(Model):
     #: draft: written and saved as it goes; correcting: a published version within its 24 hours.
     mode: Literal["draft", "correcting"]
     german: TextOut
-    english: TextOut | None
     #: Named by the next save: another save in between refuses it.
     edit_count: int
     edited_at: UtcDateTime | None
@@ -144,9 +142,8 @@ class EditorOut(Model):
     snapshots: list[SnapshotOut]
     #: Its PDF, as saved (``?prepare=1`` first).
     pdf_url: str
-    #: Its Markdown files as saved, to download: German, and English when there is a translation.
+    #: Its Markdown file as saved, to download.
     markdown_url: str
-    english_markdown_url: str | None
     #: Where the list of texts is: Admin › Legal texts, or the team's Rules page.
     back_url: str
     may_publish: bool
@@ -174,11 +171,8 @@ def _editor_out(record, opened):
     in_force_out = None
     # Correcting: the version in force is this one, as published -- what the correction changes.
     if in_force is not None:
-        translated = legal.translation(in_force)
         in_force_out = InForceTextOut(
             german=TextOut(title=in_force.title, revision=in_force.revision, body=legal.body(in_force)),
-            english=None if translated is None else TextOut(
-                title=translated.title, revision=translated.revision, body=legal.body(translated)),
             validity=legal.validity(in_force))
     content = editor.content(record)
     admin = current_user.can(Permission.LEGAL_TEXTS)
@@ -198,12 +192,11 @@ def _editor_out(record, opened):
     return EditorOut(
         record_id=record.id, document=record.document, name=name, team=record.team_slug,
         team_name=team.name if team else None, mode="draft" if record.status == "draft" else "correcting",
-        german=_text(content["german"]), english=_text(content["english"]), edit_count=record.edit_count,
+        german=_text(content["german"]), edit_count=record.edit_count,
         edited_at=record.edited_at, in_force=in_force_out, opened_snapshot_id=opened.id,
         snapshots=[SnapshotOut(id=s.id, created_at=s.created_at, created_by=_person(s.created_by))
                    for s in reversed(record.snapshots)],
         pdf_url=pdf_url, back_url=back_url, markdown_url=markdown_url,
-        english_markdown_url=f"{markdown_url}&language=en" if content["english"] else None,
         may_publish=current_user.can(Permission.LEGAL_TEXTS) and current_user.can(Permission.LEGAL_PUBLISH),
         approved_by=record.approved_by, approved_on=record.approved_on, effective_from=record.effective_from,
         lock=_lock_out(record),
@@ -225,8 +218,6 @@ def legal_draft_session(record_id):
 
 class SaveIn(Model):
     german: TextIn
-    #: None: no English translation (one there is removed).
-    english: TextIn | None = None
     #: ``edit_count`` as loaded or last saved.
     edit_count: int
 
@@ -241,14 +232,13 @@ def legal_draft_save(record_id, body):
     """Save a draft as written. Refused (409, ``legal_draft_changed``) when somebody else saved it
     since ``edit_count``."""
     record = editor.editable(current_user, record_id)
-    editor.save(current_user, record, body.german.model_dump(),
-                body.english.model_dump() if body.english is not None else None, body.edit_count)
+    editor.save(current_user, record, body.german.model_dump(), body.edit_count)
     db.session.commit()
     return SavedOut(edit_count=record.edit_count, edited_at=record.edited_at)
 
 
 class CheckIn(TextIn):
-    language: Literal["de", "en"] = "de"
+    pass
 
 
 class CheckedOut(Model):
@@ -261,16 +251,40 @@ class CheckedOut(Model):
 
 @endpoint("POST", "/legal/drafts/<int:record_id>/check", response=CheckedOut, body=CheckIn, tag=TAG)
 def legal_draft_check(record_id, body):
-    """One language as written -- saved or not -- rendered as its page will be, and checked."""
+    """The German as written -- saved or not -- rendered as its page will be, and checked."""
     record = editor.editable(current_user, record_id)
-    html, contents, problems = editor.check(record, body.language, body.model_dump(exclude={"language"}))
+    html, contents, problems = editor.check(record, legal.AUTHORITATIVE, body.model_dump())
     return CheckedOut(html=html, contents=[SectionOut(anchor=a, label=label, level=level)
                                            for a, label, level in contents], problems=problems)
 
 
 class ContentOut(Model):
     german: TextOut
-    english: TextOut | None
+
+
+class EnglishOut(Model):
+    """The German as written, in English by machine -- as members will read it once published."""
+
+    title: str
+    html: str
+    #: Why there is none, when no translation service translated it.
+    unavailable: str | None = None
+
+
+@endpoint("POST", "/legal/drafts/<int:record_id>/english", response=EnglishOut, body=CheckIn, tag=TAG)
+def legal_draft_english(record_id, body):
+    """The editor's *English* view: the German as written, translated paragraph by paragraph --
+    each kept, so only what changed is sent to the translator."""
+    from ..services.translation import TranslationUnavailable
+
+    record = editor.editable(current_user, record_id)
+    try:
+        title, html = editor.english(record, body.model_dump())
+    except TranslationUnavailable as exc:
+        db.session.rollback()
+        return EnglishOut(title="", html="", unavailable=str(exc))
+    db.session.commit()
+    return EnglishOut(title=title, html=html)
 
 
 @endpoint("GET", "/legal/drafts/<int:record_id>/snapshots/<int:snapshot_id>", response=ContentOut, tag=TAG)
@@ -278,21 +292,20 @@ def legal_draft_snapshot(record_id, snapshot_id):
     """An earlier state of the draft, to go back to in the editor (then saved as any change)."""
     record = editor.editable(current_user, record_id)
     kept = editor.snapshot(record, snapshot_id).content
-    return ContentOut(german=_text(kept["german"]), english=_text(kept.get("english")))
+    return ContentOut(german=_text(kept["german"]))
 
 
-@endpoint("POST", "/legal/drafts/<int:record_id>/file", response=ContentOut, tag=TAG,
-          uploads={"german": True, "english": False})
+@endpoint("POST", "/legal/drafts/<int:record_id>/file", response=ContentOut, tag=TAG, uploads={"german": True})
 def legal_draft_read_file(record_id, files):
-    """*Replace with a file*: the text of uploaded files -- checked as an upload is -- for the editor to put
-    in; ``english`` None: the translation stays. The draft as it was is kept as an earlier state.
-    What is wrong is a 400 with ``details.problems``."""
-    from .admin_legal import _uploads
+    """*Replace with a file*: the text of an uploaded German file -- checked as an upload is -- for the
+    editor to put in. The draft as it was is kept as an earlier state. What is wrong is a 400 with
+    ``details.problems``."""
+    from .admin_legal import _upload
 
     record = editor.editable(current_user, record_id)
-    read = editor.read_file(current_user, record, *_uploads(files))
+    read = editor.read_file(current_user, record, _upload(files))
     db.session.commit()
-    return ContentOut(german=_text(read["german"]), english=_text(read["english"]))
+    return ContentOut(german=_text(read["german"]))
 
 
 class LockIn(Model):
@@ -327,7 +340,6 @@ def legal_draft_unlock(record_id):
 
 class CorrectIn(Model):
     german: TextIn
-    english: TextIn | None = None
 
 
 @endpoint("POST", "/legal/drafts/<int:record_id>/correct", response=SavedOut, body=CorrectIn, tag=TAG)
@@ -337,7 +349,6 @@ def legal_draft_correct(record_id, body):
     record = editor.editable(current_user, record_id)
     if record.status == "draft":
         raise NotFoundError("A draft is saved, not corrected.", code="no_version")
-    editor.correct(current_user, record, body.german.model_dump(),
-                   body.english.model_dump() if body.english is not None else None)
+    editor.correct(current_user, record, body.german.model_dump())
     db.session.commit()
     return SavedOut(edit_count=record.edit_count, edited_at=record.corrected_at)

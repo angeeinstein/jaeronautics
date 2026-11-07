@@ -9,6 +9,8 @@ frontend/src/pages/admin/settings/.
 """
 
 
+from typing import Literal
+
 from flask import current_app
 from flask_login import current_user
 from pydantic import Field
@@ -296,3 +298,98 @@ def admin_settings_forum_test():
                     metadata={"success": ok, "message": message})
     db.session.commit()
     return ConnectionOut(ok=bool(ok), message=message)
+
+
+# --- Translation (docs/legal-translation-plan.md) ---------------------------------------
+
+
+class TranslationServiceOut(Model):
+    #: deepl or azure.
+    name: Literal["deepl", "azure"]
+    label: str
+    #: A key is set (never shown).
+    key_set: bool
+
+
+class TranslationOut(Model):
+    """The services that make the legal texts' English, in the order they are tried, and the glossary."""
+
+    services: list[TranslationServiceOut]
+    azure_region: str
+    #: Each a German term and its English one.
+    glossary: list[list[str]]
+    #: DeepL's characters this month, when DeepL is set up and answers.
+    deepl_used: int | None = None
+    deepl_limit: int | None = None
+
+
+class TranslationIn(Model):
+    #: The services in the order they are tried; the first that translates it is used.
+    order: list[Literal["deepl", "azure"]]
+    #: Empty keeps the one set.
+    deepl_key: str | None = Field(None, max_length=255)
+    azure_key: str | None = Field(None, max_length=255)
+    azure_region: str = Field("", max_length=40)
+    #: Each a German term and its English one.
+    glossary: list[list[str]] = Field(default_factory=list, max_length=200)
+    #: Keys to remove.
+    forget: list[Literal["deepl", "azure"]] = Field(default_factory=list)
+
+
+def _translation_out():
+    from ..services import translation
+
+    current = translation.settings()
+    usage = translation.deepl_usage() if current["deepl_key"] else None
+    return TranslationOut(
+        services=[TranslationServiceOut(name=name, label=translation.NAMES[name],
+                                        key_set=bool(current[f"{name}_key"])) for name in current["order"]],
+        azure_region=current["azure_region"], glossary=[list(entry) for entry in current["glossary"]],
+        deepl_used=usage["used"] if usage else None, deepl_limit=usage["limit"] if usage else None)
+
+
+@endpoint("GET", "/admin/settings/translation", response=TranslationOut, permissions=CREDENTIALS, tag=TAG)
+def admin_settings_translation():
+    """The translation services, their order, DeepL's characters this month, and the glossary."""
+    return _translation_out()
+
+
+@endpoint("PUT", "/admin/settings/translation", response=SettingsSavedOut, body=TranslationIn,
+          permissions=CREDENTIALS, tag=TAG)
+def admin_settings_translation_save(body):
+    """Save them. A changed glossary is used from the next translation on.
+
+    English that waits for a service -- published before one was set up -- is made now."""
+    from ..services import legal_translation, translation
+
+    changed = translation.save_settings(
+        current_user, order=body.order, deepl_key=body.deepl_key, azure_key=body.azure_key,
+        azure_region=body.azure_region, glossary=[list(entry) for entry in body.glossary], forget=body.forget)
+    if changed and translation.configured():
+        legal_translation.wake_waiting()
+    db.session.commit()
+    return SettingsSavedOut(changed=changed)
+
+
+class TranslationTryOut(Model):
+    ok: bool
+    #: The sentence in English, or why it did not work.
+    message: str
+
+
+@endpoint("POST", "/admin/settings/translation/<name>/try", response=TranslationTryOut,
+          permissions=CREDENTIALS, tag=TAG)
+def admin_settings_translation_try(name):
+    """Translate one sentence with this service only: whether its key works.
+
+    The sentence is not kept; DeepL's glossary id, made on the way, is."""
+    from ..services import ValidationError
+    from ..services import translation
+
+    try:
+        tried = TranslationTryOut(ok=True, message=translation.try_service(name))
+    except ValidationError as exc:
+        db.session.rollback()
+        return TranslationTryOut(ok=False, message=str(exc))
+    db.session.commit()
+    return tried

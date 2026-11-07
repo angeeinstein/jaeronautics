@@ -41,6 +41,8 @@ class LegalTextOut(Model):
     language: str
     #: An English translation: the German text applies.
     is_translation: bool
+    #: Made by machine from the German (docs/legal-translation-plan.md).
+    machine_translated: bool = False
     version: date
     revision: str | None
     effective_from: date
@@ -94,6 +96,7 @@ def legal_text(slug, language, version, *, page, pdf, team=None):
     rendered = legal.render(shown)
     return LegalTextOut(
         title=shown.title, language=shown.language, is_translation=shown.is_translation,
+        machine_translated=shown.machine_translated,
         version=shown.version, revision=shown.revision, effective_from=shown.effective_from,
         in_force=current or german.version, upcoming=german.effective_from > get_membership_today(),
         validity=legal.validity(shown), html=str(rendered["html"]),

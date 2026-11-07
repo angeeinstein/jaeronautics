@@ -112,9 +112,9 @@ function NewVersion({ data }: { data: LegalOut }) {
     <Panel icon={IconUpload} title="Upload a file">
       <Stack gap="md">
         <Text size="sm" c="dimmed">
-          The Markdown file of a new version -- the association&apos;s or a team&apos;s rules -- and its
-          English translation, if there is one. Checked as a file in legal/ is. A draft is seen only here
-          until it is published; the preview keeps nothing.
+          The German Markdown file of a new version -- the association&apos;s or a team&apos;s rules; its
+          English is made by machine once it is published. Checked as a file in legal/ is. A draft is seen
+          only here until it is published; the preview keeps nothing.
         </Text>
         <Problems problems={problems} title="Not taken, because of:" />
         <LegalFiles
@@ -188,9 +188,8 @@ function Correct({ text, onClose }: { text: InForceText; onClose: () => void }) 
     <Modal opened onClose={onClose} title={`Correct: ${text.title}`} size="lg">
       <Stack gap="md">
         <Text size="sm" c="dimmed">
-          The whole file again, with the mistake put right. Its day, the day it applies from and its approval
-          stay; the earlier wording is kept in the log. The English translation is replaced only if one is
-          chosen.
+          The whole German file again, with the mistake put right. Its day, the day it applies from and its
+          approval stay; the earlier wording is kept in the log, and the English is made anew.
         </Text>
         <Problems problems={problems} title="Not corrected, because of:" />
         <LegalFiles
@@ -548,11 +547,6 @@ function NotInForce({ data }: { data: LegalOut }) {
                     {text.markdown_url ? (
                       <Anchor href={text.markdown_url} download size="sm">
                         Markdown
-                      </Anchor>
-                    ) : null}
-                    {text.english_markdown_url ? (
-                      <Anchor href={text.english_markdown_url} download size="sm">
-                        Markdown (en)
                       </Anchor>
                     ) : null}
                     <PdfLink href={text.pdf_url}>Preview PDF</PdfLink>

@@ -219,7 +219,7 @@ def admin_settings():
 #: A section of the settings, and what it needs beyond the general settings permission.
 SETTINGS_SECTIONS = {
     "general": None, "email": None, "credit": None, "billing": Permission.SETTINGS_CREDENTIALS,
-    "forum": Permission.SETTINGS_CREDENTIALS,
+    "forum": Permission.SETTINGS_CREDENTIALS, "translation": Permission.SETTINGS_CREDENTIALS,
     "health": Permission.SYSTEM_UPDATE, "updates": Permission.SYSTEM_UPDATE, "backup": Permission.SYSTEM_BACKUP,
     "devices": Permission.DEVICES_MANAGE,
 }
@@ -235,7 +235,8 @@ def admin_settings_email_moved(old):
     return redirect(url_for("admin.admin_settings_section", section="email") + "#" + EMAIL_TABS[old])
 
 
-@admin_bp.route("/admin/settings/<any(general, email, billing, credit, forum, health, updates, backup, devices)"
+@admin_bp.route("/admin/settings/<any(general, email, billing, credit, forum, translation, health, updates, backup,"
+                " devices)"
                 ":section>", methods=["GET"])
 @login_required
 @requires(Permission.SETTINGS_GENERAL)
@@ -292,8 +293,8 @@ def admin_legal_editor(record_id):
 @login_required
 @requires(Permission.LEGAL_TEXTS)
 def admin_legal_waiting_markdown():
-    """A version not in force yet as its Markdown file -- German, or ``language=en`` -- front matter
-    included: to pass round, change elsewhere and upload again."""
+    """A version not in force yet as its German Markdown file, front matter included: to
+    pass round, change elsewhere and upload again."""
     from ..services import legal_texts as legal
 
     document = request.args.get("document", "")
@@ -303,7 +304,7 @@ def admin_legal_waiting_markdown():
     german = legal_pages.waiting_version(document, team_slug)
     if german is None:
         abort(404)
-    return legal_pages.markdown(german, request.args.get("language", "de"))
+    return legal_pages.markdown(german)
 
 
 @admin_bp.route("/admin/legal/waiting.pdf", methods=["GET"])

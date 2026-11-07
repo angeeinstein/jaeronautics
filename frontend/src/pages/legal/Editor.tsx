@@ -86,7 +86,6 @@ import { Publish } from '../admin/LegalTexts';
 import classes from './Editor.module.css';
 
 type EditorOut = Schemas['EditorOut'];
-type Language = 'de' | 'en';
 interface Part {
   title: string;
   revision: string | null;
@@ -94,12 +93,13 @@ interface Part {
 }
 interface Content {
   german: Part;
-  english: Part | null;
 }
 type Saving = 'saved' | 'unsaved' | 'saving' | 'conflict' | 'failed';
 
 const SAVE_AFTER_MS = 2000;
 const CHECK_AFTER_MS = 500;
+/** The English view asks the translator once typing has stopped this long. */
+const TRANSLATE_AFTER_MS = 3000;
 /** The holder's sign of life, and the others asking whether it is free. */
 const LOCK_EVERY_MS = 30_000;
 
@@ -139,9 +139,8 @@ function Workspace({ data, onReload }: { data: EditorOut; onReload: () => void }
   const [german, setGerman] = useState<Part>(
     () => partOf(data.german) ?? { title: '', revision: null, body: '' },
   );
-  const [english, setEnglish] = useState<Part | null>(() => partOf(data.english));
-  const [language, setLanguage] = useState<Language>('de');
-  const [pane, setPane] = useState<'write' | 'preview' | 'changes'>('write');
+  const [pane, setPane] = useState<'write' | 'preview' | 'english' | 'changes'>('write');
+  const [side, setSide] = useState<'preview' | 'english' | 'changes'>('preview');
   const [saving, setSaving] = useState<Saving>('saved');
   const [editedAt, setEditedAt] = useState(data.edited_at ?? null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -152,15 +151,12 @@ function Workspace({ data, onReload }: { data: EditorOut; onReload: () => void }
   const [lostTo, setLostTo] = useState<string | null>(null);
   const readOnly = !lock.mine;
   const germanView = useRef<EditorView | null>(null);
-  const englishView = useRef<EditorView | null>(null);
-  // Only in handlers: a view is never read while drawing.
-  const viewOf = (which: Language) => (which === 'de' ? germanView.current : englishView.current);
 
   // What the saver sends: always the latest, whatever render it runs from.
-  const latest = useRef<Content>({ german, english });
+  const latest = useRef<Content>({ german });
   useLayoutEffect(() => {
-    latest.current = { german, english };
-  }, [german, english]);
+    latest.current = { german };
+  }, [german]);
   const editCount = useRef(data.edit_count);
   const changes = useRef(0);
   const timer = useRef<number | undefined>(undefined);
@@ -296,32 +292,15 @@ function Workspace({ data, onReload }: { data: EditorOut; onReload: () => void }
     onError: notifyFailed,
   });
 
-  const setPart = (which: Language, part: Partial<Part>) => {
-    if (which === 'de') setGerman((now) => ({ ...now, ...part }));
-    else setEnglish((now) => (now ? { ...now, ...part } : now));
+  const setPart = (part: Partial<Part>) => {
+    setGerman((now) => ({ ...now, ...part }));
     changed();
   };
 
-  /** An earlier state put back: the texts as changes that undo takes back. */
+  /** An earlier state put back: the text as a change undo takes back. */
   const putBack = (content: Content) => {
     setGerman((now) => ({ ...now, title: content.german.title, revision: content.german.revision }));
     replaceText(germanView.current, content.german.body);
-    if (content.english) {
-      const englishPart = content.english;
-      if (englishView.current) {
-        setEnglish((now) => ({
-          ...(now ?? englishPart),
-          title: englishPart.title,
-          revision: englishPart.revision,
-        }));
-        replaceText(englishView.current, englishPart.body);
-      } else {
-        setEnglish(englishPart);
-      }
-    } else {
-      setEnglish(null);
-      setLanguage('de');
-    }
     changed();
   };
   const loadState = useMutation({
@@ -332,7 +311,7 @@ function Workspace({ data, onReload }: { data: EditorOut; onReload: () => void }
         }),
       ),
     onSuccess: (content, snapshotId) => {
-      putBack({ german: partOf(content.german) ?? german, english: partOf(content.english) });
+      putBack({ german: partOf(content.german) ?? german });
       setHistoryOpen(false);
       notifyDone(
         snapshotId === data.opened_snapshot_id
@@ -359,129 +338,67 @@ function Workspace({ data, onReload }: { data: EditorOut; onReload: () => void }
     onError: notifyFailed,
   });
 
-  const active = language === 'de' ? german : english;
-  const inForce = data.in_force ? (language === 'de' ? data.in_force.german : data.in_force.english) : null;
+  const inForce = data.in_force?.german ?? null;
 
   const editor = (
     <Stack gap="sm">
-      <Tabs
-        value={language}
-        onChange={(value) => {
-          setLanguage(value === 'en' ? 'en' : 'de');
-        }}
-      >
-        <Tabs.List>
-          <Tabs.Tab value="de">German</Tabs.Tab>
-          <Tabs.Tab value="en">English{english ? '' : ' (none)'}</Tabs.Tab>
-        </Tabs.List>
-      </Tabs>
-      {active ? (
-        <>
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-            <TextInput
-              label="Title"
-              required
-              readOnly={readOnly}
-              maxLength={200}
-              value={active.title}
-              onChange={(event) => {
-                setPart(language, { title: event.currentTarget.value });
-              }}
-            />
-            <TextInput
-              label="Revision (optional)"
-              placeholder="Version 2026.2"
-              readOnly={readOnly}
-              maxLength={100}
-              value={active.revision ?? ''}
-              onChange={(event) => {
-                setPart(language, { revision: event.currentTarget.value || null });
-              }}
-            />
-          </SimpleGrid>
-          <Toolbar
-            disabled={readOnly}
-            view={() => viewOf(language)}
-            onUndo={() => {
-              undoIn(viewOf(language));
-            }}
-            onRedo={() => {
-              redoIn(viewOf(language));
-            }}
-          />
-        </>
-      ) : null}
-      <div hidden={language !== 'de'}>
-        <MarkdownEditor
-          initial={german.body}
-          viewRef={germanView}
-          label="German text, Markdown"
-          lang="de"
+      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+        <TextInput
+          label="Title"
+          required
           readOnly={readOnly}
-          onChange={(body) => {
-            setPart('de', { body });
+          maxLength={200}
+          value={german.title}
+          onChange={(event) => {
+            setPart({ title: event.currentTarget.value });
           }}
         />
-      </div>
-      {english ? (
-        <div hidden={language !== 'en'}>
-          <MarkdownEditor
-            initial={english.body}
-            viewRef={englishView}
-            label="English text, Markdown"
-            lang="en"
-            readOnly={readOnly}
-            onChange={(body) => {
-              setPart('en', { body });
-            }}
-          />
-          <Group justify="flex-end" mt="xs" hidden={readOnly}>
-            <ConfirmButton
-              size="xs"
-              confirmLabel="Yes, remove it"
-              onConfirm={() => {
-                setEnglish(null);
-                setLanguage('de');
-                changed();
-              }}
-            >
-              Remove the translation
-            </ConfirmButton>
-          </Group>
-        </div>
-      ) : language === 'en' ? (
-        <Stack gap="sm" align="flex-start" py="md">
-          <Text size="sm" c="dimmed">
-            No English translation. Where there is none, the German text is shown.
-          </Text>
-          <Button
-            variant="default"
-            disabled={readOnly}
-            onClick={() => {
-              setEnglish({ title: '', revision: german.revision, body: '' });
-              changed();
-            }}
-          >
-            Add an English translation
-          </Button>
-        </Stack>
-      ) : null}
+        <TextInput
+          label="Revision (optional)"
+          placeholder="Version 2026.2"
+          readOnly={readOnly}
+          maxLength={100}
+          value={german.revision ?? ''}
+          onChange={(event) => {
+            setPart({ revision: event.currentTarget.value || null });
+          }}
+        />
+      </SimpleGrid>
+      <Toolbar
+        disabled={readOnly}
+        view={() => germanView.current}
+        onUndo={() => {
+          undoIn(germanView.current);
+        }}
+        onRedo={() => {
+          redoIn(germanView.current);
+        }}
+      />
+      <MarkdownEditor
+        initial={german.body}
+        viewRef={germanView}
+        label="German text, Markdown"
+        lang="de"
+        readOnly={readOnly}
+        onChange={(body) => {
+          setPart({ body });
+        }}
+      />
     </Stack>
   );
 
-  const preview = active ? <Preview recordId={data.record_id} language={language} part={active} /> : null;
-  const comparison = active ? (
-    inForce ? (
-      <Stack gap="xs">
-        <Text size="sm" c="dimmed">
-          Against the version in force ({data.in_force?.validity}).
-        </Text>
-        <Changes before={inForce.body} after={active.body} />
-      </Stack>
-    ) : (
-      <EmptyState>{`Nothing in force to compare with${language === 'en' ? ' in English' : ''}.`}</EmptyState>
-    )
-  ) : null;
+  const preview = <Preview recordId={data.record_id} part={german} />;
+  const english = <EnglishView recordId={data.record_id} part={german} />;
+  const comparison = inForce ? (
+    <Stack gap="xs">
+      <Text size="sm" c="dimmed">
+        Against the version in force ({data.in_force?.validity}).
+      </Text>
+      <Changes before={inForce.body} after={german.body} />
+    </Stack>
+  ) : (
+    <EmptyState>Nothing in force to compare with.</EmptyState>
+  );
 
   return (
     <>
@@ -538,16 +455,6 @@ function Workspace({ data, onReload }: { data: EditorOut; onReload: () => void }
                 <Menu.Item component="a" href={data.markdown_url} download disabled={saving !== 'saved'}>
                   Download Markdown
                 </Menu.Item>
-                {english && data.english_markdown_url ? (
-                  <Menu.Item
-                    component="a"
-                    href={data.english_markdown_url}
-                    download
-                    disabled={saving !== 'saved'}
-                  >
-                    Download Markdown (English)
-                  </Menu.Item>
-                ) : null}
                 <Menu.Divider />
                 <Menu.Item
                   disabled={readOnly}
@@ -629,13 +536,25 @@ function Workspace({ data, onReload }: { data: EditorOut; onReload: () => void }
       {wide ? (
         <div className={classes.split}>
           {editor}
-          <Tabs defaultValue="preview" className={classes.side}>
+          {/* Only the pane shown is drawn: the English one asks the translator only while it is open. */}
+          <Tabs
+            value={side}
+            onChange={(value) => {
+              setSide(value === 'changes' ? 'changes' : value === 'english' ? 'english' : 'preview');
+            }}
+            keepMounted={false}
+            className={classes.side}
+          >
             <Tabs.List>
               <Tabs.Tab value="preview">Preview</Tabs.Tab>
+              <Tabs.Tab value="english">English</Tabs.Tab>
               <Tabs.Tab value="changes">Changes</Tabs.Tab>
             </Tabs.List>
             <Tabs.Panel value="preview" pt="md">
               {preview}
+            </Tabs.Panel>
+            <Tabs.Panel value="english" pt="md">
+              {english}
             </Tabs.Panel>
             <Tabs.Panel value="changes" pt="md">
               {comparison}
@@ -648,16 +567,18 @@ function Workspace({ data, onReload }: { data: EditorOut; onReload: () => void }
             fullWidth
             value={pane}
             onChange={(value) => {
-              setPane(value === 'preview' ? 'preview' : value === 'changes' ? 'changes' : 'write');
+              setPane(value === 'preview' || value === 'english' || value === 'changes' ? value : 'write');
             }}
             data={[
               { value: 'write', label: 'Write' },
               { value: 'preview', label: 'Preview' },
+              { value: 'english', label: 'English' },
               { value: 'changes', label: 'Changes' },
             ]}
           />
           <div hidden={pane !== 'write'}>{editor}</div>
           {pane === 'preview' ? preview : null}
+          {pane === 'english' ? english : null}
           {pane === 'changes' ? comparison : null}
         </Stack>
       )}
@@ -707,11 +628,7 @@ function Workspace({ data, onReload }: { data: EditorOut; onReload: () => void }
             setReplacing(false);
           }}
           onRead={(content) => {
-            putBack({
-              german: partOf(content.german) ?? german,
-              // A file without its translation leaves the translation as it is.
-              english: partOf(content.english) ?? english,
-            });
+            putBack({ german: partOf(content.german) ?? german });
             setReplacing(false);
             notifyDone('Replaced with the file. Undo takes it back.');
           }}
@@ -773,8 +690,7 @@ function ReplaceWithFile({
       <Stack gap="md">
         <Text size="sm" c="dimmed">
           The whole text, as a Markdown file -- downloaded from here and changed, or written elsewhere. It is
-          checked as an upload is. Without an English file, the translation stays as it is. The draft as it is
-          now stays under History, and undo takes the change back.
+          checked as an upload is. The draft as it is now stays under History, and undo takes the change back.
         </Text>
         <Problems problems={problems} title="Not taken in, because of:" />
         <LegalFiles
@@ -898,15 +814,15 @@ function Toolbar({
 }
 
 /** The page as it will be, and what keeps it from being published: from the server, as written. */
-function Preview({ recordId, language, part }: { recordId: number; language: Language; part: Part }) {
+function Preview({ recordId, part }: { recordId: number; part: Part }) {
   const [written] = useDebouncedValue(part, CHECK_AFTER_MS);
   const checked = useQuery({
-    queryKey: ['legal', 'editor', recordId, 'check', language, written] as const,
+    queryKey: ['legal', 'editor', recordId, 'check', written] as const,
     queryFn: () =>
       call(
         api.POST('/api/v1/legal/drafts/{record_id}/check', {
           params: { path: { record_id: recordId } },
-          body: { language, ...written },
+          body: written,
         }),
       ),
     placeholderData: keepPreviousData,
@@ -923,14 +839,63 @@ function Preview({ recordId, language, part }: { recordId: number; language: Lan
           Nothing in the way of publishing it.
         </Text>
       )}
-      <h2 className={classes.previewTitle} lang={language}>
+      <h2 className={classes.previewTitle} lang="de">
         {written.title}
       </h2>
       <div
         className={textClasses.text}
-        lang={language}
+        lang="de"
         // Markdown rendered on the server with HTML switched off: nothing in it can run.
         dangerouslySetInnerHTML={{ __html: checked.data.html }}
+      />
+    </Stack>
+  );
+}
+
+/**
+ * The English members will read: the German as written, translated by machine a few seconds after
+ * typing stops -- paragraph by paragraph, each kept, so only what changed goes to the translator.
+ */
+function EnglishView({ recordId, part }: { recordId: number; part: Part }) {
+  const [written] = useDebouncedValue(part, TRANSLATE_AFTER_MS);
+  const translated = useQuery({
+    queryKey: ['legal', 'editor', recordId, 'english', written] as const,
+    queryFn: () =>
+      call(
+        api.POST('/api/v1/legal/drafts/{record_id}/english', {
+          params: { path: { record_id: recordId } },
+          body: written,
+        }),
+      ),
+    placeholderData: keepPreviousData,
+    staleTime: Infinity,
+  });
+  if (translated.isPending) return <LoadingState />;
+  if (translated.isError) {
+    return <ErrorState error={translated.error} onRetry={() => void translated.refetch()} />;
+  }
+  if (translated.data.unavailable) {
+    return (
+      <Alert color="yellow" variant="light" title="No English just now">
+        {translated.data.unavailable.replace(/\.?$/, '.')} Publishing does not wait for it: the English is
+        made once a service answers.
+      </Alert>
+    );
+  }
+  return (
+    <Stack gap="md">
+      <Text size="sm" c="dimmed">
+        Made by machine from the German, as members will read it once it is published. It is not edited by
+        hand: terms are kept right by the glossary (Settings › Translation).
+      </Text>
+      <h2 className={classes.previewTitle} lang="en">
+        {translated.data.title}
+      </h2>
+      <div
+        className={textClasses.text}
+        lang="en"
+        // The translator's HTML, cleaned on the server to the tags the German page has.
+        dangerouslySetInnerHTML={{ __html: translated.data.html }}
       />
     </Stack>
   );

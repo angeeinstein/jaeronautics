@@ -36,7 +36,7 @@ from ..db_models import LegalTextSnapshot, LegalTextVersion, db
 from ..permissions import Permission
 from . import ConflictError, NotFoundError, PermissionError_, ValidationError
 from . import legal_texts as legal
-from . import legal_uploads
+from . import legal_translation, legal_uploads
 from .audit import log_audit_event
 from .clock import get_membership_today, get_now_utc
 
@@ -101,18 +101,10 @@ def editable(user, record_id):
 # --- What a draft holds ------------------------------------------------------------------
 
 
-def _english(record):
-    return next(iter(record.translations), None)
-
-
 def content(record):
-    """{"german": {"title", "revision", "body"}, "english": {...} or None}."""
-    english = _english(record)
-    return {
-        "german": {"title": record.title, "revision": record.revision, "body": record.body},
-        "english": None if english is None else {"title": english.title, "revision": english.revision,
-                                                  "body": english.body},
-    }
+    """{"german": {"title", "revision", "body"}}: only the German is written; the English is made by
+    machine (services/legal_translation.py)."""
+    return {"german": {"title": record.title, "revision": record.revision, "body": record.body}}
 
 
 def _clean(part, role):
@@ -150,18 +142,13 @@ def _known(document, team_slug):
     return legal.TEAM_BY_SLUG[document]
 
 
-def _new_record(actor, document, team_slug, german, english, imported_from=(None, None)):
+def _new_record(actor, document, team_slug, german, imported_from=None):
     today, now = get_membership_today(), get_now_utc()
     record = LegalTextVersion(
         document=document, team_slug=team_slug, language=legal.AUTHORITATIVE, status="draft", version=today,
         effective_from=today, title=german["title"], revision=german["revision"], body=german["body"],
-        uploaded_at=now, uploaded_by=actor, imported_from=imported_from[0])
+        uploaded_at=now, uploaded_by=actor, imported_from=imported_from)
     db.session.add(record)
-    if english is not None:
-        db.session.add(LegalTextVersion(
-            document=document, team_slug=team_slug, language="en", translation_of=record, status="draft",
-            version=today, effective_from=today, title=english["title"], revision=english["revision"],
-            body=english["body"], uploaded_at=now, uploaded_by=actor, imported_from=imported_from[1]))
     db.session.flush()
     return record
 
@@ -176,14 +163,9 @@ def start_draft(actor, document, team_slug=None, start="in_force", template=""):
     in_force = legal.current_version(document, team=team_slug) if start == "in_force" else None
     if in_force is not None:
         german = {"title": in_force.title, "revision": in_force.revision, "body": legal.body(in_force)}
-        translated = legal.translation(in_force)
-        english = None if translated is None else {
-            "title": translated.title, "revision": translated.revision, "body": legal.body(translated)}
     else:
-        german = {"title": text.title, "revision": None,
-                  "body": _template_body(template)}
-        english = None
-    record = _new_record(actor, document, team_slug, german, english)
+        german = {"title": text.title, "revision": None, "body": _template_body(template)}
+    record = _new_record(actor, document, team_slug, german)
     log_audit_event("legal", "legal_text_started", actor_user=actor, target_user=actor,
                     metadata={"document": document, "team": team_slug, "record": record.id,
                               "from": "in_force" if in_force is not None else "template"})
@@ -211,13 +193,8 @@ def import_file(actor, document, team_slug, version_day):
         return copied
     german_version, _ = legal._check(path, document, legal.AUTHORITATIVE, team_slug)
     german = {"title": german_version.title, "revision": german_version.revision, "body": legal.body(german_version)}
-    english, english_where = None, None
-    for candidate in legal._files(document, "en", team_slug):
-        version, _problems = legal._check(candidate, document, "en", team_slug)
-        if version is not None and version.version == version_day:
-            english = {"title": version.title, "revision": version.revision, "body": legal.body(version)}
-            english_where = legal.relative(candidate)
-    record = _new_record(actor, document, team_slug, german, english, (where, english_where))
+    # Its English file is left: the English is made by machine once it is published (decided).
+    record = _new_record(actor, document, team_slug, german, where)
     record.approved_by, record.approved_on = german_version.approved_by, german_version.approved_on
     log_audit_event("legal", "legal_text_imported", actor_user=actor, target_user=actor,
                     metadata={"document": document, "team": team_slug, "record": record.id, "file": where})
@@ -343,13 +320,12 @@ def snapshot(record, snapshot_id):
     return found
 
 
-def save(actor, record, german, english, edit_count):
-    """Save a draft as written. ``edit_count``: the count it was loaded with; another save in
-    between refuses this one. ``english`` None: no translation (an existing one is removed)."""
+def save(actor, record, german, edit_count):
+    """Save a draft as written -- its German; the English is made once it is published.
+    ``edit_count``: the count it was loaded with; another save in between refuses this one."""
     if record.status != "draft":
         raise ConflictError("A published version is corrected, not saved.", code="legal_published_already")
     german = _clean(german, "german")
-    english = _clean(english, "english") if english is not None else None
     _require_lock(actor, record)
     now = get_now_utc()
     # Compared and counted up in one statement: of two saves at the same moment, only one
@@ -364,21 +340,6 @@ def save(actor, record, german, english, edit_count):
                             code="legal_draft_changed")
     db.session.refresh(record, ["edit_count", "edited_at"])
     record.title, record.revision, record.body = german["title"], german["revision"], german["body"]
-    translation = _english(record)
-    if english is None:
-        if translation is not None:
-            record.translations.remove(translation)
-    else:
-        if translation is None:
-            translation = LegalTextVersion(
-                document=record.document, team_slug=record.team_slug, language="en", translation_of=record,
-                status="draft", version=record.version, effective_from=record.effective_from,
-                uploaded_at=now, uploaded_by=actor, title="", body="")
-            db.session.add(translation)
-        translation.title, translation.revision, translation.body = (
-            english["title"], english["revision"], english["body"])
-        translation.edited_at = now
-        translation.edit_count = (translation.edit_count or 0) + 1
     db.session.flush()
     return record
 
@@ -403,35 +364,45 @@ def as_file(record, language, part):
     return ("\n".join(lines) + "\n---\n\n" + (part.get("body") or "")).encode("utf-8")
 
 
-def read_file(actor, record, german_upload, english_upload=None):
-    """*Replace with a file* in the editor: uploaded files, checked as an upload is, read into
-    {"german": part, "english": part or None} -- None: the translation stays as it is. Must be the
-    same text. The draft's state before is kept as an earlier state; the editor puts the text in as a
-    change undo takes back, and saves it as any other."""
-    versions, bodies, problems = legal_uploads._checked(german_upload, english_upload)
+def read_file(actor, record, german_upload):
+    """*Replace with a file* in the editor: an uploaded German file, checked as an upload is, read into
+    {"german": part}. Must be the same text. The draft's state before is kept as an earlier state;
+    the editor puts the text in as a change undo takes back, and saves it as any other."""
+    versions, bodies, problems = legal_uploads._checked(german_upload)
     if problems or not versions:
         legal_uploads._invalid(problems or ["The German file is missing."], action="taken in")
     if (versions[0].slug, versions[0].team) != (record.document, record.team_slug):
         legal_uploads._invalid(["The file is a different text: the front matter must name the same document and "
                                 "team."], action="taken in")
     open_session(actor, record)
-    parts = [{"title": v.title, "revision": v.revision, "body": text} for v, text in zip(versions, bodies)]
-    return {"german": parts[0], "english": parts[1] if len(parts) == 2 else None}
+    return {"german": {"title": versions[0].title, "revision": versions[0].revision, "body": bodies[0]}}
 
 
-def markdown_file(german, language="de"):
-    """``(data, filename)`` of a version's Markdown file -- German, or its English translation --
-    front matter included, as an upload takes it back; None when there is none. A file in legal/ as
-    it is; one kept in the portal as its fields and text make it."""
-    version = german if language == legal.AUTHORITATIVE else legal.translation_any(german)
-    if version is None:
-        return None
-    name = "-".join(part for part in (german.team, german.slug, language, german.version.isoformat()) if part) + ".md"
-    if version.path is not None:
-        return version.path.read_bytes(), name
+def markdown_file(german):
+    """``(data, filename)`` of a version's German Markdown file, front matter included, as an upload
+    takes it back. A file in legal/ as it is; one kept in the portal as its fields and text make it."""
+    name = "-".join(part for part in (german.team, german.slug, "de", german.version.isoformat()) if part) + ".md"
+    if german.path is not None:
+        return german.path.read_bytes(), name
     record = db.session.get(LegalTextVersion, german.record_id)
-    part = content(record)["german" if language == legal.AUTHORITATIVE else "english"]
-    return as_file(record, language, part), name
+    return as_file(record, legal.AUTHORITATIVE, content(record)["german"]), name
+
+
+def english(record, part):
+    """The editor's *English* view: the German as written, translated by machine, ``(title, html)`` --
+    each block of it kept, so typing sends only what changed. ``("", "")`` while the text cannot be
+    laid out; TranslationUnavailable when no service translates it."""
+    part = _clean(part, "german")
+    with tempfile.TemporaryDirectory() as folder:
+        path, slug, _language, team, _found = legal_pdf._uploaded(
+            folder, as_file(record, legal.AUTHORITATIVE, part), "draft.md", "German")
+        if path is None:
+            return "", ""
+        try:
+            version, _problems = legal._check(path, slug, legal.AUTHORITATIVE, team)
+            return legal_translation.translate_version(version) if version is not None else ("", "")
+        finally:
+            legal.forget([path])
 
 
 _ROLE = re.compile(r"^(German|English): ")
@@ -460,24 +431,13 @@ def check(record, language, part):
 
 
 def problems_of(record):
-    """What keeps a draft from being published: its texts as written, checked."""
-    found = []
-    for language, part in (("de", content(record)["german"]), ("en", content(record)["english"])):
-        if part is None:
-            continue
-        _html, _contents, problems = check(record, language, part)
-        label = "German" if language == "de" else "English"
-        found += [f"{label}: {problem}" for problem in problems]
-    return found
+    """What keeps a draft from being published: its German as written, checked."""
+    _html, _contents, problems = check(record, legal.AUTHORITATIVE, content(record)["german"])
+    return problems
 
 
-def correct(actor, record, german, english):
+def correct(actor, record, german):
     """A published version corrected in the editor: as an upload would correct it."""
     german = _clean(german, "german")
-    english = _clean(english, "english") if english is not None else None
     _require_lock(actor, record)
-    files = [(as_file(record, "de", german), "draft.md")]
-    if english is not None:
-        files.append((as_file(record, "en", english), "draft.md"))
-    # The translation removed in the editor: removed, not kept as an upload without one would.
-    return legal_uploads.correct(actor, record.id, *files, remove_english=english is None)
+    return legal_uploads.correct(actor, record.id, (as_file(record, legal.AUTHORITATIVE, german), "draft.md"))
