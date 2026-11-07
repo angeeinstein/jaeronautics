@@ -332,8 +332,9 @@ def find_published(slug, language, version_day, today=None, team=None):
 
 
 def translation(version, language="en", today=None):
-    """The translation of a German version into ``language``, if there is one."""
-    return find(version.slug, language, version.version, today, version.team)
+    """The translation of a German version into ``language``, if there is one -- of a version
+    announced for a later day too, as its PDF has it."""
+    return find_published(version.slug, language, version.version, today, version.team)
 
 
 def has_language(slug, language, today=None, team=None):
