@@ -53,8 +53,9 @@ be live translated from German."
 - **DeepL API** (Free: 500,000 characters a month -- the account set up in
   November 2026 shows 1,000,000 instead, possibly once rather than monthly;
   a key ending `:fx` is a
-  Free key, sent to `api-free.deepl.com`) and **Azure AI Translator** (free
-  tier: 2,000,000 a month; key and region). Both can be set up at once, like
+  Free key, sent to `api-free.deepl.com`; British English) and **Azure AI
+  Translator** (free tier: 2,000,000 a month; key and region; one English,
+  `en`, with no British variant). Both can be set up at once, like
   the email accounts: one is used first, the other is the **fallback** when
   the first fails or is out of characters (decided: "support both … and make
   it switchable … maybe even have the other as fallback").
@@ -66,6 +67,8 @@ be live translated from German."
   its address in their name, so the test and live servers may share a key);
   Azure as its dynamic
   dictionary, for the words as written.
+- **English that waits** -- published before a service was set up, its
+  tries run out -- is made as soon as a key is saved.
 - The texts are public and hold no personal data: the privacy policy does
   not change.
 

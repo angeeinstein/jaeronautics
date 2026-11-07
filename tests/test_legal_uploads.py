@@ -107,6 +107,31 @@ class TestUploadingAndPublishing:
         assert item.status == "pending" and "No translation service" in (item.last_error or "")
         assert legal.translation(legal.current_version("statutes")) is None
 
+    def test_given_up_it_is_made_once_a_key_is_saved(self, client, boss, monkeypatch):
+        # Published before a service was set up: its tries ran out. Saving a key brings it back.
+        from aeronautics_members.db_models import ExternalWorkItem
+        from aeronautics_members.services import outbox, translation
+
+        record = legal_uploads.upload_draft(boss, _file())
+        db.session.commit()
+        _publish(boss, record)
+        [item] = db.session.query(ExternalWorkItem).filter_by(kind="legal_translate").all()
+        item.status, item.attempts = ExternalWorkItem.STATUS_FAILED, 5
+        db.session.commit()
+        _login(client, boss.id)
+
+        saved = send(client, "PUT", "/api/v1/admin/settings/translation", {
+            "order": ["deepl", "azure"], "deepl_key": "secret:fx", "azure_key": "", "azure_region": "",
+            "glossary": []})
+        db.session.expire_all()
+
+        assert saved.status_code == 200
+        assert item.status == ExternalWorkItem.STATUS_PENDING and item.attempts == 0
+        monkeypatch.setattr(translation, "translate",
+                            lambda sent, as_html=True: [f"{text} [en]" for text in sent])
+        outbox.process_pending()
+        assert legal.translation(legal.current_version("statutes")).machine_translated
+
     def test_a_hand_made_english_draft_goes_when_it_is_published(self, boss):
         record = legal_uploads.upload_draft(boss, _file())
         db.session.add(LegalTextVersion(document="statutes", language="en", translation_of=record, status="draft",

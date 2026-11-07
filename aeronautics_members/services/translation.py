@@ -44,7 +44,8 @@ DEEPL_GLOSSARY_KEY = "translation.deepl_glossary"
 KEYS = [ORDER_KEY, DEEPL_KEY, AZURE_KEY, AZURE_REGION_KEY, GLOSSARY_KEY, DEEPL_GLOSSARY_KEY]
 
 AZURE_ENDPOINT = "https://api.cognitive.microsofttranslator.com"
-#: British English: the association is in Austria, and its texts read as European ones.
+#: British English at DeepL: the association is in Austria, and its texts read as European ones.
+#: (Azure has one English, "en".)
 TARGET = "EN-GB"
 TIMEOUT_SECONDS = 30
 #: Told to DeepL with every text, not translated and not counted: what the texts are, and that the
@@ -368,7 +369,8 @@ def _azure(texts, as_html, current):
     headers = {"Ocp-Apim-Subscription-Key": current["azure_key"]}
     if current["azure_region"]:
         headers["Ocp-Apim-Subscription-Region"] = current["azure_region"]
-    url = (f"{AZURE_ENDPOINT}/translate?api-version=3.0&from=de&to=en-GB"
+    # Azure has one English, "en" -- no British variant as DeepL's EN-GB.
+    url = (f"{AZURE_ENDPOINT}/translate?api-version=3.0&from=de&to=en"
            f"&textType={'html' if as_html else 'plain'}")
     sent = [{"Text": _with_glossary(text, current["glossary"], as_html)} for text in texts]
     answer = _call(url, headers=headers, data=sent)

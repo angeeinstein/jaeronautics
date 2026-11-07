@@ -3,6 +3,7 @@ DeepL and Azure, one first and the other the fallback; what was translated
 once is never sent again; the glossary; what comes back is cleaned.
 """
 import json
+from urllib.parse import urlparse
 
 import pytest
 
@@ -66,7 +67,7 @@ class TestTranslating:
         assert translation.translate(["<p>Hallo.</p>"]) == ["[DeepL] <p>Hallo.</p>"]
 
         sent = [call for call in services.calls if call[0].endswith("/v2/translate")]
-        assert len(sent) == 1 and sent[0][0].startswith("https://api-free.deepl.com")
+        assert len(sent) == 1 and urlparse(sent[0][0]).hostname == "api-free.deepl.com"
         assert sent[0][1]["tag_handling"] == "html" and sent[0][1]["target_lang"] == "EN-GB"
         assert db.session.query(Translation).count() == 1
 
@@ -90,6 +91,9 @@ class TestTranslating:
         _set_up(azure="azure-key", order="azure,deepl")
 
         assert translation.translate(["<p>Hallo.</p>"]) == ["[Azure] <p>Hallo.</p>"]
+        # Azure's English is "en": it has no British variant.
+        [url] = [call[0] for call in services.calls if "microsofttranslator" in call[0]]
+        assert "&to=en&" in url
 
     def test_none_set_up_or_all_failing_says_why(self, services):
         _set_up(deepl="")

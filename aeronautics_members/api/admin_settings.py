@@ -357,12 +357,16 @@ def admin_settings_translation():
 @endpoint("PUT", "/admin/settings/translation", response=SettingsSavedOut, body=TranslationIn,
           permissions=CREDENTIALS, tag=TAG)
 def admin_settings_translation_save(body):
-    """Save them. A changed glossary is used from the next translation on."""
-    from ..services import translation
+    """Save them. A changed glossary is used from the next translation on.
+
+    English that waits for a service -- published before one was set up -- is made now."""
+    from ..services import legal_translation, translation
 
     changed = translation.save_settings(
         current_user, order=body.order, deepl_key=body.deepl_key, azure_key=body.azure_key,
         azure_region=body.azure_region, glossary=[list(entry) for entry in body.glossary], forget=body.forget)
+    if changed and translation.configured():
+        legal_translation.wake_waiting()
     db.session.commit()
     return SettingsSavedOut(changed=changed)
 

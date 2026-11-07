@@ -84,6 +84,21 @@ def make_english(record):
     return english
 
 
+def wake_waiting():
+    """A service set up or changed (Settings › Translation): every English still waiting -- retried
+    later, or given up after its last try -- is made now, with fresh tries. Returns how many."""
+    from . import outbox
+
+    items = db.session.execute(db.select(ExternalWorkItem).where(
+        ExternalWorkItem.kind == ExternalWorkItem.KIND_LEGAL_TRANSLATE,
+        ExternalWorkItem.status.in_([ExternalWorkItem.STATUS_PENDING, ExternalWorkItem.STATUS_FAILED]))).scalars().all()
+    for item in items:
+        outbox.revive(item)
+    if items:
+        outbox._start_after_commit()
+    return len(items)
+
+
 def queue(record, reason):
     """Make the English of a published record soon: at once after the commit, retried if no service
     answers."""
