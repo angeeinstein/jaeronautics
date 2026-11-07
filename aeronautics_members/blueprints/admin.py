@@ -288,6 +288,24 @@ def admin_legal_editor(record_id):
     return app_shell()
 
 
+@admin_bp.route("/admin/legal/waiting.md", methods=["GET"])
+@login_required
+@requires(Permission.LEGAL_TEXTS)
+def admin_legal_waiting_markdown():
+    """A version not in force yet as its Markdown file -- German, or ``language=en`` -- front matter
+    included: to pass round, change elsewhere and upload again."""
+    from ..services import legal_texts as legal
+
+    document = request.args.get("document", "")
+    team_slug = request.args.get("team") or None
+    if document not in (legal.TEAM_BY_SLUG if team_slug else legal.BY_SLUG):
+        abort(404)
+    german = legal_pages.waiting_version(document, team_slug)
+    if german is None:
+        abort(404)
+    return legal_pages.markdown(german, request.args.get("language", "de"))
+
+
 @admin_bp.route("/admin/legal/waiting.pdf", methods=["GET"])
 @login_required
 @requires(Permission.LEGAL_TEXTS)

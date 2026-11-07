@@ -129,9 +129,42 @@ Decided 2026-11-04.
   version in force, paragraph by paragraph -- added underlined green,
   removed struck through red (the `diff` library, in the browser). For
   whoever approves a change.
+- **One person at a time** (decided 2026-11-05): whoever opens a draft holds
+  it; the others see it read-only, told who is editing it and since when. It
+  is free again when the holder leaves, or about a minute after their editor
+  goes quiet (a sign of life every 30 seconds), and may be taken over after 10
+  minutes without typing. A hard lock without expiry was ruled out (a laptop
+  closed with a draft open would block it), and so was editing together
+  (the texts change about once a year).
 - **Correcting** a published version within its 24 hours opens the same
   editor, without autosave: the correction is saved with a button that asks
   twice, and goes into the log with the earlier wording.
+
+## Telling the members
+
+Decided 2026-11-05. A new version applies to everybody from its day: members
+are told, never asked ("They just have to accept it"; only one version can
+be in force). Publishing sends the email at once:
+
+- *Tell the members by email* in the publish dialog, ticked by default for
+  the texts accepted at signup (statutes, rules of procedure, membership
+  terms, privacy policy) and a team's rules, not for the legal notice and the
+  webshop terms. An optional *What changed* goes into the email.
+- To all active members as a **notice** (it cannot be switched off, like the
+  invitation to the general assembly); a team's rules to the team's active
+  members as a team mailing. Both are mailings like any other (Admin ›
+  Announcements, the team's Messages page): delivery status kept, the
+  provider's limits kept.
+- The email: which text, from which day, who approved it, what changed, and
+  links to the text and its PDF. Nothing to accept.
+- No fixed waiting period (the maintainer: not weeks before the portal can
+  be updated). The privacy policy is information, not a contract: it may
+  apply from the day it is published. The membership terms say how they
+  change (§ 36 of the draft of 08.10.): material changes told "rechtzeitig"
+  before they apply, by email or in the portal; changes for a coming fee
+  period apply from that period (fees: § 11); silence is not consent where
+  consent is needed. So: publish material changes to them a little ahead of
+  their day. Not legal advice -- the board decides what is material.
 
 ## Where it is built
 

@@ -13,6 +13,15 @@ afterEach(() => {
 
 const API = '/api/v1/legal/drafts/7';
 
+const MINE: Schemas['LockOut'] = { mine: true, free: false, holder: null, since: null, can_take_over: false };
+const ANNAS: Schemas['LockOut'] = {
+  mine: false,
+  free: false,
+  holder: 'Anna Berger',
+  since: '2026-11-05T13:02:00Z',
+  can_take_over: false,
+};
+
 function session(overrides: Partial<Schemas['EditorOut']> = {}): Schemas['EditorOut'] {
   return {
     record_id: 7,
@@ -36,6 +45,9 @@ function session(overrides: Partial<Schemas['EditorOut']> = {}): Schemas['Editor
       { id: 20, created_at: '2026-11-03T10:00:00Z', created_by: 'Lea Lead' },
     ],
     pdf_url: '/admin/legal/waiting.pdf?document=statutes&record=7',
+    markdown_url: '/admin/legal/waiting.md?document=statutes&record=7',
+    lock: MINE,
+    english_markdown_url: null,
     back_url: '/admin/legal',
     may_publish: true,
     approved_by: null,
@@ -58,6 +70,8 @@ function show(answers: Answers = {}) {
       },
     },
     [`PUT ${API}`]: { body: { edit_count: 4, edited_at: '2026-11-04T10:05:00Z' } },
+    [`POST ${API}/lock`]: { body: MINE },
+    [`DELETE ${API}/lock`]: { body: { ...MINE, mine: false, free: true } },
     ...answers,
   });
   renderPage(<Editor />, { route: '/admin/legal/drafts/7', path: '/admin/legal/drafts/:recordId' });
@@ -159,6 +173,64 @@ describe('the editor', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add an English translation' }));
 
     expect(await screen.findByRole('textbox', { name: 'English text, Markdown' })).toBeInTheDocument();
+  });
+
+  it('replaced with a file, as a change undo takes back', async () => {
+    const { calls } = show({
+      [`POST ${API}/file`]: {
+        body: { german: { title: 'Statuten', revision: 'Rev 2', body: 'Aus der Datei.' }, english: null },
+      },
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'File' }));
+    expect(await screen.findByRole('menuitem', { name: 'Download Markdown' })).toHaveAttribute(
+      'href',
+      '/admin/legal/waiting.md?document=statutes&record=7',
+    );
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Replace with a file…' }));
+    const dialog = await screen.findByRole('dialog');
+    const [germanInput] = dialog.querySelectorAll<HTMLInputElement>('input[type="file"]');
+    await userEvent.upload(germanInput ?? dialog, new File(['---'], 'changed.md', { type: 'text/markdown' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Replace' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'German text, Markdown' })).toHaveTextContent(
+        'Aus der Datei.',
+      );
+    });
+    expect(screen.getByRole('textbox', { name: 'Revision (optional)' })).toHaveValue('Rev 2');
+    expect(calls.some((call) => new URL(call.url).pathname === `${API}/file`)).toBe(true);
+  });
+
+  it('read-only while somebody else edits it, saying who and since when', async () => {
+    show({
+      [`POST ${API}/session`]: { body: session({ lock: ANNAS }) },
+      [`POST ${API}/lock`]: { body: ANNAS },
+    });
+
+    expect(
+      await screen.findByText(/^Anna Berger is editing this draft \(since \d\d:\d\d\)$/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Title' })).toHaveAttribute('readonly');
+    expect(screen.getByRole('button', { name: 'Bold' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Publish' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Take over' })).not.toBeInTheDocument();
+  });
+
+  it('taken over once its holder has not typed for 10 minutes, then loaded again', async () => {
+    const idle = { ...ANNAS, can_take_over: true };
+    const { calls } = show({
+      [`POST ${API}/session`]: { body: session({ lock: idle }) },
+      [`POST ${API}/lock`]: { body: MINE },
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Take over' }));
+
+    await waitFor(() => {
+      expect(calls.filter((call) => new URL(call.url).pathname === `${API}/session`)).toHaveLength(2);
+    });
+    const taken = calls.find((call) => new URL(call.url).pathname === `${API}/lock`);
+    expect(await taken?.clone().json()).toEqual({ action: 'take_over', typed: false });
   });
 
   it('no Publish for somebody who may only write', async () => {

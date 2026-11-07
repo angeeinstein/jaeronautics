@@ -440,10 +440,12 @@ acceptances are kept -- is in the PDF's footer ("Fassung vom …").
 **Which version is shown:** for the text and language, files with `status:
 "published"` whose `effective_from` has come; of those, the latest
 `effective_from`. So a version can be committed early and switch over by
-itself on its day, or wait as `draft` until it is approved. Drafts and
-future versions are not shown, not even by their address. Older versions
-stay readable at `/legal/<text>/<language>/<version>`, marked "No longer in
-force".
+itself on its day, or wait as `draft` until it is approved. Drafts are not
+shown, not even by their address. A published version whose day has not
+come is readable at its own address already (`/legal/<text>/<language>/<version>`
+and its PDF), marked "Not in force yet", and listed beside the others with its
+day -- the members are told of it when it is published (below). Older
+versions stay readable there too, marked "No longer in force".
 
 **German applies; English is a translation.** A text is in force when its
 German version is. `/legal/<text>` shows the English translation of the
@@ -537,7 +539,15 @@ does not exist).
   into the portal the first time (`imported_from`), and the file is no
   longer listed; delete it from the repository in the next batch.
 - *Publish* (only with `legal.publish`; refused while the checks find
-  something) asks for the day it applies from (today or later) and, if there
+  something) can **tell the members by email** -- ticked by default for the
+  texts accepted at signup and a team's rules, not for the legal notice and
+  the webshop terms -- with an optional *What changed*: a notice to all
+  active members (it cannot be switched off), or a mailing to the team's
+  active members; it goes out with the mailings (Admin › Announcements,
+  the team's Messages page), at the provider's pace. The email names the
+  text, the day it applies from, the approval, what changed, and links to
+  the version and its PDF; nothing to accept -- members are told, never
+  asked. It also asks for the day it applies from (today or later) and, if there
   was one, who approved it and when -- a record, not checked; filled in from
   the file's `approved_by`/`approved_on`. It asks twice: it cannot be taken
   back. The version's day becomes today's; one version of a text a day, and
@@ -562,6 +572,25 @@ count is refused ("Somebody else saved this draft meanwhile"). Undo and redo;
 *History* an earlier state (`legal_text_snapshots`: one per editing session,
 the last 20) -- both as a change undo takes back, saved like any other.
 Correcting a published version: the same page, saved with *Save correction*.
+**One person edits a draft at a time:** whoever opens it first holds it
+(`lock_user_id` and its times on `legal_text_versions`), and their editor says
+so every 30 seconds; anyone else sees it read-only, with "Anna Berger is
+editing this draft (since 14:02)". The draft is free again at once when the
+holder leaves the editor, or about a minute after their editor stops (the tab
+closed, the laptop asleep) -- *Edit* then takes it, loading it as it is. After
+10 minutes without typing the others get *Take over* (logged as
+`legal_draft_taken_over`); the earlier holder's editor turns read-only and
+says so -- what they wrote is saved already. Saving, correcting and
+publishing are refused while somebody else holds it; the save count stays
+behind the lock as a safety net.
+*File* in the editor downloads the draft as saved as its Markdown file (German,
+and English when there is a translation), front matter included -- the file an
+upload takes back -- and *Replace with a file* reads uploaded files into the
+editor (checked as an upload is; without an English file the translation
+stays), keeping the state before under *History*; undo takes it back. Every
+row under *Not in force yet* (and on a team's Rules page) has its *Markdown*
+too, a file in `legal/` as it is. So a draft kept in the portal can be handed
+to someone -- or an AI agent -- who cannot reach the server, and taken back.
 
 Starting, copying in, uploading, publishing, correcting and deleting are in
 the log (category *legal*); a save is not. *Download a template* gives a Markdown file with every front matter
@@ -586,7 +615,8 @@ versions, drafts, `effective_from`, English as a translation of the same
 version, the checks in CI -- works as above. Shown at `/teams/<team>/rules`
 (signed-in only), as a PDF at `/teams/<team>/rules/pdf` with the team's logo
 beside the association's and its name (on white: the logo field asks teams for one visible on dark and on white), and ticked when applying or joining, read in a
-window over the form. The membership keeps the version's day. **A team's
+window over the form. The membership keeps the version's day; when new rules
+are published the team's members are emailed (above, *Publish*). **A team's
 leads** (team permission *Rules*, `team.rules`) upload drafts of their own
 rules on the team's *Rules* page (`/teams/<team>/manage/rules`) -- written in
 the editor or uploaded, with a template set up for the team -- edit any
@@ -1434,8 +1464,8 @@ preview of the text) and by site admins; uploads are made anew as JPEG on the
 server, like members' pictures, and go into backups. Rules are optional and kept by the association as files (see "Legal
 Texts"); a team with rules needs them ticked to apply or join, and each
 membership keeps when they were accepted and which version. A new version
-applies to whoever applies next; members already in are not asked again, and
-their team page says the rules have changed.
+applies to whoever applies next; members already in are not asked again: they
+are emailed when it is published, and their team page says the rules have changed.
 
 **Running a team** (its leads, from the team's side menu: open the team's tile under Teams), in sections:
 *Applications* (invite with the meeting details, approve, not accept),

@@ -2824,6 +2824,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/legal/drafts/{record_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** *Replace with a file*: the text of uploaded files -- checked as an upload is -- for the editor to put */
+        post: operations["legal_draft_read_file"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/legal/drafts/{record_id}/lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Who edits the draft now -- every 30 seconds from the editor: the holder's sign of life, or the */
+        post: operations["legal_draft_lock"];
+        /** The holder leaves the editor: the draft is free at once (else a minute later by itself). */
+        delete: operations["legal_draft_unlock"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/legal/drafts/{record_id}/session": {
         parameters: {
             query?: never;
@@ -2833,7 +2868,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start an editing session: the draft as it is now, kept as an earlier state to go back to. */
+        /** Start an editing session: the draft as it is now, kept as an earlier state to go back to. When */
         post: operations["legal_draft_session"];
         delete?: never;
         options?: never;
@@ -6389,10 +6424,20 @@ export interface components {
              */
             effective_from: string;
             english: components["schemas"]["TextOut"] | null;
+            /** English Markdown Url */
+            english_markdown_url: string | null;
             german: components["schemas"]["TextOut"];
             in_force: components["schemas"]["InForceTextOut"] | null;
+            lock: components["schemas"]["LockOut"];
+            /** Markdown Url */
+            markdown_url: string;
             /** May Publish */
             may_publish: boolean;
+            /**
+             * Members To Tell
+             * @default 0
+             */
+            members_to_tell?: number;
             /**
              * Mode
              * @enum {string}
@@ -6412,6 +6457,11 @@ export interface components {
             team: string | null;
             /** Team Name */
             team_name: string | null;
+            /**
+             * Tells By Default
+             * @default false
+             */
+            tells_by_default?: boolean;
         };
         /** EmailAddressOut */
         EmailAddressOut: {
@@ -7454,6 +7504,11 @@ export interface components {
             revision: string | null;
             /** Title */
             title: string;
+            /**
+             * Upcoming
+             * @default false
+             */
+            upcoming?: boolean;
             /** Validity */
             validity: string;
             /**
@@ -7480,6 +7535,36 @@ export interface components {
         LinkOut: {
             /** Valid */
             valid: boolean;
+        };
+        /** LockIn */
+        LockIn: {
+            /**
+             * Action
+             * @default look
+             * @enum {string}
+             */
+            action?: "look" | "beat" | "take" | "take_over";
+            /**
+             * Typed
+             * @default false
+             */
+            typed?: boolean;
+        };
+        /**
+         * LockOut
+         * @description Who edits the draft now: one person at a time; the others see it read-only.
+         */
+        LockOut: {
+            /** Can Take Over */
+            can_take_over: boolean;
+            /** Free */
+            free: boolean;
+            /** Holder */
+            holder: string | null;
+            /** Mine */
+            mine: boolean;
+            /** Since */
+            since: string | null;
         };
         /** LogEntry */
         LogEntry: {
@@ -8319,8 +8404,18 @@ export interface components {
         };
         /** OtherVersionOut */
         OtherVersionOut: {
+            /**
+             * Effective From
+             * @default null
+             */
+            effective_from?: string | null;
             /** In Force */
             in_force: boolean;
+            /**
+             * Upcoming
+             * @default false
+             */
+            upcoming?: boolean;
             /** Url */
             url: string;
             /**
@@ -8855,6 +8950,16 @@ export interface components {
              * Format: date
              */
             effective_from: string;
+            /**
+             * Summary
+             * @default null
+             */
+            summary?: string | null;
+            /**
+             * Tell
+             * @default null
+             */
+            tell?: boolean | null;
         };
         /** QueueItem */
         QueueItem: {
@@ -9173,8 +9278,18 @@ export interface components {
              * Format: date
              */
             effective_from: string;
+            /**
+             * English Markdown Url
+             * @default null
+             */
+            english_markdown_url?: string | null;
             /** Has English */
             has_english: boolean;
+            /**
+             * Markdown Url
+             * @default
+             */
+            markdown_url?: string;
             /** Pdf Url */
             pdf_url: string;
             /**
@@ -10491,8 +10606,23 @@ export interface components {
              * Format: date
              */
             effective_from: string;
+            /**
+             * English Markdown Url
+             * @default null
+             */
+            english_markdown_url?: string | null;
             /** Has English */
             has_english: boolean;
+            /**
+             * Markdown Url
+             * @default
+             */
+            markdown_url?: string;
+            /**
+             * Members To Tell
+             * @default 0
+             */
+            members_to_tell?: number;
             /** Pdf Url */
             pdf_url: string;
             /**
@@ -10514,6 +10644,11 @@ export interface components {
             team?: string | null;
             /** Team Name */
             team_name: string | null;
+            /**
+             * Tells By Default
+             * @default false
+             */
+            tells_by_default?: boolean;
             /** Title */
             title: string;
             /**
@@ -20892,6 +21027,184 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    legal_draft_read_file: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    english?: string;
+                    /** Format: binary */
+                    german: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    legal_draft_lock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LockIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LockOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    legal_draft_unlock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LockOut"];
                 };
             };
             /** @description Not signed in. */

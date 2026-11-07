@@ -316,9 +316,25 @@ def find(slug, language, version_day, today=None, team=None):
     return next((v for v in versions(slug, language, today, team) if v.version == version_day), None)
 
 
+def announced(slug, language=AUTHORITATIVE, today=None, team=None):
+    """Published versions whose day has not come, soonest first: readable at their own address
+    before it -- the members are told of them when they are published."""
+    today = today or get_membership_today()
+    return sorted((v for v in _all_versions(slug, language, team)
+                   if v.status == "published" and v.effective_from > today),
+                  key=lambda v: (v.effective_from, v.version))
+
+
+def find_published(slug, language, version_day, today=None, team=None):
+    """A version members may read, by its day: one that may be shown, or one announced for later."""
+    return (find(slug, language, version_day, today, team)
+            or next((v for v in announced(slug, language, today, team) if v.version == version_day), None))
+
+
 def translation(version, language="en", today=None):
-    """The translation of a German version into ``language``, if there is one."""
-    return find(version.slug, language, version.version, today, version.team)
+    """The translation of a German version into ``language``, if there is one -- of a version
+    announced for a later day too, as its PDF has it."""
+    return find_published(version.slug, language, version.version, today, version.team)
 
 
 def has_language(slug, language, today=None, team=None):
@@ -527,6 +543,13 @@ def render(version):
             if token.tag == "h1":
                 token.attrSet("class", "legal-part")
             contents.append((anchor, label, int(token.tag[1])))
+        if token.type in ("th_open", "td_open") and token.attrGet("style"):
+            # A table column aligned right or centred: a class, not the inline style markdown-it
+            # writes -- the pages' security policy blocks style attributes.
+            align = str(token.attrGet("style")).removeprefix("text-align:").strip()
+            token.attrs.pop("style", None)
+            if align in ("left", "right", "center"):
+                token.attrSet("class", f"align-{align}")
         kept.append(token)
 
     rendered = {

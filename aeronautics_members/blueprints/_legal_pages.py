@@ -19,7 +19,8 @@ def _german(slug, version, team):
         german = legal.current_version(slug, team=team)
     else:
         try:
-            german = legal.find(slug, legal.AUTHORITATIVE, date.fromisoformat(version), team=team)
+            # A version announced for a later day too: the members are told of it ahead.
+            german = legal.find_published(slug, legal.AUTHORITATIVE, date.fromisoformat(version), team=team)
         except ValueError:
             abort(404)
     if german is None:
@@ -97,6 +98,19 @@ def template(team=None):
     response = current_app.response_class(
         render_template("legal/template.md", day=day, team=team), mimetype="text/markdown")
     response.headers["Content-Disposition"] = f'attachment; filename="{day}.md"'
+    return response
+
+
+def markdown(german, language):
+    """A version's Markdown file, to download (``language``: de or en), or 404."""
+    from ..services import legal_editor
+
+    found = legal_editor.markdown_file(german, language) if language in legal.LANGUAGES else None
+    if found is None:
+        abort(404)
+    data, name = found
+    response = current_app.response_class(data, mimetype="text/markdown")
+    response.headers["Content-Disposition"] = f'attachment; filename="{name}"'
     return response
 
 

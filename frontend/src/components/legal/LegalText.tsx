@@ -23,7 +23,16 @@ function Facts({ text }: { text: LegalTextData }) {
     <Text size="sm" c="dimmed" lang="en">
       {/* In the text's own language, as on its PDF: the day it applies from, and who approved it. */}
       <span lang={text.language}>{text.validity}</span>
-      {text.version !== text.in_force ? (
+      {text.upcoming ? (
+        <>
+          {' · '}
+          <strong>
+            {text.version !== text.in_force
+              ? `Not in force yet; until then the version of ${formatDate(text.in_force)} applies.`
+              : 'Not in force yet.'}
+          </strong>
+        </>
+      ) : text.version !== text.in_force ? (
         <>
           {' · '}
           <strong>{`No longer in force; the current version is of ${formatDate(text.in_force)}.`}</strong>
@@ -122,6 +131,9 @@ export function LegalTextPage({ text }: { text: LegalTextData }) {
                       <Anchor component={AppLink} to={other.url} size="sm">
                         {formatDate(other.version)}
                         {other.in_force ? ' (in force)' : ''}
+                        {other.upcoming && other.effective_from
+                          ? ` (from ${formatDate(other.effective_from)})`
+                          : ''}
                       </Anchor>
                     </List.Item>
                   ))}

@@ -868,6 +868,9 @@ class RulesWaitingOut(Model):
     uploaded_by: str | None = None
     #: A draft uploaded in the portal: the leads may delete it.
     deletable: bool = False
+    #: Its Markdown file, to download: German, and the English one if there is one.
+    markdown_url: str = ""
+    english_markdown_url: str | None = None
 
 
 class TeamRulesOut(Model):
@@ -896,7 +899,12 @@ def _rules_out(team):
     waiting = []
     for version in legal.waiting(legal.TEAM_RULES, team=team.slug):
         record = db.session.get(LegalTextVersion, version.record_id) if version.record_id else None
+        which = {"record": record.id} if record else {"version": version.version.isoformat()}
+        has_english = legal.translation_any(version) is not None
         waiting.append(RulesWaitingOut(
+            markdown_url=url_for("teams.team_rules_waiting_markdown", slug=team.slug, **which),
+            english_markdown_url=url_for("teams.team_rules_waiting_markdown", slug=team.slug, language="en",
+                                         **which) if has_english else None,
             title=version.title, status="draft" if version.status == "draft" else "scheduled",
             version=version.version, effective_from=version.effective_from,
             has_english=legal.translation_any(version) is not None,

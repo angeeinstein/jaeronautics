@@ -11,6 +11,7 @@
 import {
   Anchor,
   Button,
+  Checkbox,
   Group,
   List,
   Modal,
@@ -18,6 +19,7 @@ import {
   SimpleGrid,
   Stack,
   Text,
+  Textarea,
   TextInput,
 } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -293,7 +295,17 @@ function InForce({ data }: { data: LegalOut }) {
 const APPROVERS = ['Vorstand', 'Generalversammlung'];
 
 /** Publishing a draft: the day it applies from, and who approved it and when. Not to be undone. */
-type Publishable = Pick<Waiting, 'title' | 'record_id' | 'effective_from' | 'approved_by' | 'approved_on'>;
+type Publishable = Pick<
+  Waiting,
+  | 'title'
+  | 'record_id'
+  | 'effective_from'
+  | 'approved_by'
+  | 'approved_on'
+  | 'tells_by_default'
+  | 'members_to_tell'
+  | 'team_name'
+>;
 
 export function Publish({
   text,
@@ -314,6 +326,8 @@ export function Publish({
   const [approver, setApprover] = useState(!named ? 'none' : APPROVERS.includes(named) ? named : 'other');
   const [other, setOther] = useState(APPROVERS.includes(named) ? '' : named);
   const [approvedOn, setApprovedOn] = useState(text.approved_on ?? '');
+  const [tell, setTell] = useState(Boolean(text.tells_by_default));
+  const [summary, setSummary] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [problems, setProblems] = useState<string[]>([]);
   const approvedBy = approver === 'none' ? null : approver === 'other' ? other.trim() || null : approver;
@@ -326,6 +340,8 @@ export function Publish({
             effective_from: effectiveFrom,
             approved_by: approvedBy,
             approved_on: approvedBy || approvedOn ? approvedOn || null : null,
+            tell,
+            summary: tell ? summary.trim() || null : null,
           },
         }),
       ),
@@ -403,6 +419,32 @@ export function Publish({
           {approvedOn ? ` am ${formatDate(approvedOn)}` : ''}
           {approvedBy && !APPROVERS.includes(approvedBy) ? ` (${approvedBy})` : ''}
         </Text>
+        <Stack gap={6}>
+          <Checkbox
+            label={`Tell the members by email (${String(text.members_to_tell ?? 0)}${
+              text.team_name ? `, the members of ${text.team_name}` : ', all active members'
+            })`}
+            description="Told, not asked: from the day it applies, this version applies to everybody."
+            checked={tell}
+            onChange={(event) => {
+              setTell(event.currentTarget.checked);
+            }}
+          />
+          {tell ? (
+            <Textarea
+              label="What changed (optional)"
+              description="A few lines for the email, beside the link to the text."
+              autosize
+              minRows={2}
+              maxLength={2000}
+              value={summary}
+              onChange={(event) => {
+                setSummary(event.currentTarget.value);
+              }}
+              error={errors.summary}
+            />
+          ) : null}
+        </Stack>
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>
             Cancel
@@ -502,6 +544,16 @@ function NotInForce({ data }: { data: LegalOut }) {
                           Delete
                         </ConfirmButton>
                       </>
+                    ) : null}
+                    {text.markdown_url ? (
+                      <Anchor href={text.markdown_url} download size="sm">
+                        Markdown
+                      </Anchor>
+                    ) : null}
+                    {text.english_markdown_url ? (
+                      <Anchor href={text.english_markdown_url} download size="sm">
+                        Markdown (en)
+                      </Anchor>
                     ) : null}
                     <PdfLink href={text.pdf_url}>Preview PDF</PdfLink>
                   </Group>

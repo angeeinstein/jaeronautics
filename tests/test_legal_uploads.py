@@ -17,6 +17,7 @@ from aeronautics_members.services import ConflictError, ValidationError
 from aeronautics_members.services import legal_texts as legal
 from aeronautics_members.services import legal_uploads, teams
 from aeronautics_members.services.clock import get_membership_today, get_now_utc
+from aeronautics_members import legal_pdf
 from test_admin_reviews import _login, _staff
 from test_legal_texts import legal_dir, texts  # noqa: F401 -- fixtures
 from test_teams_flow import switched_on  # noqa: F401 -- fixture
@@ -82,6 +83,17 @@ class TestUploadingAndPublishing:
         english = legal.translation(legal.current_version("statutes"))
         assert english is not None and "English" in str(legal.render(english)["html"])
 
+    def test_announced_for_a_later_day_its_pdf_has_its_translation(self, boss):
+        later = get_membership_today() + timedelta(days=30)
+        record = legal_uploads.upload_draft(
+            boss, _file(), _file(title="Statutes", body="§ 1 Name (English).", language="en"))
+        db.session.commit()
+        _publish(boss, record, effective_from=later)
+
+        [german] = legal.announced("statutes")
+
+        assert [part.language for part in legal_pdf.parts(german)] == ["de", "en"]
+
     def test_not_from_a_day_gone(self, boss):
         record = legal_uploads.upload_draft(boss, _file())
         db.session.commit()
@@ -123,6 +135,21 @@ class TestCorrecting:
         assert "Name." in str(legal.render(version)["html"]) and "Nmae" not in str(legal.render(version)["html"])
         [entry] = db.session.query(AuditLog).filter_by(event_type="legal_text_corrected").all()
         assert "Nmae" in entry.before_state["body"]
+
+    def test_not_with_a_file_while_somebody_corrects_it_in_the_editor(self, boss):
+        from aeronautics_members.services import legal_editor
+
+        record = legal_uploads.upload_draft(boss, _file(body="§ 1 Nmae."))
+        db.session.commit()
+        _publish(boss, record)
+        other = _staff("other@example.org", "superadmin")
+        assert legal_editor.take_lock(other, record)
+        db.session.commit()
+
+        with pytest.raises(ConflictError) as refused:
+            legal_uploads.correct(boss, record.id, _file(body="§ 1 Name."))
+
+        assert refused.value.code == "legal_draft_locked"
 
     def test_not_once_somebody_accepted_it(self, boss):
         record = legal_uploads.upload_draft(boss, _file())
@@ -336,3 +363,70 @@ def test_the_template_as_it_is_is_uploaded(boss, rocket):
 def test_admins_and_super_admins_may_write_and_publish_the_legal_texts():
     for role in ("admin", "superadmin"):
         assert {Permission.LEGAL_TEXTS, Permission.LEGAL_PUBLISH} <= ROLE_PERMISSIONS[role]
+
+
+class TestTellingTheMembers:
+    """Published, the members are told -- never asked (docs/legal-texts-in-portal-plan.md)."""
+
+    def _mailings(self):
+        from aeronautics_members.db_models import Mailing
+
+        return db.session.query(Mailing).all()
+
+    def test_a_text_accepted_at_signup_goes_to_every_active_member(self, boss):
+        member = _association_member("member@example.org")
+        record = legal_uploads.upload_draft(boss, _file())
+        db.session.commit()
+
+        _publish(boss, record, effective_from=get_membership_today() + timedelta(days=14),
+                 approved_by="Generalversammlung", summary="§ 5: admission without a board decision.")
+
+        [mailing] = self._mailings()
+        assert mailing.kind == "notice" and [r.email for r in mailing.recipients] == [member.email]
+        assert mailing.subject.startswith("Statuten: a new version from ")
+        assert "approved by the general assembly" in mailing.body
+        assert "§ 5: admission without a board decision." in mailing.body
+        assert f"/legal/statutes/de/{get_membership_today().isoformat()}" in mailing.body
+        assert "nothing you need to do" in mailing.body
+        [entry] = db.session.query(AuditLog).filter_by(event_type="legal_text_published").all()
+        assert entry.event_metadata["members_told"] == 1
+
+    def test_not_when_unticked(self, boss):
+        _association_member("member@example.org")
+        record = legal_uploads.upload_draft(boss, _file())
+        db.session.commit()
+
+        _publish(boss, record, tell=False)
+
+        assert self._mailings() == []
+
+    def test_the_legal_notice_not_unless_asked(self, boss):
+        _association_member("member@example.org")
+        record = legal_uploads.upload_draft(boss, _file("legal-notice", "Impressum"))
+        db.session.commit()
+
+        _publish(boss, record)
+
+        assert self._mailings() == []
+        assert legal_uploads.tells_by_default("legal-notice", None) is False
+
+    def test_a_teams_rules_go_to_the_team(self, boss, rocket):
+        team, lead = rocket
+        _association_member("outsider@example.org")
+        record = legal_uploads.upload_draft(lead, _file("team-rules", "Teamordnung", team="rocket"), team=team)
+        db.session.commit()
+
+        _publish(boss, record)
+
+        [mailing] = self._mailings()
+        assert mailing.kind == "team" and mailing.team_id == team.id
+        assert [r.email for r in mailing.recipients] == ["lead@example.org"]
+        assert "the rules of Rocket" in mailing.body
+
+    def test_nobody_to_tell_still_publishes(self, boss):
+        record = legal_uploads.upload_draft(boss, _file())
+        db.session.commit()
+
+        _publish(boss, record)
+
+        assert legal.current_version("statutes").record_id == record.id and self._mailings() == []

@@ -148,6 +148,15 @@ class TestTheFilesAreChecked:
 
 
 class TestRendering:
+    def test_a_columns_alignment_is_a_class_not_an_inline_style(self, texts):
+        # The pages' security policy blocks style attributes (content_security.py).
+        texts("statutes", "2019-03-17", "| A | B | C |\n|---|---:|:---:|\n| 1 | 2 | 3 |\n")
+
+        html = str(legal.render(legal.current_version("statutes", today=date(2026, 1, 1)))["html"])
+
+        assert "style=" not in html
+        assert '<td class="align-right">2</td>' in html and '<td class="align-center">3</td>' in html
+
     def test_front_matter_is_not_shown_and_paragraphs_get_anchors(self, texts):
         texts("statutes", "2019-03-17", "# Statuten des Vereins\n\n## §1. Name\n\nText.\n\n## Schluss\n",
               title="Statuten")
@@ -266,15 +275,26 @@ class TestThePages:
 
         assert "Alt." in text["html"] and (text["version"], text["in_force"]) == ("2019-03-17", "2026-01-01")
 
-    def test_a_version_not_yet_in_force_or_a_draft_is_not_shown(self, client, texts):
+    def test_a_draft_is_not_shown_nor_a_later_version_as_the_one_in_force(self, client, texts):
         texts("statutes", "2019-03-17")
-        texts("statutes", "2999-01-01", "Geheim.")
+        texts("statutes", "2999-01-01", "Später.")
         texts("statutes", "2020-01-01", "Entwurf.", status="draft")
 
-        assert _text(client, "statutes", "de", "2999-01-01").status_code == 404
         assert _text(client, "statutes", "de", "2020-01-01").status_code == 404
         html = _text(client, "statutes").get_json()["html"]
-        assert "Geheim." not in html and "Entwurf." not in html
+        assert "Später." not in html and "Entwurf." not in html
+
+    def test_a_version_announced_for_a_later_day_is_read_at_its_address(self, client, texts):
+        # Published ahead of its day: the members are told, and the email links here.
+        texts("statutes", "2019-03-17")
+        texts("statutes", "2999-01-01", "Später.")
+
+        later = _text(client, "statutes", "de", "2999-01-01").get_json()
+        current = _text(client, "statutes").get_json()
+
+        assert later["upcoming"] and "Später." in later["html"] and later["in_force"] == "2019-03-17"
+        assert [(other["version"], other["upcoming"]) for other in current["others"]] == [("2999-01-01", True)]
+        assert client.get("/legal/statutes/pdf/2999-01-01?prepare=1").status_code == 200
 
     @pytest.mark.parametrize("path", ["/legal/nonsense", "/legal/statutes/fr"])
     def test_a_page_that_cannot_exist(self, client, texts, path):

@@ -7178,6 +7178,17 @@
               }
             ]
           },
+          "english_markdown_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "English Markdown Url"
+          },
           "german": {
             "$ref": "#/components/schemas/TextOut"
           },
@@ -7191,9 +7202,21 @@
               }
             ]
           },
+          "lock": {
+            "$ref": "#/components/schemas/LockOut"
+          },
+          "markdown_url": {
+            "title": "Markdown Url",
+            "type": "string"
+          },
           "may_publish": {
             "title": "May Publish",
             "type": "boolean"
+          },
+          "members_to_tell": {
+            "default": 0,
+            "title": "Members To Tell",
+            "type": "integer"
           },
           "mode": {
             "enum": [
@@ -7247,6 +7270,11 @@
               }
             ],
             "title": "Team Name"
+          },
+          "tells_by_default": {
+            "default": false,
+            "title": "Tells By Default",
+            "type": "boolean"
           }
         },
         "required": [
@@ -7264,11 +7292,14 @@
           "opened_snapshot_id",
           "snapshots",
           "pdf_url",
+          "markdown_url",
+          "english_markdown_url",
           "back_url",
           "may_publish",
           "approved_by",
           "approved_on",
-          "effective_from"
+          "effective_from",
+          "lock"
         ],
         "title": "EditorOut",
         "type": "object"
@@ -10397,6 +10428,11 @@
             "title": "Title",
             "type": "string"
           },
+          "upcoming": {
+            "default": false,
+            "title": "Upcoming",
+            "type": "boolean"
+          },
           "validity": {
             "title": "Validity",
             "type": "string"
@@ -10481,6 +10517,78 @@
           "valid"
         ],
         "title": "LinkOut",
+        "type": "object"
+      },
+      "LockIn": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "default": "look",
+            "enum": [
+              "look",
+              "beat",
+              "take",
+              "take_over"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "typed": {
+            "default": false,
+            "title": "Typed",
+            "type": "boolean"
+          }
+        },
+        "title": "LockIn",
+        "type": "object"
+      },
+      "LockOut": {
+        "additionalProperties": false,
+        "description": "Who edits the draft now: one person at a time; the others see it read-only.",
+        "properties": {
+          "can_take_over": {
+            "title": "Can Take Over",
+            "type": "boolean"
+          },
+          "free": {
+            "title": "Free",
+            "type": "boolean"
+          },
+          "holder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Holder"
+          },
+          "mine": {
+            "title": "Mine",
+            "type": "boolean"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          }
+        },
+        "required": [
+          "mine",
+          "free",
+          "holder",
+          "since",
+          "can_take_over"
+        ],
+        "title": "LockOut",
         "type": "object"
       },
       "LogEntry": {
@@ -13100,8 +13208,26 @@
       "OtherVersionOut": {
         "additionalProperties": false,
         "properties": {
+          "effective_from": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Effective From"
+          },
           "in_force": {
             "title": "In Force",
+            "type": "boolean"
+          },
+          "upcoming": {
+            "default": false,
+            "title": "Upcoming",
             "type": "boolean"
           },
           "url": {
@@ -14729,6 +14855,30 @@
             "format": "date",
             "title": "Effective From",
             "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Summary"
+          },
+          "tell": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tell"
           }
         },
         "required": [
@@ -15692,9 +15842,26 @@
             "title": "Effective From",
             "type": "string"
           },
+          "english_markdown_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English Markdown Url"
+          },
           "has_english": {
             "title": "Has English",
             "type": "boolean"
+          },
+          "markdown_url": {
+            "default": "",
+            "title": "Markdown Url",
+            "type": "string"
           },
           "pdf_url": {
             "title": "Pdf Url",
@@ -19650,9 +19817,31 @@
             "title": "Effective From",
             "type": "string"
           },
+          "english_markdown_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English Markdown Url"
+          },
           "has_english": {
             "title": "Has English",
             "type": "boolean"
+          },
+          "markdown_url": {
+            "default": "",
+            "title": "Markdown Url",
+            "type": "string"
+          },
+          "members_to_tell": {
+            "default": 0,
+            "title": "Members To Tell",
+            "type": "integer"
           },
           "pdf_url": {
             "title": "Pdf Url",
@@ -19711,6 +19900,11 @@
               }
             ],
             "title": "Team Name"
+          },
+          "tells_by_default": {
+            "default": false,
+            "title": "Tells By Default",
+            "type": "boolean"
           },
           "title": {
             "title": "Title",
@@ -33330,6 +33524,240 @@
         ]
       }
     },
+    "/api/v1/legal/drafts/{record_id}/file": {
+      "post": {
+        "operationId": "legal_draft_read_file",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "english": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "german": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "german"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "*Replace with a file*: the text of uploaded files -- checked as an upload is -- for the editor to put",
+        "tags": [
+          "Legal"
+        ]
+      }
+    },
+    "/api/v1/legal/drafts/{record_id}/lock": {
+      "delete": {
+        "operationId": "legal_draft_unlock",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LockOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "The holder leaves the editor: the draft is free at once (else a minute later by itself).",
+        "tags": [
+          "Legal"
+        ]
+      },
+      "post": {
+        "operationId": "legal_draft_lock",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LockIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LockOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Who edits the draft now -- every 30 seconds from the editor: the holder's sign of life, or the",
+        "tags": [
+          "Legal"
+        ]
+      }
+    },
     "/api/v1/legal/drafts/{record_id}/session": {
       "post": {
         "operationId": "legal_draft_session",
@@ -33385,7 +33813,7 @@
             "description": "Not possible in the current state."
           }
         },
-        "summary": "Start an editing session: the draft as it is now, kept as an earlier state to go back to.",
+        "summary": "Start an editing session: the draft as it is now, kept as an earlier state to go back to. When",
         "tags": [
           "Legal"
         ]

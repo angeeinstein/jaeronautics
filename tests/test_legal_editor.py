@@ -5,6 +5,9 @@ never over somebody else's save; its earlier states kept per session; one
 language checked and rendered as written; a correction within the 24 hours;
 who may do what -- and publishing refusing a text the checks refuse.
 """
+import io
+from datetime import timedelta
+
 import pytest
 
 from api_helpers import send
@@ -213,6 +216,7 @@ class TestWho:
         team, lead = rocket
         record = editor.start_draft(lead, legal.TEAM_RULES, team.slug, "template", _template(team))
         editor.save(lead, record, {"title": "Teamordnung", "revision": None, "body": "§ 1 Regeln."}, None, 0)
+        editor.release(lead, record)  # the lead closed the editor
         db.session.commit()
         _publish(boss, record)
 
@@ -271,3 +275,167 @@ class TestTheApi:
 
         assert started["editor_url"].startswith("/teams/rocket/manage/rules/drafts/")
         assert client.get(started["editor_url"]).status_code == 200
+
+
+class TestAsAFile:
+    def test_downloaded_with_its_front_matter_and_taken_back_as_it_is(self, client, boss):  # noqa: F811
+        record = legal_uploads.upload_draft(boss, _file(body="§ 1 Name.", extra='approved_by: "Vorstand"\n'),
+                                            _file(title="Statutes", body="§ 1 Name (en).", language="en"))
+        db.session.commit()
+        _login(client, boss.id)
+
+        german = client.get(f"/admin/legal/waiting.md?document=statutes&record={record.id}")
+        english = client.get(f"/admin/legal/waiting.md?document=statutes&record={record.id}&language=en")
+
+        assert german.status_code == 200 and german.mimetype == "text/markdown"
+        assert 'filename="statutes-de-' in german.headers["Content-Disposition"]
+        text = german.get_data(as_text=True)
+        assert text.startswith("---\n") and 'approved_by: "Vorstand"' in text and "§ 1 Name." in text
+        assert "§ 1 Name (en)." in english.get_data(as_text=True)
+        again = legal_uploads.upload_draft(boss, (german.data, "x.md"), (english.data, "y.md"))
+        assert again.body.strip() == "§ 1 Name." and again.approved_by == "Vorstand"
+
+    def test_a_file_in_legal_as_it_is(self, client, boss, texts):  # noqa: F811
+        day = get_membership_today().isoformat()
+        texts("privacy-policy", day, "§ 1 Datei.", status="draft", title="Datenschutz")
+        _login(client, boss.id)
+
+        response = client.get(f"/admin/legal/waiting.md?document=privacy-policy&version={day}")
+
+        assert response.status_code == 200 and "§ 1 Datei." in response.get_data(as_text=True)
+
+    def test_for_a_lead_their_rules_only(self, client, boss, rocket, switched_on):  # noqa: F811
+        team, lead = rocket
+        record = editor.start_draft(lead, legal.TEAM_RULES, team.slug, "template", _template(team))
+        db.session.commit()
+        _login(client, lead.id)
+
+        assert client.get(f"/teams/rocket/manage/rules/waiting.md?record={record.id}").status_code == 200
+        # Not through the admins' address: sent away, not given the file.
+        assert client.get(f"/admin/legal/waiting.md?document=team-rules&team=rocket&record={record.id}") \
+            .status_code in (302, 403)
+
+    def test_replaced_with_a_file_the_state_before_kept(self, client, boss):  # noqa: F811
+        record = editor.start_draft(boss, "statutes", template=_template())
+        db.session.commit()
+        _login(client, boss.id)
+        data, _name = _file(body="§ 1 Aus der Datei.")
+
+        read = client.post(f"/api/v1/legal/drafts/{record.id}/file",
+                           data={"german": (io.BytesIO(data), "anything.md")},
+                           content_type="multipart/form-data").get_json()
+
+        assert read["german"]["body"].strip() == "§ 1 Aus der Datei." and read["english"] is None
+        assert "Aus der Datei" not in record.body  # put in by the editor, then saved
+        assert db.session.query(LegalTextSnapshot).filter_by(record_id=record.id).count() == 1
+
+    def test_never_a_different_text(self, client, boss):  # noqa: F811
+        record = editor.start_draft(boss, "statutes", template=_template())
+        db.session.commit()
+        _login(client, boss.id)
+        data, _name = _file("legal-notice", "Impressum")
+
+        refused = client.post(f"/api/v1/legal/drafts/{record.id}/file", data={"german": (io.BytesIO(data), "x.md")},
+                              content_type="multipart/form-data")
+
+        assert refused.status_code == 400 and "different text" in refused.get_json()["error"]["details"]["problems"][0]
+
+
+class TestTheLock:
+    """One person edits a draft at a time (docs/legal-texts-in-portal-plan.md, "The editor")."""
+
+    @pytest.fixture
+    def two(self, boss):  # noqa: F811
+        other = _staff("other@example.org", "admin")
+        record = editor.start_draft(boss, "statutes", template=_template())
+        db.session.commit()
+        return record, other
+
+    def test_the_first_holds_it_the_second_sees_who(self, boss, two):  # noqa: F811
+        record, other = two
+
+        assert editor.take_lock(boss, record)
+        assert not editor.take_lock(other, record)
+        state = editor.lock_state(record, other)
+        assert not state["free"] and not state["mine"] and state["holder"].id == boss.id
+        assert not state["can_take_over"]
+
+    def test_the_second_cannot_save(self, boss, two):  # noqa: F811
+        record, other = two
+        editor.take_lock(boss, record)
+
+        with pytest.raises(ConflictError, match="Somebody else is editing"):
+            editor.save(other, record, *_content("Nicht ich."), 0)
+
+    def test_free_again_once_the_holders_editor_goes_quiet(self, boss, two):  # noqa: F811
+        from datetime import datetime
+
+        record, other = two
+        start = datetime(2026, 11, 5, 10, 0)
+        editor.take_lock(boss, record, now=start)
+
+        later = start + editor.LOCK_GONE_AFTER + timedelta(seconds=1)
+        assert editor.lock_state(record, other, now=later)["free"]
+        assert editor.take_lock(other, record, now=later)
+        # The first one's next sign of life says it is gone.
+        assert not editor.beat(boss, record, now=later)
+
+    def test_taken_over_after_ten_minutes_without_typing(self, boss, two):  # noqa: F811
+        from datetime import datetime
+
+        record, other = two
+        start = datetime(2026, 11, 5, 10, 0)
+        editor.take_lock(boss, record, typed=True, now=start)
+        # The tab stays open: signs of life, but no typing.
+        idle = start + editor.TAKE_OVER_AFTER + timedelta(seconds=5)
+        editor.beat(boss, record, now=idle)
+
+        assert not editor.take_lock(other, record, now=idle)
+        assert editor.lock_state(record, other, now=idle)["can_take_over"]
+        assert editor.take_lock(other, record, take_over=True, now=idle)
+        assert db.session.query(AuditLog).filter_by(event_type="legal_draft_taken_over").count() == 1
+
+    def test_not_taken_over_while_the_holder_types(self, boss, two):  # noqa: F811
+        from datetime import datetime
+
+        record, other = two
+        start = datetime(2026, 11, 5, 10, 0)
+        editor.take_lock(boss, record, typed=True, now=start)
+        editor.beat(boss, record, typed=True, now=start + timedelta(minutes=9))
+        editor.beat(boss, record, now=start + timedelta(minutes=11))  # the tab open, not typing since minute 9
+
+        assert not editor.take_lock(other, record, take_over=True, now=start + timedelta(minutes=11))
+
+    def test_leaving_frees_it_at_once(self, boss, two):  # noqa: F811
+        record, other = two
+        editor.take_lock(boss, record)
+
+        editor.release(boss, record)
+
+        assert editor.lock_state(record, other)["free"] and editor.take_lock(other, record)
+
+    def test_no_publishing_while_somebody_edits(self, boss, two):  # noqa: F811
+        record, other = two
+        editor.save(other, record, *_content("## § 1 Name\n\nText."), 0)
+        db.session.commit()
+
+        with pytest.raises(ConflictError, match="editing this draft now"):
+            _publish(boss, record)
+
+    def test_the_api(self, client, boss, two):  # noqa: F811
+        record, other = two
+        _login(client, other.id)
+        editor.take_lock(boss, record)
+        db.session.commit()
+
+        opened = send(client, "POST", f"/api/v1/legal/drafts/{record.id}/session").get_json()
+        assert opened["lock"]["mine"] is False and opened["lock"]["holder"]
+        looked = send(client, "POST", f"/api/v1/legal/drafts/{record.id}/lock", {"action": "look"}).get_json()
+        assert looked["free"] is False
+
+        editor.release(boss, record)
+        db.session.commit()
+        taken = send(client, "POST", f"/api/v1/legal/drafts/{record.id}/lock", {"action": "take"}).get_json()
+        assert taken["mine"] is True
+        left = send(client, "DELETE", f"/api/v1/legal/drafts/{record.id}/lock").get_json()
+        assert left["free"] is True

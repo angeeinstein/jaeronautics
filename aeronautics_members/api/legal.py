@@ -15,6 +15,7 @@ from flask import url_for
 
 from ..services import NotFoundError
 from ..services import legal_texts as legal
+from ..services.clock import get_membership_today
 from ._core import Model, endpoint
 
 
@@ -29,6 +30,9 @@ class OtherVersionOut(Model):
     version: date
     in_force: bool
     url: str
+    #: Published, applies from a later day (``effective_from``).
+    upcoming: bool = False
+    effective_from: date | None = None
 
 
 class LegalTextOut(Model):
@@ -40,8 +44,11 @@ class LegalTextOut(Model):
     version: date
     revision: str | None
     effective_from: date
-    #: The day of the version in force -- this one, or a later one.
+    #: The day of the version in force -- this one, or a later one; this one's own day when none
+    #: is in force yet.
     in_force: date
+    #: Published, but applies only from ``effective_from``: the members are told ahead.
+    upcoming: bool = False
     #: The line under the title, in the text's language: its revision, the day it
     #: applies from, who approved it and when ("Gültig ab 01.12.2026 · genehmigt …").
     validity: str
@@ -66,31 +73,38 @@ def legal_text(slug, language, version, *, page, pdf, team=None):
     None for the version in force. Without a language, the English translation
     where there is one, else the German text."""
     in_force = legal.current_version(slug, team=team)
-    if in_force is None:
-        raise NotFoundError("There is no such text.", code="no_text")
     if version is None:
+        if in_force is None:
+            raise NotFoundError("There is no such text.", code="no_text")
         german = in_force
     else:
-        german = legal.find(slug, legal.AUTHORITATIVE, version, team=team)
+        # A version announced for a later day is readable at its address already.
+        german = legal.find_published(slug, legal.AUTHORITATIVE, version, team=team)
         if german is None:
             raise NotFoundError("There is no version of that day.", code="no_version")
-    english = legal.translation(german)
+    english = legal.find_published(slug, "en", german.version, team=team)
     shown = german if language == legal.AUTHORITATIVE or english is None else english
+    current = in_force.version if in_force is not None else None
 
     def address(of):
-        return page(of.language, None if of.version == in_force.version else of.version.isoformat())
+        return page(of.language, None if of.version == current else of.version.isoformat())
+
+    upcoming = [v for v in legal.announced(slug, shown.language, team=team) if v.version != shown.version]
 
     rendered = legal.render(shown)
     return LegalTextOut(
         title=shown.title, language=shown.language, is_translation=shown.is_translation,
         version=shown.version, revision=shown.revision, effective_from=shown.effective_from,
-        in_force=in_force.version, validity=legal.validity(shown), html=str(rendered["html"]),
+        in_force=current or german.version, upcoming=german.effective_from > get_membership_today(),
+        validity=legal.validity(shown), html=str(rendered["html"]),
         contents=[SectionOut(anchor=anchor, label=label, level=level) for anchor, label, level in rendered["contents"]],
         german_url=address(german), english_url=address(english) if english is not None else None,
         english_elsewhere=english is None and legal.has_language(slug, "en", team=team),
-        others=[OtherVersionOut(version=other.version, in_force=other.version == in_force.version, url=address(other))
-                for other in legal.versions(slug, shown.language, team=team) if other.version != shown.version],
-        pdf_url=pdf(None if german.version == in_force.version else german.version.isoformat()),
+        others=[OtherVersionOut(version=other.version, in_force=False, url=address(other), upcoming=True,
+                                effective_from=other.effective_from) for other in reversed(upcoming)]
+        + [OtherVersionOut(version=other.version, in_force=other.version == current, url=address(other))
+           for other in legal.versions(slug, shown.language, team=team) if other.version != shown.version],
+        pdf_url=pdf(None if german.version == current else german.version.isoformat()),
         pdf_has_english=english is not None,
     )
 

@@ -190,6 +190,13 @@ update's warning of local changes only for the portal's own files).
   names, and that a difference with Stripe names the payer's address and is
   kept a year after it is resolved (§ 20, § 40). See
   `docs/money-ledger-plan.md`.
+- **Also (2026-11-05):** in the membership terms draft, § 36's sub-sections
+  were still numbered 35.1-35.4 from before § 31 was inserted: now 36.1-36.4
+  (German and English). The one cross-reference, to § 11, was right.
+- **Also (2026-11-05):** the portal sends email through Microsoft 365 and
+  Brevo; IONOS's contract ended. The privacy policy draft says so (§ 31, § 38),
+  in German also that an email reply to an answer comes back into the portal
+  (the English draft had it already).
 - **Waiting for (2026-10-11):** the maintainer discusses them with the
   association's board, the credit feature above all ("I haven't really
   discussed with them if they like it"). Shown under Admin › Legal texts,
@@ -197,8 +204,7 @@ update's warning of local changes only for the portal's own files).
 - **Once approved:** since legal texts are kept in the portal
   (`docs/legal-texts-in-portal-plan.md`), upload each German file with its
   English one on Admin › Legal texts and publish it there, with the approval;
-  then delete the four draft files from `legal/` in the next batch. Check
-  that nothing refers to the old § 31-36 of the membership terms.
+  then delete the four draft files from `legal/` in the next batch.
 
 ## Ideas for later (not scheduled)
 
