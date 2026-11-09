@@ -15,7 +15,7 @@ gunicorn==26.2.0
 Flask-Login==0.6.3
 Flask-Limiter==4.1.1
 # The JSON API's requests and answers (aeronautics_members/api/), and its OpenAPI description.
-pydantic==2.14.1
+pydantic==2.14.2
 redis==8.1.0
 Pillow==13.0.0
 cryptography==50.0.2
