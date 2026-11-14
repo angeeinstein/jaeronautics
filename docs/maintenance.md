@@ -2562,6 +2562,10 @@ What waits for a person:
   14): they change behaviour on purpose, and tests do not catch all of it.
   The pull request stays open with a note; read the package's release notes
   (what changed, what to do), then merge it by hand.
+- **Not offered at all** (`ignore` in `.github/dependabot.yml`): the majors
+  of `@types/node` (raised with Node.js) and of `stripe` -- the tests fake
+  Stripe, so a green CI says nothing about payments; it is moved by hand
+  (`docs/todo.md`, "Stripe's Python package").
 - **An update CI failed**: it stays open, red. Usually a newer version that
   needs a change in our code. Dependabot rebases it when `main` moves, which
   runs CI again.

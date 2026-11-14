@@ -67,7 +67,9 @@ update's warning of local changes only for the portal's own files).
 - **What:** move `stripe` from 13.0.1 (API version `2025-09-30.clover`) to
   16.x (`2026-09-30.endive`). Dependabot's #63 did only the version and was
   closed: CI passed because the tests fake Stripe with plain dicts, but on
-  the server it would have broken payments.
+  the server it would have broken payments. #74 (16.1) was closed too, and
+  Dependabot no longer offers Stripe's majors (`.github/dependabot.yml`,
+  2026-11-14): this item is the reminder.
 - **The changes that matter here** (stripe-python's `CHANGELOG.md`, 15.0.0
   and 16.0.0):
   - 15.0.0: `StripeObject` is no longer a `dict` -- no `.get()`, `.items()`;
