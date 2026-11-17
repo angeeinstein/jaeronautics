@@ -14,7 +14,7 @@ costs that paragraph. A paragraph's own number -- ``i)``, ``a)``, ``3)`` --
 is taken off before and put back after: a translator writes some of them as
 ``(i)`` and leaves others, so they would no longer match. A paragraph whose
 sentence the next ones finish ("verpflichtet sich jedes Mitglied," / "i) sich
-… zu verhalten;") goes together with them, as one text.
+… zu verhalten;") and those paragraphs are each told of the other, as context.
 
 In Admin › Legal texts a version's English can be made again from scratch
 (``translate_again``) or taken away (``remove_english``).
@@ -41,9 +41,10 @@ def source_hash(record):
 #: A paragraph that starts with its own number: ``<p>iii) …``, ``<p>(a) …``, ``<li>2) …``.
 _NUMBERED = re.compile(r"^(\s*<(?:p|li)>)(\(?(?:[ivxlcdm]{1,6}|[a-z]|\d{1,3})\))[ \t]+", re.IGNORECASE)
 _OPENING = re.compile(r"^\s*<(?:p|li)>")
-#: One paragraph, as a block is; and the paragraphs of a translated run.
+#: One paragraph, as a block is.
 _PARAGRAPH = re.compile(r"\s*<p>(?:(?!</p>).)*</p>\s*", re.DOTALL)
-_PARAGRAPHS = re.compile(r"<p>.*?</p>", re.DOTALL)
+#: How much of a neighbouring paragraph is told to DeepL as context.
+NEAR_MAX = 600
 
 
 def _plain(block):
@@ -51,63 +52,52 @@ def _plain(block):
 
 
 def _plan(german):
-    """What is sent of a version, and how its page is put together again: its blocks with their
-    numbers taken off, the numbers, and the groups of blocks sent as one text.
+    """What is sent of a version: its blocks with their numbers taken off, the numbers, and for each
+    block what DeepL is told of its neighbours ("" for nothing).
 
-    A group is one block -- or a *run*: a paragraph ending in "," or ":" and the paragraphs after it
-    that finish its sentence (starting with a small letter, after their number). Sent apart, each
-    half was translated without the other ("undertakes to, / i) to behave …")."""
+    A paragraph ending in "," or ":" and the paragraphs after it that finish its sentence (starting
+    with a small letter, after their number) are each told of the other: translated apart and
+    unknowing, the two halves read "undertakes to, / i) to behave …". Each is still translated on
+    its own -- sent as one text, DeepL ran the paragraphs into each other and lost the glossary
+    and the gender-neutral wording (tried on 2026-11-17)."""
     blocks, numbers = [], []
     for block in legal.blocks(german):
         numbered = _NUMBERED.match(block)
         numbers.append(numbered.group(2) if numbered else None)
         blocks.append(numbered.group(1) + block[numbered.end():] if numbered else block)
-    groups, index = [], 0
+    near, index = [""] * len(blocks), 0
     while index < len(blocks):
-        group = [index]
+        items = []
         if _PARAGRAPH.fullmatch(blocks[index]) and _plain(blocks[index]).endswith((",", ":")):
             following = index + 1
             while (following < len(blocks) and _PARAGRAPH.fullmatch(blocks[following])
                    and _plain(blocks[following])[:1].islower()):
-                group.append(following)
+                items.append(following)
                 following += 1
-        groups.append(group)
-        index = group[-1] + 1
-    return blocks, numbers, groups
-
-
-def _sent(blocks, groups):
-    return ["".join(blocks[index] for index in group) for group in groups]
+        if items:
+            lead = _plain(blocks[index])[:NEAR_MAX]
+            listed = " / ".join(_plain(blocks[item]) for item in items)[:NEAR_MAX]
+            near[index] = f"This paragraph begins a sentence that the following list items finish: {listed}"
+            for item in items:
+                near[item] = f"This list item finishes the sentence begun by: {lead}"
+            index = items[-1] + 1
+        else:
+            index += 1
+    return blocks, numbers, near
 
 
 def translate_version(german):
     """``(title, html)``: a German Version's title and page in English."""
-    blocks, numbers, groups = _plan(german)
-    english = [None] * len(blocks)
-    apart = []  # the paragraphs of a run that did not come back as as many paragraphs
-    for group, made in zip(groups, translation.translate(_sent(blocks, groups))):
-        if len(group) == 1:
-            english[group[0]] = made
-            continue
-        parts = _PARAGRAPHS.findall(made)
-        if len(parts) == len(group):
-            for index, part in zip(group, parts):
-                english[index] = part + "\n"
-        else:
-            apart += group
-    if apart:
-        for index, made in zip(apart, translation.translate([blocks[index] for index in apart])):
-            english[index] = made
+    blocks, numbers, near = _plan(german)
+    english = translation.translate(blocks, near=near)
     [title] = translation.translate([german.title], as_html=False)
     return title, "".join(_numbered(text, number) for text, number in zip(english, numbers))
 
 
 def forget_kept(german):
     """The kept translations of a version's texts forgotten, so they are asked for again."""
-    blocks, _numbers, groups = _plan(german)
-    runs = [blocks[index] for group in groups if len(group) > 1 for index in group]
-    return (translation.forget(_sent(blocks, groups) + runs)
-            + translation.forget([german.title], as_html=False))
+    blocks, _numbers, near = _plan(german)
+    return translation.forget(blocks, near=near) + translation.forget([german.title], as_html=False)
 
 
 def _numbered(english, number):

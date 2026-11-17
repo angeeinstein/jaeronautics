@@ -158,43 +158,53 @@ def _fingerprint(glossary):
 # --- Translating -----------------------------------------------------------------------------
 
 
-def _key(text, as_html, glossary):
-    # The context is part of it: when it changes, what was translated is translated anew.
-    return hashlib.sha256(f"{TARGET}|{int(as_html)}|{_fingerprint(glossary)}|{CONTEXT}|{text}".encode()
-                          ).hexdigest()
+def _key(text, as_html, glossary, near=""):
+    # The context is part of it: when it changes, what was translated is translated anew. ``near``
+    # only when there is one, so the translations kept before it existed keep their keys.
+    near_part = f"|{near}" if near else ""
+    return hashlib.sha256(f"{TARGET}|{int(as_html)}|{_fingerprint(glossary)}|{CONTEXT}{near_part}|{text}"
+                          .encode()).hexdigest()
 
 
-def translate(texts, *, as_html=True):
+def translate(texts, *, as_html=True, near=None):
     """``texts`` in English, in their order: what was translated before from the store, the rest by
-    the first service that manages it. TranslationUnavailable when none does."""
+    the first service that manages it. TranslationUnavailable when none does.
+
+    ``near``: for each text, what is around it that DeepL should know of ("" for nothing) -- the
+    paragraph whose sentence it finishes, say. Told as context, not translated, not counted."""
     current = settings()
-    keys = [_key(text, as_html, current["glossary"]) for text in texts]
+    near = list(near) if near is not None else [""] * len(texts)
+    keys = [_key(text, as_html, current["glossary"], around) for text, around in zip(texts, near)]
     known = {row.source_hash: row.target for row in db.session.execute(
         db.select(Translation).where(Translation.source_hash.in_(set(keys)))).scalars()} if keys else {}
-    missing = list(dict.fromkeys(text for text, key in zip(texts, keys) if key not in known and text.strip()))
-    if missing:
-        made, service = _by_a_service(missing, as_html, current)
-        now = get_now_utc()
-        for text, english in zip(missing, made):
-            key = _key(text, as_html, current["glossary"])
+    missing = list(dict.fromkeys((text, around) for text, around, key in zip(texts, near, keys)
+                                 if key not in known and text.strip()))
+    now = get_now_utc()
+    for around in dict.fromkeys(around for _text, around in missing):
+        asked = [text for text, other in missing if other == around]
+        made, service = _by_a_service(asked, as_html, current, near=around)
+        for text, english in zip(asked, made):
+            key = _key(text, as_html, current["glossary"], around)
             known[key] = english
             if db.session.get(Translation, key) is None:
                 db.session.add(Translation(source_hash=key, source=text, target=english, service=service,
                                            created_at=now))
+    if missing:
         db.session.flush()
     return [known.get(key, text) for text, key in zip(texts, keys)]
 
 
-def forget(texts, *, as_html=True):
+def forget(texts, *, as_html=True, near=None):
     """The kept translations of ``texts`` forgotten: asked for again next time. Returns how many."""
     glossary = settings()["glossary"]
-    keys = list({_key(text, as_html, glossary) for text in texts})
+    near = list(near) if near is not None else [""] * len(texts)
+    keys = list({_key(text, as_html, glossary, around) for text, around in zip(texts, near)})
     if not keys:
         return 0
     return db.session.execute(db.delete(Translation).where(Translation.source_hash.in_(keys))).rowcount
 
 
-def _by_a_service(texts, as_html, current, only=None):
+def _by_a_service(texts, as_html, current, only=None, near=""):
     services = [only] if only else configured(current)
     if not services:
         raise TranslationUnavailable("No translation service is set up (Settings › Translation).")
@@ -204,7 +214,8 @@ def _by_a_service(texts, as_html, current, only=None):
             made = []
             for start in range(0, len(texts), BATCH):
                 batch = texts[start:start + BATCH]
-                made += (_deepl if name == DEEPL else _azure)(batch, as_html, current)
+                made += (_deepl(batch, as_html, current, near) if name == DEEPL
+                         else _azure(batch, as_html, current))  # Azure takes no context
             return [clean_html(text) if as_html else text for text in made], name
         except _ServiceError as exc:
             current_app.logger.warning("Translating with %s failed: %s", NAMES[name], exc)
@@ -329,9 +340,10 @@ def _deepl_glossary(current, fresh=False):
     return glossary_id
 
 
-def _deepl(texts, as_html, current):
+def _deepl(texts, as_html, current, near=""):
     key = current["deepl_key"]
-    data = {"text": texts, "source_lang": "DE", "target_lang": TARGET, "context": CONTEXT}
+    data = {"text": texts, "source_lang": "DE", "target_lang": TARGET,
+            "context": f"{CONTEXT} {near}" if near else CONTEXT}
     if as_html:
         data["tag_handling"] = "html"
     glossary_id = _deepl_glossary(current)

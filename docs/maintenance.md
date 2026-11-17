@@ -477,8 +477,8 @@ made anew when it changes; Azure the English word in place for the German as
 written. The English is never corrected by hand -- the glossary keeps terms
 right. Published English from before (the files of 04.10.2026) stays as it is.
 A paragraph's own number (`i)`) is taken off before and put back after; a
-paragraph ending in "," or ":" goes together with the paragraphs that finish
-its sentence, as one text.
+paragraph ending in "," or ":" and the paragraphs that finish its sentence are
+each translated on their own, with the other given to DeepL as context.
 
 **A version's English, again or away:** on Admin → Legal Texts, each version
 published in the portal says what its English is -- made by machine, by hand

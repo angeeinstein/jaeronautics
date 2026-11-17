@@ -296,13 +296,14 @@ def test_a_paragraphs_own_number_kept_as_written(services, monkeypatch):
 
 
 class TestASentenceOverSeveralParagraphs:
-    """A lead-in ending in "," or ":" and the paragraphs finishing its sentence go as one text --
-    apart, DeepL wrote "undertakes to, / i) to behave …"."""
+    """A lead-in ending in "," or ":" and the paragraphs finishing its sentence are each translated
+    on their own, told of the other as context -- apart and unknowing, DeepL wrote "undertakes to,
+    / i) to behave …"; sent as one text, it ran them into each other."""
 
     LEAD_IN = "<p>Mit dem Beitritt verpflichtet sich jedes Mitglied,</p>\n"
     BLOCKS = [LEAD_IN, "<p>i) fair zu sein;</p>\n", "<p>ii) zu helfen.</p>\n", "<p>Ein neuer Satz.</p>\n"]
 
-    def _translate(self, services, monkeypatch, answer):
+    def _translate(self, services, monkeypatch):
         from types import SimpleNamespace
 
         from aeronautics_members.services import legal_translation
@@ -313,39 +314,37 @@ class TestASentenceOverSeveralParagraphs:
 
         def deepl(url, *, data=None, headers=None, method="POST"):
             if url.endswith("/v2/translate"):
-                sent.append(data["text"])
-                return {"translations": [{"text": answer(text)} for text in data["text"]]}
+                sent.append((data["text"], data["context"]))
+                return {"translations": [{"text": text} for text in data["text"]]}
             return services(url, data=data, headers=headers, method=method)
 
         monkeypatch.setattr(translation, "_call", deepl)
         _title, english = legal_translation.translate_version(SimpleNamespace(title="Teamordnung"))
         return sent, english
 
-    def test_sent_together_and_put_back_paragraph_by_paragraph(self, services, monkeypatch):
-        sent, english = self._translate(services, monkeypatch, lambda text: text.replace("zu", "to"))
+    def test_each_on_its_own_told_of_the_other(self, services, monkeypatch):
+        sent, english = self._translate(services, monkeypatch)
 
-        assert sent[0][0] == (self.LEAD_IN + "<p>fair zu sein;</p>\n<p>zu helfen.</p>\n")
-        assert sent[0][1] == "<p>Ein neuer Satz.</p>\n"
-        assert english == ("<p>Mit dem Beitritt verpflichtet sich jedes Mitglied,</p>\n<p>i) fair to sein;</p>\n"
-                           "<p>ii) to helfen.</p>\n<p>Ein neuer Satz.</p>\n")
+        by_text = {text: context for texts, context in sent for text in texts}
+        assert by_text["<p>Ein neuer Satz.</p>\n"] == translation.CONTEXT
+        assert by_text[self.LEAD_IN].endswith("finish: fair zu sein; / zu helfen.")
+        assert by_text["<p>fair zu sein;</p>\n"].endswith("begun by: Mit dem Beitritt verpflichtet sich jedes Mitglied,")
+        assert by_text["<p>zu helfen.</p>\n"] == by_text["<p>fair zu sein;</p>\n"]  # one request for both
+        assert english == "".join(self.BLOCKS)  # each paragraph, its number put back
 
-    def test_not_as_many_paragraphs_back_then_one_by_one(self, services, monkeypatch):
-        def merged(text):
-            return "<p>All in one.</p>" if text.count("<p>") > 1 else text
-
-        sent, english = self._translate(services, monkeypatch, merged)
-
-        assert sent[1] == [self.LEAD_IN, "<p>fair zu sein;</p>\n", "<p>zu helfen.</p>\n"]
-        assert "All in one" not in english and "<p>ii) zu helfen.</p>" in english
-
-    def test_forgotten_together_with_the_paragraphs(self, services, monkeypatch):
+    def test_kept_by_their_context_and_forgotten_with_it(self, services, monkeypatch):
         from types import SimpleNamespace
 
         from aeronautics_members.services import legal_translation
 
-        self._translate(services, monkeypatch, lambda text: text)
-        assert db.session.query(Translation).count() == 3  # the run, the last paragraph, the title
+        self._translate(services, monkeypatch)
+        assert db.session.query(Translation).count() == 5  # four paragraphs and the title
 
         legal_translation.forget_kept(SimpleNamespace(title="Teamordnung"))
 
         assert db.session.query(Translation).count() == 0
+
+    def test_a_translation_kept_without_context_keeps_its_key(self, app):
+        # Kept before there was a context per text: not translated again for nothing.
+        glossary = translation.settings()["glossary"]
+        assert translation._key("<p>x</p>", True, glossary) == translation._key("<p>x</p>", True, glossary, "")

@@ -78,7 +78,7 @@ class TestUploadingAndPublishing:
         from aeronautics_members.services import outbox, translation
 
         monkeypatch.setattr(translation, "translate",
-                            lambda sent, as_html=True: [f"{text} [en]" for text in sent])
+                            lambda sent, as_html=True, near=None: [f"{text} [en]" for text in sent])
         record = legal_uploads.upload_draft(boss, _file(body="## § 1 Name\n\nDer Verein heißt."))
         db.session.commit()
         _publish(boss, record)
@@ -128,7 +128,7 @@ class TestUploadingAndPublishing:
         assert saved.status_code == 200
         assert item.status == ExternalWorkItem.STATUS_PENDING and item.attempts == 0
         monkeypatch.setattr(translation, "translate",
-                            lambda sent, as_html=True: [f"{text} [en]" for text in sent])
+                            lambda sent, as_html=True, near=None: [f"{text} [en]" for text in sent])
         outbox.process_pending()
         assert legal.translation(legal.current_version("statutes")).machine_translated
 
@@ -147,7 +147,7 @@ class TestUploadingAndPublishing:
         from aeronautics_members.services import outbox, translation
 
         monkeypatch.setattr(translation, "translate",
-                            lambda sent, as_html=True: [f"{text} [en]" for text in sent])
+                            lambda sent, as_html=True, near=None: [f"{text} [en]" for text in sent])
         later = get_membership_today() + timedelta(days=30)
         record = legal_uploads.upload_draft(boss, _file())
         db.session.commit()
@@ -506,7 +506,7 @@ class TestTheEnglishOfAVersion:
         set_setting_value(translation.DEEPL_KEY, "key:fx")
         state = {"round": 1, "sent": []}
 
-        def by_a_service(asked, as_html, current, only=None):
+        def by_a_service(asked, as_html, current, only=None, near=""):
             state["sent"] += asked
             return [f"{text} [round {state['round']}]" for text in asked], "deepl"
 

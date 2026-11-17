@@ -98,10 +98,12 @@ be live translated from German."
   asked anew -- also the way to replace an English a fallback made, or a
   hand-made one from before. Removed: not made again by itself.
 - **A sentence over several paragraphs** ("verpflichtet sich jedes Mitglied,"
-  / "i) sich … zu verhalten;") goes as one text and is split back by its
-  paragraphs; when it does not come back as as many, paragraph by paragraph
-  as before. To be seen on the test server whether DeepL then writes it
-  without "undertakes to, / i) to …".
+  / "i) sich … zu verhalten;"): each paragraph is still translated on its
+  own, and DeepL is told of the other as context (not counted). Tried first
+  (2026-11-17): sent as one text -- DeepL ran the paragraphs into each other
+  ("each membercommits to"), wrote "his conduct" again and missed the glossary
+  ("club"); so not that. If the doubled "to" stays, it is accepted: a blemish,
+  where the other way made mistakes.
 - **Setup guide** for both services: `docs/maintenance.md`, "Setting up a
   translation service".
 

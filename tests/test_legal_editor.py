@@ -222,11 +222,11 @@ class TestTheEnglishView:
 
         sent = []
 
-        def fake(blocks, as_html=True):
+        def fake(blocks, as_html=True, near=None):
             sent.extend(blocks)
             return [f"EN:{block}" for block in blocks]
 
-        monkeypatch.setattr(translation, "_by_a_service", lambda blocks, as_html, current, only=None:
+        monkeypatch.setattr(translation, "_by_a_service", lambda blocks, as_html, current, only=None, near="":
                             (fake(blocks, as_html), "deepl"))
         monkeypatch.setattr(translation, "configured", lambda current=None: ["deepl"])
         record = editor.start_draft(boss, "statutes", template=_template())
