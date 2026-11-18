@@ -29,6 +29,7 @@ from . import legal_texts as legal
 from . import ConflictError, translation
 from .audit import log_audit_event
 from .clock import get_now_utc
+from .locking import locked
 from .outbox import enqueue, register_handler
 
 
@@ -164,28 +165,33 @@ def _dedupe_key(record):
     return f"legal-translate-{record.id}"
 
 
-def _outstanding(record):
-    """Its translation job not done yet: waiting, running, or given up."""
-    return db.session.execute(db.select(ExternalWorkItem).where(
+def _outstanding(record, lock=False):
+    """Its translation job not done yet: waiting, running, or given up. ``lock``: held until the
+    commit, so the worker cannot claim it meanwhile (it claims with an UPDATE of the same row)."""
+    query = db.select(ExternalWorkItem).where(
         ExternalWorkItem.dedupe_key == _dedupe_key(record),
         ExternalWorkItem.status.in_([ExternalWorkItem.STATUS_PENDING, ExternalWorkItem.STATUS_PROCESSING,
-                                     ExternalWorkItem.STATUS_FAILED]))).scalar_one_or_none()
+                                     ExternalWorkItem.STATUS_FAILED]))
+    return db.session.execute(locked(query) if lock else query).scalar_one_or_none()
 
 
 def english_state(record):
-    """``(state, problem)`` of a published version's English, for Admin › Legal texts: "machine",
-    "hand" (uploaded before the English was made by machine), "making" -- with what went wrong in
-    the last try, if one failed -- "failed" (given up; a saved key or *Translate again* brings it
-    back), or "none"."""
+    """``(state, problem, shown)`` of a published version's English, for Admin › Legal texts.
+
+    ``state``: "machine", "hand" (uploaded before the English was made by machine), "making" --
+    with what went wrong in the last try, if one failed -- "failed" (given up; a saved key or
+    *Translate again* brings it back), or "none". ``shown``: whether an English is there and shown
+    now -- while being made again, or after that gave up, it is the one from before."""
+    english = english_of(record)
+    shown = english is not None
     item = _outstanding(record)
     if item is not None:
         if item.status == ExternalWorkItem.STATUS_FAILED:
-            return "failed", item.last_error
-        return "making", item.last_error if item.attempts else None
-    english = english_of(record)
+            return "failed", item.last_error, shown
+        return "making", item.last_error if item.attempts else None, shown
     if english is None:
-        return "none", None
-    return ("machine" if english.machine_translated else "hand"), None
+        return "none", None, False
+    return ("machine" if english.machine_translated else "hand"), None, True
 
 
 def _published_german(record):
@@ -211,7 +217,8 @@ def remove_english(actor, record):
     """Its English taken away: the English page then says there is none. Not made again by itself --
     only by *Translate again* or a correction."""
     _published_german(record)
-    item = _outstanding(record)
+    # Locked: a job the worker has not claimed yet is cancelled here, never claimed in between.
+    item = _outstanding(record, lock=True)
     if item is not None and item.status == ExternalWorkItem.STATUS_PROCESSING:
         raise ConflictError("The English is being made just now. Remove it once it is done.",
                             code="legal_english_busy")

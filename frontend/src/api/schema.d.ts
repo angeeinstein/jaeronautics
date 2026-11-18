@@ -7314,6 +7314,11 @@ export interface components {
              * @default null
              */
             english_problem?: string | null;
+            /**
+             * English Shown
+             * @default false
+             */
+            english_shown?: boolean;
             /** Page Url */
             page_url: string;
             /** Pdf Url */
@@ -10761,6 +10766,11 @@ export interface components {
              * @default null
              */
             english_problem?: string | null;
+            /**
+             * English Shown
+             * @default false
+             */
+            english_shown?: boolean;
             /** Has English */
             has_english: boolean;
             /**
@@ -10892,6 +10902,11 @@ export interface components {
              * @default null
              */
             english_problem?: string | null;
+            /**
+             * English Shown
+             * @default false
+             */
+            english_shown?: boolean;
         };
         /** VersionOut */
         VersionOut: {

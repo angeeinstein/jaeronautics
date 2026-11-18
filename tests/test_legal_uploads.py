@@ -581,6 +581,39 @@ class TestTheEnglishOfAVersion:
         outbox.process_pending()
         assert self._listed(client)["english"] == "machine"
 
+    def test_a_redo_given_up_the_english_from_before_still_shown_and_removable(self, client, boss, services):
+        from aeronautics_members.db_models import ExternalWorkItem
+
+        record = self._published(boss)
+        _login(client, boss.id)
+        client.post(f"/api/v1/admin/legal/versions/{record.id}/english")
+        [item] = db.session.query(ExternalWorkItem).filter_by(kind="legal_translate", status="pending").all()
+        item.status, item.attempts, item.last_error = ExternalWorkItem.STATUS_FAILED, 5, "DeepL: error 500"
+        db.session.commit()
+
+        listed = self._listed(client)
+        assert (listed["english"], listed["english_shown"]) == ("failed", True)
+        assert "[round 1]" in self._english_html()  # still there for the members
+
+        assert client.delete(f"/api/v1/admin/legal/versions/{record.id}/english").status_code == 200
+        assert legal.translation(legal.current_version("statutes")) is None
+        assert self._listed(client)["english"] == "none"
+
+    def test_not_removed_while_being_made(self, client, boss, services):
+        from aeronautics_members.db_models import ExternalWorkItem
+
+        record = self._published(boss)
+        _login(client, boss.id)
+        client.post(f"/api/v1/admin/legal/versions/{record.id}/english")
+        [item] = db.session.query(ExternalWorkItem).filter_by(kind="legal_translate", status="pending").all()
+        item.status = ExternalWorkItem.STATUS_PROCESSING  # the worker has it
+        db.session.commit()
+
+        refused = client.delete(f"/api/v1/admin/legal/versions/{record.id}/english")
+
+        assert refused.status_code == 409 and refused.get_json()["error"]["code"] == "legal_english_busy"
+        assert legal.translation(legal.current_version("statutes")) is not None
+
     def test_only_for_whoever_may_publish(self, client, boss, services, monkeypatch):
         from aeronautics_members import permissions
 

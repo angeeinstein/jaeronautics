@@ -9662,6 +9662,11 @@
             "default": null,
             "title": "English Problem"
           },
+          "english_shown": {
+            "default": false,
+            "title": "English Shown",
+            "type": "boolean"
+          },
           "page_url": {
             "title": "Page Url",
             "type": "string"
@@ -20008,6 +20013,11 @@
             "default": null,
             "title": "English Problem"
           },
+          "english_shown": {
+            "default": false,
+            "title": "English Shown",
+            "type": "boolean"
+          },
           "has_english": {
             "title": "Has English",
             "type": "boolean"
@@ -20353,6 +20363,11 @@
             ],
             "default": null,
             "title": "English Problem"
+          },
+          "english_shown": {
+            "default": false,
+            "title": "English Shown",
+            "type": "boolean"
           }
         },
         "required": [

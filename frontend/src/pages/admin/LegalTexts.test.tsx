@@ -244,13 +244,18 @@ describe('a version uploaded here', () => {
 });
 
 describe('the English of a version published here', () => {
-  function published(english: NonNullable<LegalOut['in_force'][number]['english']>, problem?: string) {
+  function published(
+    english: NonNullable<LegalOut['in_force'][number]['english']>,
+    problem?: string,
+    shown = english === 'machine' || english === 'hand',
+  ) {
     return legal({
       in_force: legal().in_force.map((text) => ({
         ...text,
         record_id: 3,
         english,
         english_problem: problem ?? null,
+        english_shown: shown,
       })),
     });
   }
@@ -299,6 +304,20 @@ describe('the English of a version published here', () => {
     await waitFor(() => {
       expect(calls.some((call) => call.method === 'DELETE')).toBe(true);
     });
+  });
+
+  it('a redo that gave up still offers to remove the English from before', async () => {
+    show({ [API]: { body: published('failed', 'DeepL: error 500', true) } });
+    const inForce = await screen.findByRole('region', { name: 'In force' });
+    expect(inForce).toHaveTextContent(
+      'Translating again gave up (DeepL: error 500); the English before is still shown',
+    );
+
+    await userEvent.click(within(inForce).getByRole('button', { name: 'English' }));
+    const dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).getByRole('button', { name: 'Remove the English' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Translate again' })).toBeInTheDocument();
   });
 
   it('without one, only Translate is offered', async () => {

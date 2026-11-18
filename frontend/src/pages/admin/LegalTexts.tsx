@@ -56,7 +56,7 @@ type Waiting = LegalOut['waiting'][number];
 type InForceText = LegalOut['in_force'][number];
 type EnglishState = NonNullable<InForceText['english']>;
 /** A version published here: what its English is, and the dialog to make it again or remove it. */
-type WithEnglish = Pick<InForceText, 'title' | 'record_id' | 'english' | 'english_problem'>;
+type WithEnglish = Pick<InForceText, 'title' | 'record_id' | 'english' | 'english_problem' | 'english_shown'>;
 
 /** While an English is being made, the page asks again this often. */
 const MAKING_EVERY_MS = 3000;
@@ -167,16 +167,20 @@ function NewVersion({ data }: { data: LegalOut }) {
   );
 }
 
-function englishLine(state: EnglishState, problem: string | null | undefined) {
+/** ``shown``: an English is there -- while it is made again, or after that gave up, the one before. */
+function englishLine(state: EnglishState, problem: string | null | undefined, shown: boolean | undefined) {
+  const why = problem ? ` (${problem})` : '';
   switch (state) {
     case 'machine':
       return 'English made by machine';
     case 'hand':
       return 'English by hand';
     case 'making':
+      if (shown) return `English being made again; the one before is shown until then${why}`;
       return problem ? `English being made; the last try failed: ${problem}` : 'English being made…';
     case 'failed':
-      return `No English: the translation gave up${problem ? ` (${problem})` : ''}`;
+      if (shown) return `Translating again gave up${why}; the English before is still shown`;
+      return `No English: the translation gave up${why}`;
     case 'none':
       return 'No English';
   }
@@ -187,7 +191,7 @@ function EnglishText({ text }: { text: WithEnglish }) {
   if (!text.english) return null;
   return (
     <Text size="sm" c={text.english === 'failed' ? 'var(--ja-danger)' : 'dimmed'}>
-      {englishLine(text.english, text.english_problem)}
+      {englishLine(text.english, text.english_problem, text.english_shown)}
     </Text>
   );
 }
@@ -215,11 +219,14 @@ function English({ text, onClose }: { text: WithEnglish; onClose: () => void }) 
     },
     onError: notifyFailed,
   });
-  const has = text.english === 'machine' || text.english === 'hand' || text.english === 'making';
+  // Shown, or on its way: it can be removed (a job not started yet is cancelled with it).
+  const removable = Boolean(text.english_shown) || text.english === 'making';
   return (
     <Modal opened onClose={onClose} title={`English: ${text.title}`}>
       <Stack gap="md">
-        {text.english ? <Text>{englishLine(text.english, text.english_problem)}.</Text> : null}
+        {text.english ? (
+          <Text>{englishLine(text.english, text.english_problem, text.english_shown)}.</Text>
+        ) : null}
         <Text size="sm" c="dimmed">
           Translate again makes it anew from the German, with the glossary as it is now; nothing translated
           before is used. Remove takes it away: the English page then says there is none, and it is not made
@@ -229,7 +236,7 @@ function English({ text, onClose }: { text: WithEnglish; onClose: () => void }) 
           <Button variant="default" onClick={onClose}>
             Cancel
           </Button>
-          {has ? (
+          {removable ? (
             <ConfirmButton
               confirmLabel="Yes, remove it"
               loading={remove.isPending}
@@ -247,7 +254,7 @@ function English({ text, onClose }: { text: WithEnglish; onClose: () => void }) 
               again.mutate();
             }}
           >
-            {has ? 'Translate again' : 'Translate'}
+            {text.english_shown ? 'Translate again' : 'Translate'}
           </ConfirmButton>
         </Group>
       </Stack>

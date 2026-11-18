@@ -56,6 +56,8 @@ class InForce(Model):
     #: Published here: its English (``legal_translation.english_state``). None: a file in legal/.
     english: EnglishState | None = None
     english_problem: str | None = None
+    #: An English is shown now -- while it is made again, or after that gave up, the one from before.
+    english_shown: bool = False
 
 
 class UpcomingVersionOut(Model):
@@ -90,6 +92,7 @@ class UpcomingVersionOut(Model):
     #: Published here for a later day: its English, as in ``InForce``. None: a draft, or a file.
     english: EnglishState | None = None
     english_problem: str | None = None
+    english_shown: bool = False
 
 
 class PdfJob(Model):
@@ -151,8 +154,8 @@ def _english(record):
     """``english`` and ``english_problem`` of a version published here."""
     if record is None or record.status != "published":
         return {}
-    state, problem = legal_translation.english_state(record)
-    return {"english": state, "english_problem": problem}
+    state, problem, shown = legal_translation.english_state(record)
+    return {"english": state, "english_problem": problem, "english_shown": shown}
 
 
 def _correcting(version):
@@ -361,6 +364,7 @@ class DraftDeletedOut(Model):
 class VersionEnglishOut(Model):
     english: EnglishState
     english_problem: str | None = None
+    english_shown: bool = False
 
 
 def _published(record_id):
@@ -377,8 +381,8 @@ def admin_legal_translate_again(record_id):
     record = _published(record_id)
     legal_translation.translate_again(current_user, record)
     db.session.commit()
-    state, problem = legal_translation.english_state(record)
-    return VersionEnglishOut(english=state, english_problem=problem)
+    state, problem, shown = legal_translation.english_state(record)
+    return VersionEnglishOut(english=state, english_problem=problem, english_shown=shown)
 
 
 @endpoint("DELETE", "/admin/legal/versions/<int:record_id>/english", response=VersionEnglishOut,
