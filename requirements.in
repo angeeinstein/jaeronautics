@@ -6,9 +6,9 @@ Flask==3.1.3
 python-dotenv==1.2.4
 Flask-SQLAlchemy==3.1.1
 Flask-Migrate==4.1.0
-PyMySQL==1.2.3
+PyMySQL==1.2.4
 Flask-Babel==4.0.0
-stripe==13.0.1
+stripe==13.2.1
 Flask-WTF==1.3.0
 email-validator==2.3.0
 gunicorn==26.2.0
@@ -22,7 +22,7 @@ cryptography==50.0.2
 # EPC ("GiroCode") QR codes for paying a team out from a banking app.
 segno==1.6.6
 # The legal texts are Markdown files (legal/), rendered without raw HTML.
-markdown-it-py==4.2.0
+markdown-it-py==4.3.0
 # ... each starting with YAML front matter (title, version, effective_from, status).
 PyYAML==6.0.3
 # ... and laid out as PDFs (aeronautics_members/legal_pdf.py). Needs Pango from the system
