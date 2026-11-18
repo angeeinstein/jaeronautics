@@ -24,7 +24,8 @@ urgent.
   Europe (Netherlands). Microsoft's data processing terms are part of Azure's
   standard terms.
 - The forum (Discourse) is a separate system, signed into through the portal,
-  hosted like the portal: a VM in Microsoft Azure behind Cloudflare Tunnel.
+  hosted like the portal: a VM in Microsoft Azure, West Europe, behind
+  Cloudflare Tunnel.
 - Language of the portal: English only.
 
 ## 2. Personal data the portal holds

@@ -79,8 +79,12 @@ update's warning of local changes only for the portal's own files).
   publish dialog's *Something gets worse for members*). No share of team
   sales. Attendance: no clause of its own -- one line in the cards clause
   (check in and out only oneself); hours or ECTS belong in a team's rules.
-- **Then:** the board approves; publish both from Admin › Legal texts (*Edit*
-  copies a file in), the terms with *Something gets worse*. Their English is
+- **Then:** the maintainer reads both; the privacy policy they approve
+  themselves (the board leaves it to them), the membership terms perhaps
+  after talking some details over with the board. Published from Admin ›
+  Legal texts on the live server after this branch is installed there --
+  *Edit* not pressed there before, or the old file is copied in (2026-11-18:
+  not pressed yet) -- the terms with *Something gets worse*. Their English is
   made by machine; the old hand-made English drafts are deleted.
 
 ### TDT's rules 2026.2: publish once the board approves (waiting)
