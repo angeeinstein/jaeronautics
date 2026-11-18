@@ -36,35 +36,6 @@ update's warning of local changes only for the portal's own files).
 
 ## Open
 
-### Machine English: a list that continues a sentence ("undertakes to, i) to …")
-
-- **Added:** 2026-11-07
-- **What:** in the English made by machine, a lead-in and the items that
-  finish its sentence read twice: Flight Team Ravens' rules § 2, "every
-  member undertakes to, / i) to behave respectfully …". The German is
-  "Mit dem Beitritt zum Team verpflichtet sich jedes Mitglied, / i) sich
-  gegenüber … zu verhalten;".
-- **Why it happens:** the page is translated paragraph by paragraph
-  (`services/legal_translation.py`, `translate_version`; the numbers `i)`
-  are taken off before and put back after), and each paragraph is
-  translated without the others, so neither half knows the other's
-  wording.
-- **Ideas, to be tried against DeepL first (on the test server, with a
-  short text -- characters are limited):**
-  1. A *run* -- a paragraph ending in `,` or `:` and the paragraphs after it
-     that start with a small letter (after the number) -- sent as one text,
-     then split back by its `<p>`s to put the numbers back; when the split
-     does not match, paragraph by paragraph as now. Open: whether DeepL,
-     with `tag_handling=html`, still translates each `<p>` on its own.
-  2. DeepL's `context` per paragraph: the lead-in (German) given to its
-     items -- one request per such paragraph, no characters counted. Less
-     certain to help: the lead-in's own English does not change.
-  3. Not wanted: rewriting the English afterwards ("to," → ":").
-- **Cost when built later:** only the paragraphs of such runs are
-  translated anew (their kept translations' key changes); the rest stay.
-- **Decided (2026-11-07):** after the translation branch is merged, in a
-  later batch -- not in PR #70, which holds no translation code.
-
 ### TDT's rules 2026.2: publish once the board approves (waiting)
 
 - **Added:** 2026-11-04
@@ -96,7 +67,9 @@ update's warning of local changes only for the portal's own files).
 - **What:** move `stripe` from 13.0.1 (API version `2025-09-30.clover`) to
   16.x (`2026-09-30.endive`). Dependabot's #63 did only the version and was
   closed: CI passed because the tests fake Stripe with plain dicts, but on
-  the server it would have broken payments.
+  the server it would have broken payments. #74 (16.1) was closed too, and
+  Dependabot no longer offers Stripe's majors (`.github/dependabot.yml`,
+  2026-11-14): this item is the reminder.
 - **The changes that matter here** (stripe-python's `CHANGELOG.md`, 15.0.0
   and 16.0.0):
   - 15.0.0: `StripeObject` is no longer a `dict` -- no `.get()`, `.items()`;

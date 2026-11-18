@@ -22,6 +22,12 @@ updates:
     groups:
       python:
         update-types: [minor, patch]
+    ignore:
+      # Stripe's new majors change how its objects behave, and the tests fake
+      # Stripe, so CI passes while payments would break on the server. Raised by
+      # hand: docs/todo.md, "Stripe's Python package" (#63 and #74 were closed).
+      - dependency-name: "stripe"
+        update-types: ["version-update:semver-major"]
 
   # The front end (frontend/package.json and its lock).
   - package-ecosystem: npm

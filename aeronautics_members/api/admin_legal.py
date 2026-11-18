@@ -23,7 +23,7 @@ from ..db_models import LegalTextVersion, db
 from ..permissions import Permission
 from ..services import NotFoundError, ServiceError, ValidationError
 from ..services import legal_texts as legal
-from ..services import legal_uploads
+from ..services import legal_translation, legal_uploads
 from ..services import teams as teams_service
 from ..services.audit import log_audit_event
 from ._core import Model, UtcDateTime, endpoint
@@ -32,6 +32,9 @@ TAG = "Admin"
 PERMISSIONS = [Permission.LEGAL_TEXTS]
 #: Publishing and correcting: a permission of its own.
 PUBLISHING = [Permission.LEGAL_TEXTS, Permission.LEGAL_PUBLISH]
+
+
+EnglishState = Literal["machine", "hand", "making", "failed", "none"]
 
 
 class InForce(Model):
@@ -50,6 +53,11 @@ class InForce(Model):
     record_id: int | None = None
     #: May still be corrected: uploaded here, published under 24 hours ago, accepted by nobody.
     correctable: bool = False
+    #: Published here: its English (``legal_translation.english_state``). None: a file in legal/.
+    english: EnglishState | None = None
+    english_problem: str | None = None
+    #: An English is shown now -- while it is made again, or after that gave up, the one from before.
+    english_shown: bool = False
 
 
 class UpcomingVersionOut(Model):
@@ -81,6 +89,10 @@ class UpcomingVersionOut(Model):
     tells_by_default: bool = False
     #: How many members that email would reach: all active ones, or the team's.
     members_to_tell: int = 0
+    #: Published here for a later day: its English, as in ``InForce``. None: a draft, or a file.
+    english: EnglishState | None = None
+    english_problem: str | None = None
+    english_shown: bool = False
 
 
 class PdfJob(Model):
@@ -138,13 +150,21 @@ def _person(user):
     return name or user.email
 
 
+def _english(record):
+    """``english`` and ``english_problem`` of a version published here."""
+    if record is None or record.status != "published":
+        return {}
+    state, problem, shown = legal_translation.english_state(record)
+    return {"english": state, "english_problem": problem, "english_shown": shown}
+
+
 def _correcting(version):
-    """``record_id`` and ``correctable`` of a version in force."""
+    """``record_id``, ``correctable`` and the English of a version in force."""
     if version.record_id is None:
         return {}
     record = db.session.get(LegalTextVersion, version.record_id)
     return {"record_id": version.record_id,
-            "correctable": legal_uploads.why_not_correctable(record) is None}
+            "correctable": legal_uploads.why_not_correctable(record) is None, **_english(record)}
 
 
 @endpoint("GET", "/admin/legal", response=LegalOut, permissions=PERMISSIONS, tag=TAG)
@@ -193,7 +213,8 @@ def admin_legal():
                 uploaded_by=_person(record.uploaded_by) if record else None,
                 approved_by=version.approved_by, approved_on=version.approved_on,
                 document=slug, team=team, tells_by_default=legal_uploads.tells_by_default(slug, team),
-                members_to_tell=_members_to_tell(slug, team) if record and record.status == "draft" else 0))
+                members_to_tell=_members_to_tell(slug, team) if record and record.status == "draft" else 0,
+                **_english(record)))
 
     orphans = [f"legal/teams/{slug}/: no team has this short name, so these rules are shown nowhere."
                for slug in legal.teams_with_texts() if slug not in names]
@@ -338,6 +359,40 @@ def admin_legal_correct(record_id, files):
 
 class DraftDeletedOut(Model):
     deleted: bool
+
+
+class VersionEnglishOut(Model):
+    english: EnglishState
+    english_problem: str | None = None
+    english_shown: bool = False
+
+
+def _published(record_id):
+    record = db.session.get(LegalTextVersion, record_id)
+    if record is None or record.translation_of_id is not None:
+        raise NotFoundError("No such version.")
+    return record
+
+
+@endpoint("POST", "/admin/legal/versions/<int:record_id>/english", response=VersionEnglishOut, permissions=PUBLISHING,
+          tag=TAG)
+def admin_legal_translate_again(record_id):
+    """Make a published version's English again, from scratch, in the background."""
+    record = _published(record_id)
+    legal_translation.translate_again(current_user, record)
+    db.session.commit()
+    state, problem, shown = legal_translation.english_state(record)
+    return VersionEnglishOut(english=state, english_problem=problem, english_shown=shown)
+
+
+@endpoint("DELETE", "/admin/legal/versions/<int:record_id>/english", response=VersionEnglishOut,
+          permissions=PUBLISHING, tag=TAG)
+def admin_legal_remove_english(record_id):
+    """Take a published version's English away; its English page then says there is none."""
+    record = _published(record_id)
+    legal_translation.remove_english(current_user, record)
+    db.session.commit()
+    return VersionEnglishOut(english="none")
 
 
 @endpoint("DELETE", "/admin/legal/drafts/<int:record_id>", response=DraftDeletedOut, permissions=PERMISSIONS, tag=TAG)

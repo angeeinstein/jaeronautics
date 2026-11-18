@@ -89,6 +89,24 @@ be live translated from German."
   in `tests/test_legal_uploads.py` and `tests/test_legal_editor.py`, the pages'
   `*.test.tsx`.
 
+## Added afterwards (2026-11-07)
+
+- **Translate again / Remove the English** per version published in the
+  portal (Admin › Legal texts, `legal.publish`), asked for by the
+  maintainer: "a button to scrap an English translation or redo it". Again:
+  the kept translations of its paragraphs are forgotten, so the services are
+  asked anew -- also the way to replace an English a fallback made, or a
+  hand-made one from before. Removed: not made again by itself.
+- **A sentence over several paragraphs** ("verpflichtet sich jedes Mitglied,"
+  / "i) sich … zu verhalten;"): each paragraph is still translated on its
+  own, and DeepL is told of the other as context (not counted). Tried first
+  (2026-11-17): sent as one text -- DeepL ran the paragraphs into each other
+  ("each membercommits to"), wrote "his conduct" again and missed the glossary
+  ("club"); so not that. If the doubled "to" stays, it is accepted: a blemish,
+  where the other way made mistakes.
+- **Setup guide** for both services: `docs/maintenance.md`, "Setting up a
+  translation service".
+
 ## Not built
 
 - Keeping text typed in the last seconds before an editor lost its lock

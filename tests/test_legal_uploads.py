@@ -78,7 +78,7 @@ class TestUploadingAndPublishing:
         from aeronautics_members.services import outbox, translation
 
         monkeypatch.setattr(translation, "translate",
-                            lambda sent, as_html=True: [f"{text} [en]" for text in sent])
+                            lambda sent, as_html=True, near=None: [f"{text} [en]" for text in sent])
         record = legal_uploads.upload_draft(boss, _file(body="## § 1 Name\n\nDer Verein heißt."))
         db.session.commit()
         _publish(boss, record)
@@ -128,7 +128,7 @@ class TestUploadingAndPublishing:
         assert saved.status_code == 200
         assert item.status == ExternalWorkItem.STATUS_PENDING and item.attempts == 0
         monkeypatch.setattr(translation, "translate",
-                            lambda sent, as_html=True: [f"{text} [en]" for text in sent])
+                            lambda sent, as_html=True, near=None: [f"{text} [en]" for text in sent])
         outbox.process_pending()
         assert legal.translation(legal.current_version("statutes")).machine_translated
 
@@ -147,7 +147,7 @@ class TestUploadingAndPublishing:
         from aeronautics_members.services import outbox, translation
 
         monkeypatch.setattr(translation, "translate",
-                            lambda sent, as_html=True: [f"{text} [en]" for text in sent])
+                            lambda sent, as_html=True, near=None: [f"{text} [en]" for text in sent])
         later = get_membership_today() + timedelta(days=30)
         record = legal_uploads.upload_draft(boss, _file())
         db.session.commit()
@@ -492,3 +492,143 @@ class TestTellingTheMembers:
         _publish(boss, record)
 
         assert legal.current_version("statutes").record_id == record.id and self._mailings() == []
+
+
+class TestTheEnglishOfAVersion:
+    """Admin › Legal texts: a published version's English made again from scratch, or taken away."""
+
+    @pytest.fixture
+    def services(self, monkeypatch):
+        # Below the kept translations: what reaches a service is counted, in rounds.
+        from aeronautics_members.services import translation
+        from aeronautics_members.services.settings import set_setting_value
+
+        set_setting_value(translation.DEEPL_KEY, "key:fx")
+        state = {"round": 1, "sent": []}
+
+        def by_a_service(asked, as_html, current, only=None, near=""):
+            state["sent"] += asked
+            return [f"{text} [round {state['round']}]" for text in asked], "deepl"
+
+        monkeypatch.setattr(translation, "_by_a_service", by_a_service)
+        return state
+
+    def _published(self, boss):
+        from aeronautics_members.services import outbox
+
+        record = legal_uploads.upload_draft(boss, _file(body="## § 1 Name\n\nDer Verein heißt."))
+        db.session.commit()
+        _publish(boss, record)
+        outbox.process_pending()
+        return record
+
+    def _english_html(self):
+        return str(legal.render(legal.translation(legal.current_version("statutes")))["html"])
+
+    def _listed(self, client):
+        [text] = [t for t in client.get("/api/v1/admin/legal").get_json()["in_force"] if t["record_id"]]
+        return text
+
+    def test_made_again_from_scratch(self, client, boss, services):
+        from aeronautics_members.services import outbox
+
+        record = self._published(boss)
+        _login(client, boss.id)
+        assert "[round 1]" in self._english_html() and self._listed(client)["english"] == "machine"
+        services["round"], services["sent"] = 2, []
+
+        asked = client.post(f"/api/v1/admin/legal/versions/{record.id}/english")
+        assert asked.status_code == 200 and asked.get_json()["english"] == "making"
+        assert self._listed(client)["english"] == "making"
+        outbox.process_pending()
+
+        assert "[round 2]" in self._english_html() and "[round 1]" not in self._english_html()
+        assert len(services["sent"]) == 3  # both paragraphs and the title: nothing kept was used
+        assert self._listed(client)["english"] == "machine"
+        assert db.session.query(AuditLog).filter_by(event_type="legal_english_translated_again").count() == 1
+
+    def test_taken_away_and_not_made_again_by_itself(self, client, boss, services):
+        from aeronautics_members.services import outbox
+
+        record = self._published(boss)
+        _login(client, boss.id)
+
+        removed = client.delete(f"/api/v1/admin/legal/versions/{record.id}/english")
+        outbox.process_pending()
+
+        assert removed.status_code == 200 and removed.get_json()["english"] == "none"
+        assert legal.translation(legal.current_version("statutes")) is None
+        assert self._listed(client)["english"] == "none"
+        [entry] = db.session.query(AuditLog).filter_by(event_type="legal_english_removed").all()
+        assert "[round 1]" in entry.before_state["body"]
+
+    def test_given_up_shown_with_why_and_tried_again(self, client, boss, services):
+        from aeronautics_members.db_models import ExternalWorkItem
+        from aeronautics_members.services import outbox
+
+        record = legal_uploads.upload_draft(boss, _file())
+        db.session.commit()
+        _publish(boss, record)
+        [item] = db.session.query(ExternalWorkItem).filter_by(kind="legal_translate").all()
+        item.status, item.attempts, item.last_error = ExternalWorkItem.STATUS_FAILED, 5, "DeepL: error 500"
+        db.session.commit()
+        _login(client, boss.id)
+
+        listed = self._listed(client)
+        assert (listed["english"], listed["english_problem"]) == ("failed", "DeepL: error 500")
+
+        client.post(f"/api/v1/admin/legal/versions/{record.id}/english")
+        outbox.process_pending()
+        assert self._listed(client)["english"] == "machine"
+
+    def test_a_redo_given_up_the_english_from_before_still_shown_and_removable(self, client, boss, services):
+        from aeronautics_members.db_models import ExternalWorkItem
+
+        record = self._published(boss)
+        _login(client, boss.id)
+        client.post(f"/api/v1/admin/legal/versions/{record.id}/english")
+        [item] = db.session.query(ExternalWorkItem).filter_by(kind="legal_translate", status="pending").all()
+        item.status, item.attempts, item.last_error = ExternalWorkItem.STATUS_FAILED, 5, "DeepL: error 500"
+        db.session.commit()
+
+        listed = self._listed(client)
+        assert (listed["english"], listed["english_shown"]) == ("failed", True)
+        assert "[round 1]" in self._english_html()  # still there for the members
+
+        assert client.delete(f"/api/v1/admin/legal/versions/{record.id}/english").status_code == 200
+        assert legal.translation(legal.current_version("statutes")) is None
+        assert self._listed(client)["english"] == "none"
+
+    def test_not_removed_while_being_made(self, client, boss, services):
+        from aeronautics_members.db_models import ExternalWorkItem
+
+        record = self._published(boss)
+        _login(client, boss.id)
+        client.post(f"/api/v1/admin/legal/versions/{record.id}/english")
+        [item] = db.session.query(ExternalWorkItem).filter_by(kind="legal_translate", status="pending").all()
+        item.status = ExternalWorkItem.STATUS_PROCESSING  # the worker has it
+        db.session.commit()
+
+        refused = client.delete(f"/api/v1/admin/legal/versions/{record.id}/english")
+
+        assert refused.status_code == 409 and refused.get_json()["error"]["code"] == "legal_english_busy"
+        assert legal.translation(legal.current_version("statutes")) is not None
+
+    def test_only_for_whoever_may_publish(self, client, boss, services, monkeypatch):
+        from aeronautics_members import permissions
+
+        record = self._published(boss)
+        writer = _staff("writer@example.org", "admin")
+        monkeypatch.setitem(permissions.ROLE_PERMISSIONS, "admin",
+                            permissions.ROLE_PERMISSIONS["admin"] - {permissions.Permission.LEGAL_PUBLISH})
+        _login(client, writer.id)
+
+        assert client.post(f"/api/v1/admin/legal/versions/{record.id}/english").status_code == 403
+        assert client.delete(f"/api/v1/admin/legal/versions/{record.id}/english").status_code == 403
+
+    def test_not_of_a_draft(self, client, boss, services):
+        record = legal_uploads.upload_draft(boss, _file())
+        db.session.commit()
+        _login(client, boss.id)
+
+        assert client.post(f"/api/v1/admin/legal/versions/{record.id}/english").status_code == 409
