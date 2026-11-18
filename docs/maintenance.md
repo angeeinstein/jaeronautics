@@ -2680,7 +2680,9 @@ ruff check .
 
 `.github/workflows/ci.yml` runs on every push and pull request, with the
 versions the servers run (Ubuntu 24.04, pinned; Python 3.12; Node.js 24).
-The jobs run side by side:
+Runs on the same commit wait for each other (a push to a branch with a pull
+request starts two): the second finds the first one's mark and skips the
+tests. The jobs run side by side:
 
 - **tested** -- first, seconds: whether these very files passed CI already
   (below). Only if so are the tests skipped -- if this job itself fails,
@@ -2716,10 +2718,16 @@ The jobs run side by side:
   repository; one that fails does not fail the commit — the installer then
   builds it itself.
 
-**Files tested once.** Git names a commit's files by a hash of all of them
-(`git rev-parse HEAD^{tree}`); the same files, byte for byte, have the same
-hash. A run that passes leaves a mark with it, and a run on the same files
-finds it and skips the tests -- they would test exactly what was tested.
+**Files tested once.** A run names a commit's files by a hash of all of
+them -- of `git ls-tree -r HEAD`, leaving out `docs/` but for the two
+documents the portal reads (`microsoft-mail-setup.md`, `device-protocol.md`);
+the same files, byte for byte, have the same hash. A run that passes leaves a
+mark with it, and a run on the same files finds it and skips the tests --
+they would test exactly what was tested. So a commit that only changes the
+to-do list, a plan or a note in `docs/` is not tested again (GitHub Actions'
+minutes cost money once the month's free ones are used up, 2026-11-18). A
+document the portal comes to read belongs in that exception, in
+`ci.yml`'s job `tested`.
 This is what makes the run on `main` after merging a pull request take about
 a minute: the pull request's run tested the files as merged. If `main`
 changed in between, the merged files differ and everything runs. Only marks

@@ -130,3 +130,9 @@ words: it will not be there later.
   possibility; it is kept in mind, not designed for.
 - No model names, credentials or members' personal data in commits, code or
   documents.
+- GitHub Actions minutes cost money once the month's free ones are used up
+  (2026-11-18: "we may need to be a bit more conservative and not let GitHub
+  Actions run for every small thing"). Commit as often as useful, but push a
+  branch when it is ready to be tried or merged -- not after every commit;
+  the checks run locally first. Changes only to `docs/` skip CI's tests by
+  themselves (`docs/maintenance.md`, "Files tested once").
