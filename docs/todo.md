@@ -36,6 +36,47 @@ update's warning of local changes only for the portal's own files).
 
 ## Open
 
+### Privacy policy and membership terms drafts: brought up to date for the board
+
+- **Added:** 2026-11-18
+- **Being built** on `claude/legal-drafts-review`. The drafts
+  `legal/{privacy-policy,membership-terms}/de/2026-10-08.md` (still the
+  files; not edited in the portal yet) were checked against the portal; then
+  approved by the board and published from Admin › Legal texts.
+- **Privacy policy, decided (2026-11-18):**
+  - Add: the readers' tap log (90 days, time, reader, the card's last
+    characters, the answer -- a first name, a balance, a refusal; admins).
+  - Cloudflare as it is: every request to the portal **and the forum**
+    passes through Cloudflare Tunnel, decrypted and re-encrypted; its
+    security cookie. The forum runs like the portal, on a VM in Azure behind
+    Cloudflare Tunnel (the maintainer).
+  - Cloudflare Web Analytics is **off** ("it won't offer much anyways"): not
+    named; its allowance leaves the security policy
+    (`content_security.py`).
+  - Browser storage besides the cookie (a tab's random id; a token while a
+    card is linked).
+  - § 22 profile pictures shown to "the other members": **kept** -- the forum
+    shows them to everyone, and the portal may one day too.
+  - Mailings that cannot be unsubscribed: also the notice of a new version
+    of the legal texts. Erasure (§ 41) and the export (§ 44) as built now.
+  - § 46: the texts live in the portal (`/legal`, every version), members
+    are emailed when one is published.
+- **Membership terms, decided (2026-11-18):**
+  - Changes: members are **told, not asked** -- silence counts as agreeing
+    after a time, and whoever does not agree can leave ("I can't keep a
+    separate version of the portal for users that don't consent ... They
+    would then have to cancel their membership"). Replaces § 36.3 "no
+    deemed consent" and the "consent obtained separately" in §§ 20, 36.1.
+  - A short clause on cards (own cards, purchases charged to the credit,
+    switching a lost one off, admins may block).
+  - § 28: **teams pay Stripe's fees** (the setting): their fees count less
+    Stripe's fee.
+  - § 32: also the association's news (unsubscribable) and notices of new
+    versions of the legal texts.
+- **Open questions:** see the answer of 2026-11-18 in the conversation --
+  how long before a change takes effect, what an objecting member gets, the
+  association's share of team sales, attendance in the terms.
+
 ### TDT's rules 2026.2: publish once the board approves (waiting)
 
 - **Added:** 2026-11-04

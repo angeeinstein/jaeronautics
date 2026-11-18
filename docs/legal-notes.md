@@ -23,8 +23,8 @@ urgent.
 - Hosted on a server of the association in Microsoft Azure, region West
   Europe (Netherlands). Microsoft's data processing terms are part of Azure's
   standard terms.
-- The forum (Discourse) is a separate system, signed into through the portal.
-  **To-do:** note where it is hosted.
+- The forum (Discourse) is a separate system, signed into through the portal,
+  hosted like the portal: a VM in Microsoft Azure behind Cloudflare Tunnel.
 - Language of the portal: English only.
 
 ## 2. Personal data the portal holds
@@ -289,7 +289,7 @@ Rev 1 (17.03.2019) and Rules of Procedure Rev 3 (26.02.2020). Where they no long
 - **Change of status** (Statutes § 7): automatic move to alumni after
   studying, change by written request. The portal: by a change request,
   decided by an admin.
-- **Invitations to the general meeting** (Statutes § 9 (3)): by email to the
+- **Invitations to the general meeting** (Statutes § 10 (3)): by email to the
   address given — the portal holds that address (private email).
 - The signup checkbox names and links the statutes, rules of procedure,
   membership terms and privacy policy, which are accepted together. Since
@@ -331,8 +331,8 @@ Collected so nothing is forgotten; none of it is urgent.
 **Portal**
 - [ ] Check Stripe's "upcoming renewal" and "failed payment" emails are on
       (live and test), and note the reminder's lead time for the terms.
-- [ ] Note where the forum is hosted.
-- [ ] Check whether Cloudflare Web Analytics is on (section 3).
+- [x] Note where the forum is hosted (section 1).
+- [x] Cloudflare Web Analytics is off (2026-11-18, section 3).
 
 ## 11. For the impressum
 
