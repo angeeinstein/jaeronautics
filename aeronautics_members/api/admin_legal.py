@@ -87,6 +87,8 @@ class UpcomingVersionOut(Model):
     markdown_url: str = ""
     #: Publishing emails the members unless unticked: the texts accepted at signup, a team's rules.
     tells_by_default: bool = False
+    #: A version may make something worse, with 4 weeks to object (the membership terms).
+    objection_possible: bool = False
     #: How many members that email would reach: all active ones, or the team's.
     members_to_tell: int = 0
     #: Published here for a later day: its English, as in ``InForce``. None: a draft, or a file.
@@ -213,6 +215,7 @@ def admin_legal():
                 uploaded_by=_person(record.uploaded_by) if record else None,
                 approved_by=version.approved_by, approved_on=version.approved_on,
                 document=slug, team=team, tells_by_default=legal_uploads.tells_by_default(slug, team),
+                objection_possible=legal_uploads.objection_possible(slug, team),
                 members_to_tell=_members_to_tell(slug, team) if record and record.status == "draft" else 0,
                 **_english(record)))
 
@@ -333,6 +336,9 @@ class PublishIn(Model):
     tell: bool | None = None
     #: What changed, a few lines for that email (Markdown).
     summary: str | None = None
+    #: Something gets worse for members: it applies 4 weeks later at the earliest, and the email
+    #: says how to object (``objection_possible`` texts only).
+    worse: bool = False
 
 
 @endpoint("POST", "/admin/legal/drafts/<int:record_id>/publish", response=UploadedOut, body=PublishIn,
@@ -342,7 +348,7 @@ def admin_legal_publish(record_id, body):
     a published version is only ever corrected, within 24 hours, while nobody has accepted it."""
     record = legal_uploads.publish(current_user, record_id, effective_from=body.effective_from,
                                    approved_by=body.approved_by, approved_on=body.approved_on,
-                                   tell=body.tell, summary=body.summary)
+                                   tell=body.tell, summary=body.summary, worse=body.worse)
     db.session.commit()
     return UploadedOut(record_id=record.id)
 

@@ -154,9 +154,26 @@ def tells_by_default(document, team_slug):
     return bool(text and text.accepted_at_signup)
 
 
-def publish(actor, record_id, *, effective_from, approved_by=None, approved_on=None, tell=None, summary=None):
+#: A change that makes something worse for members applies at the earliest this long after it is
+#: published: the time they have to object, and leave (membership terms, "Änderungen").
+OBJECTION_PERIOD = timedelta(days=28)
+
+
+def objection_possible(document, team_slug):
+    """Whether a version of this text may make something worse for members, with the time to object:
+    the membership terms -- their own clause on changes says so."""
+    return team_slug is None and document == "membership-terms"
+
+
+def publish(actor, record_id, *, effective_from, approved_by=None, approved_on=None, tell=None, summary=None,
+            worse=False):
     """Publish a draft: today is its version's day; it applies from ``effective_from``. ``tell``: email
-    the members (None: as ``tells_by_default``), with ``summary`` -- what changed -- in it."""
+    the members (None: as ``tells_by_default``), with ``summary`` -- what changed -- in it.
+
+    ``worse``: something gets worse for members (only where ``objection_possible``). It then applies
+    no sooner than ``OBJECTION_PERIOD`` from now, the members are always told, and the email says
+    that they can leave before that day -- the unused part of their fees refunded on request -- and
+    that otherwise it applies to them from then."""
     record = _german_record(record_id)
     if record.status != "draft":
         raise ConflictError("This version is published already.", code="legal_published_already")
@@ -165,6 +182,17 @@ def publish(actor, record_id, *, effective_from, approved_by=None, approved_on=N
         raise ValidationError("A version cannot apply from a day before it is published.",
                               code="legal_effective_past", details={"fields": {
                                   "effective_from": "Today or later."}})
+    if worse:
+        if not objection_possible(record.document, record.team_slug):
+            raise ValidationError("Only the membership terms are published with a time to object.",
+                                  code="legal_objection_not_offered")
+        earliest = today + OBJECTION_PERIOD
+        if effective_from < earliest:
+            raise ValidationError(
+                "A change that makes something worse applies 4 weeks after it is published at the earliest.",
+                code="legal_effective_too_soon", details={"fields": {
+                    "effective_from": f"{earliest.strftime('%d.%m.%Y')} or later."}})
+        tell = True
     approved_by = (approved_by or "").strip() or None
     if approved_by is not None and len(approved_by) > APPROVED_BY_MAX:
         raise ValidationError("Too long.", details={"fields": {"approved_by": f"At most {APPROVED_BY_MAX} characters."}})
@@ -200,13 +228,13 @@ def publish(actor, record_id, *, effective_from, approved_by=None, approved_on=N
     record.approved_by, record.approved_on = approved_by, approved_on
     record.published_at, record.published_by = now, actor
     legal_translation.queue(record, "published")
-    told = tell_the_members(actor, record, summary) if tell else None
+    told = tell_the_members(actor, record, summary, worse=worse) if tell else None
     log_audit_event("legal", "legal_text_published", actor_user=actor, target_user=actor,
                     metadata={"document": record.document, "team": record.team_slug, "record": record.id,
                               "title": record.title, "version": today.isoformat(),
                               "effective_from": effective_from.isoformat(), "approved_by": approved_by,
                               "approved_on": approved_on.isoformat() if approved_on else None,
-                              "members_told": told.recipient_count if told else 0,
+                              "worse": bool(worse), "members_told": told.recipient_count if told else 0,
                               "mailing": told.id if told else None})
     if record.team_slug is not None:
         _tell_the_leads(record)
@@ -341,10 +369,11 @@ def members_to_tell(document, team_slug):
     return mailings.count_for(None, mailings.TEAM, team=team)["recipients"] if team is not None else 0
 
 
-def tell_the_members(actor, record, summary=None):
+def tell_the_members(actor, record, summary=None, *, worse=False):
     """A new version published: the members it applies to are told, by email -- which text, from
-    which day, who approved it, what changed, and where to read it. Nothing to accept. Returns the
-    mailing (services/mailings.py), or None when there is nobody to tell."""
+    which day, who approved it, what changed, and where to read it. Nothing to accept; with ``worse``,
+    how to object by leaving before that day. Returns the mailing (services/mailings.py), or None
+    when there is nobody to tell."""
     from ..security_utils import build_public_url
     from . import mailings
     from .membership import format_date_display
@@ -367,8 +396,16 @@ def tell_the_members(actor, record, summary=None):
              + (f", {approval}." if approval else "."), ""]
     if summary:
         lines += ["What changed:", "", summary, ""]
-    lines += [f"[Read it]({page}) · [PDF]({pdf})", "",
-              f"There is nothing you need to do: from {day} this version applies to {who}."]
+    lines += [f"[Read it]({page}) · [PDF]({pdf})", ""]
+    if worse:
+        from ..config import CONTACT_EMAIL as contact
+
+        lines += ["Some of these changes make something worse for members. If you do not agree, you can "
+                  f"leave the association before {day}: write to {contact}. The unused part of your "
+                  "membership fee and of your team fees is then refunded on request.", "",
+                  f"If you do not object, this version applies to you from {day}."]
+    else:
+        lines += [f"There is nothing you need to do: from {day} this version applies to {who}."]
     ending = f": a new version from {day}"
     title = record.title if len(record.title) + len(ending) <= mailings.SUBJECT_MAX else (
         record.title[:mailings.SUBJECT_MAX - len(ending) - 1].rstrip() + "…")

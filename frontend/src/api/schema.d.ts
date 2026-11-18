@@ -6503,6 +6503,11 @@ export interface components {
             mode: "draft" | "correcting";
             /** Name */
             name: string;
+            /**
+             * Objection Possible
+             * @default false
+             */
+            objection_possible?: boolean;
             /** Opened Snapshot Id */
             opened_snapshot_id: number;
             /** Pdf Url */
@@ -9052,6 +9057,11 @@ export interface components {
              * @default null
              */
             tell?: boolean | null;
+            /**
+             * Worse
+             * @default false
+             */
+            worse?: boolean;
         };
         /** QueueItem */
         QueueItem: {
@@ -10783,6 +10793,11 @@ export interface components {
              * @default 0
              */
             members_to_tell?: number;
+            /**
+             * Objection Possible
+             * @default false
+             */
+            objection_possible?: boolean;
             /** Pdf Url */
             pdf_url: string;
             /**

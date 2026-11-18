@@ -73,9 +73,15 @@ update's warning of local changes only for the portal's own files).
     Stripe's fee.
   - § 32: also the association's news (unsubscribable) and notices of new
     versions of the legal texts.
-- **Open questions:** see the answer of 2026-11-18 in the conversation --
-  how long before a change takes effect, what an objecting member gets, the
-  association's share of team sales, attendance in the terms.
+- **Also decided (2026-11-18):** changes to the terms of two kinds -- none
+  worse: from the day set; something worse: 4 weeks, objecting means leaving,
+  the unused fees refunded on request by the treasurer, by hand (built: the
+  publish dialog's *Something gets worse for members*). No share of team
+  sales. Attendance: no clause of its own -- one line in the cards clause
+  (check in and out only oneself); hours or ECTS belong in a team's rules.
+- **Then:** the board approves; publish both from Admin › Legal texts (*Edit*
+  copies a file in), the terms with *Something gets worse*. Their English is
+  made by machine; the old hand-made English drafts are deleted.
 
 ### TDT's rules 2026.2: publish once the board approves (waiting)
 

@@ -432,7 +432,18 @@ type Publishable = Pick<
   | 'tells_by_default'
   | 'members_to_tell'
   | 'team_name'
+  | 'objection_possible'
 >;
+
+/** A change that makes something worse applies this many days after publishing at the earliest. */
+const OBJECTION_DAYS = 28;
+
+/** ``day`` (YYYY-MM-DD) and ``days`` after it, as YYYY-MM-DD. */
+function daysAfter(day: string, days: number) {
+  const moment = new Date(`${day}T12:00:00Z`);
+  moment.setUTCDate(moment.getUTCDate() + days);
+  return moment.toISOString().slice(0, 10);
+}
 
 export function Publish({
   text,
@@ -455,6 +466,9 @@ export function Publish({
   const [approvedOn, setApprovedOn] = useState(text.approved_on ?? '');
   const [tell, setTell] = useState(Boolean(text.tells_by_default));
   const [summary, setSummary] = useState('');
+  // Something gets worse for members: 4 weeks to object, and they are always told.
+  const [worse, setWorse] = useState(false);
+  const earliest = worse ? daysAfter(first, OBJECTION_DAYS) : first;
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [problems, setProblems] = useState<string[]>([]);
   const approvedBy = approver === 'none' ? null : approver === 'other' ? other.trim() || null : approver;
@@ -467,8 +481,9 @@ export function Publish({
             effective_from: effectiveFrom,
             approved_by: approvedBy,
             approved_on: approvedBy || approvedOn ? approvedOn || null : null,
-            tell,
-            summary: tell ? summary.trim() || null : null,
+            tell: tell || worse,
+            summary: tell || worse ? summary.trim() || null : null,
+            worse,
           },
         }),
       ),
@@ -496,7 +511,7 @@ export function Publish({
         <DayInput
           label="Applies from"
           required
-          minDate={first}
+          minDate={earliest}
           value={effectiveFrom}
           onChange={setEffectiveFrom}
           error={errors.effective_from}
@@ -547,17 +562,35 @@ export function Publish({
           {approvedBy && !APPROVERS.includes(approvedBy) ? ` (${approvedBy})` : ''}
         </Text>
         <Stack gap={6}>
+          {text.objection_possible ? (
+            <Checkbox
+              label="Something gets worse for members"
+              description={`They may object: it applies from ${formatDate(daysAfter(first, OBJECTION_DAYS))} at the earliest, and the email says they can leave before then, with the unused part of their fees refunded on request.`}
+              checked={worse}
+              onChange={(event) => {
+                const checked = event.currentTarget.checked;
+                setWorse(checked);
+                const soonest = daysAfter(first, OBJECTION_DAYS);
+                if (checked && effectiveFrom < soonest) setEffectiveFrom(soonest);
+              }}
+            />
+          ) : null}
           <Checkbox
             label={`Tell the members by email (${String(text.members_to_tell ?? 0)}${
               text.team_name ? `, the members of ${text.team_name}` : ', all active members'
             })`}
-            description="Told, not asked: from the day it applies, this version applies to everybody."
-            checked={tell}
+            description={
+              worse
+                ? 'Always, when something gets worse.'
+                : 'Told, not asked: from the day it applies, this version applies to everybody.'
+            }
+            checked={tell || worse}
+            disabled={worse}
             onChange={(event) => {
               setTell(event.currentTarget.checked);
             }}
           />
-          {tell ? (
+          {tell || worse ? (
             <Textarea
               label="What changed (optional)"
               description="A few lines for the email, beside the link to the text."

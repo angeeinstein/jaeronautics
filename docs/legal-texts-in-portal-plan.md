@@ -159,12 +159,23 @@ be in force). Publishing sends the email at once:
   links to the text and its PDF. Nothing to accept.
 - No fixed waiting period (the maintainer: not weeks before the portal can
   be updated). The privacy policy is information, not a contract: it may
-  apply from the day it is published. The membership terms say how they
-  change (§ 36 of the draft of 08.10.): material changes told "rechtzeitig"
-  before they apply, by email or in the portal; changes for a coming fee
-  period apply from that period (fees: § 11); silence is not consent where
-  consent is needed. So: publish material changes to them a little ahead of
-  their day. Not legal advice -- the board decides what is material.
+  apply from the day it is published.
+- **The membership terms: two kinds of change** (decided 2026-11-18, § 37 of
+  the revised draft). One that makes nothing worse for members -- rules of a
+  new feature, which bind only who uses it, a clarification, what the law
+  asks -- applies from the day set, at once if wanted. One that makes
+  something worse is published with *Something gets worse for members*: it
+  applies **4 weeks** later at the earliest (the dialog and the server refuse
+  sooner), the members are always told, and the email says they can leave
+  before that day -- the unused part of their membership and team fees
+  refunded on request, by the treasurer in Stripe's dashboard, nothing built
+  for it -- and that otherwise it applies to them from then. The maintainer:
+  "I can't keep a separate version of the portal ... for users that don't
+  consent ... They would then have to cancel their membership." Four weeks,
+  not shorter: a deemed consent needs a reasonable time to object (consumer
+  law, KSchG § 6 (1) 2), or the clause may fall altogether. Fees keep § 11
+  (14 days before the renewal). Not legal advice. The revision introducing
+  this clause is itself best published that way, once.
 
 ## Where it is built
 

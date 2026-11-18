@@ -23,10 +23,10 @@ from flask import request
 #: The policy, directive by directive. ``{nonce}`` is the answer's nonce.
 DIRECTIVES = (
     ("default-src", "'self'"),
-    ("script-src", "'self' https://static.cloudflareinsights.com"),
+    ("script-src", "'self'"),
     ("style-src", "'self' {nonce}"),
     ("img-src", "'self' data:"),
-    ("connect-src", "'self' https://cloudflareinsights.com"),
+    ("connect-src", "'self'"),
     ("object-src", "'none'"),
     ("base-uri", "'self'"),
     ("form-action", "'self' https://checkout.stripe.com https://billing.stripe.com"),

@@ -143,10 +143,8 @@ def test_no_external_asset_origins_in_templates():
 # Third-party origins the policy allows on purpose, each with the reason. Any
 # origin not listed here fails the test below, so a CDN cannot creep back in
 # without someone deciding to add it.
-DELIBERATE_EXTERNAL_ORIGINS = {
-    "https://static.cloudflareinsights.com": "Cloudflare Web Analytics beacon, injected by the tunnel",
-    "https://cloudflareinsights.com": "where that beacon reports back",
-}
+# Cloudflare Web Analytics is off (2026-11-18, docs/legal-notes.md): its beacon is not allowed.
+DELIBERATE_EXTERNAL_ORIGINS = {}
 
 
 def test_csp_allows_no_unrecorded_external_origin():
