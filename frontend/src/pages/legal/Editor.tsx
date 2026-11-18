@@ -644,6 +644,7 @@ function Workspace({ data, onReload }: { data: EditorOut; onReload: () => void }
             approved_on: data.approved_on,
             tells_by_default: data.tells_by_default,
             members_to_tell: data.members_to_tell,
+            objection_possible: data.objection_possible,
             team_name: data.team_name,
           }}
           onClose={() => {

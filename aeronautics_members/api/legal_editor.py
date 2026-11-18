@@ -154,6 +154,7 @@ class EditorOut(Model):
     lock: LockOut
     #: Publishing emails the members unless unticked, and how many it would reach.
     tells_by_default: bool = False
+    objection_possible: bool = False
     members_to_tell: int = 0
 
 
@@ -201,6 +202,7 @@ def _editor_out(record, opened):
         approved_by=record.approved_by, approved_on=record.approved_on, effective_from=record.effective_from,
         lock=_lock_out(record),
         tells_by_default=legal_uploads.tells_by_default(record.document, record.team_slug),
+        objection_possible=legal_uploads.objection_possible(record.document, record.team_slug),
         members_to_tell=legal_uploads.members_to_tell(record.document, record.team_slug)
         if record.status == "draft" and current_user.can(Permission.LEGAL_PUBLISH) else 0)
 

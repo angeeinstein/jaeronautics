@@ -453,6 +453,38 @@ class TestTellingTheMembers:
         [entry] = db.session.query(AuditLog).filter_by(event_type="legal_text_published").all()
         assert entry.event_metadata["members_told"] == 1
 
+    def test_something_worse_four_weeks_ahead_and_how_to_object(self, boss):
+        member = _association_member("member@example.org")
+        record = legal_uploads.upload_draft(boss, _file(slug="membership-terms", title="Mitgliedschaftsbedingungen"))
+        db.session.commit()
+        too_soon = get_membership_today() + timedelta(days=27)
+
+        with pytest.raises(ValidationError) as refused:
+            legal_uploads.publish(boss, record.id, effective_from=too_soon, worse=True, tell=False)
+        assert refused.value.code == "legal_effective_too_soon"
+
+        _publish(boss, record, effective_from=too_soon + timedelta(days=1), worse=True, tell=False)
+
+        [mailing] = self._mailings()  # told, even unticked
+        assert [r.email for r in mailing.recipients] == [member.email]
+        assert "you can leave the association before" in mailing.body
+        assert "refunded on request" in mailing.body and "If you do not object" in mailing.body
+        assert "nothing you need to do" not in mailing.body
+        [entry] = db.session.query(AuditLog).filter_by(event_type="legal_text_published").all()
+        assert entry.event_metadata["worse"] is True
+
+    def test_only_the_membership_terms_with_a_time_to_object(self, boss):
+        record = legal_uploads.upload_draft(boss, _file())  # the statutes
+        db.session.commit()
+
+        with pytest.raises(ValidationError) as refused:
+            legal_uploads.publish(boss, record.id, effective_from=get_membership_today() + timedelta(days=60),
+                                  worse=True)
+
+        assert refused.value.code == "legal_objection_not_offered"
+        assert legal_uploads.objection_possible("membership-terms", None)
+        assert not legal_uploads.objection_possible("privacy-policy", None)
+
     def test_not_when_unticked(self, boss):
         _association_member("member@example.org")
         record = legal_uploads.upload_draft(boss, _file())

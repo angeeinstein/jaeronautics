@@ -7178,6 +7178,11 @@
             "title": "Name",
             "type": "string"
           },
+          "objection_possible": {
+            "default": false,
+            "title": "Objection Possible",
+            "type": "boolean"
+          },
           "opened_snapshot_id": {
             "title": "Opened Snapshot Id",
             "type": "integer"
@@ -14887,6 +14892,11 @@
             ],
             "default": null,
             "title": "Tell"
+          },
+          "worse": {
+            "default": false,
+            "title": "Worse",
+            "type": "boolean"
           }
         },
         "required": [
@@ -20031,6 +20041,11 @@
             "default": 0,
             "title": "Members To Tell",
             "type": "integer"
+          },
+          "objection_possible": {
+            "default": false,
+            "title": "Objection Possible",
+            "type": "boolean"
           },
           "pdf_url": {
             "title": "Pdf Url",

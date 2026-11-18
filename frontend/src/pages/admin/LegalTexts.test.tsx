@@ -216,6 +216,48 @@ describe('a version uploaded here', () => {
     });
   });
 
+  it('the membership terms: something worse, so 4 weeks to object and always told', async () => {
+    const { calls } = show({
+      [API]: {
+        body: legal({
+          waiting: [
+            { ...DRAFT, team_name: null, title: 'Mitgliedschaftsbedingungen', objection_possible: true },
+          ],
+        }),
+      },
+      [`POST ${API}/drafts/7/publish`]: { body: { record_id: 7 } },
+    });
+    const waiting = await screen.findByRole('region', { name: 'Not in force yet' });
+
+    await userEvent.click(within(waiting).getByRole('button', { name: 'Publish' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: /Something gets worse/ }));
+    expect(within(dialog).getByRole('checkbox', { name: /Tell the members/ })).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Publish' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Yes, publish' }));
+
+    await waitFor(() => {
+      expect(calls.some((call) => new URL(call.url).pathname === `${API}/drafts/7/publish`)).toBe(true);
+    });
+    const sent = calls.find((call) => new URL(call.url).pathname === `${API}/drafts/7/publish`);
+    const body = (await sent?.clone().json()) as { effective_from: string; worse: boolean; tell: boolean };
+    expect(body.worse).toBe(true);
+    expect(body.tell).toBe(true);
+    const soonest = new Date();
+    soonest.setDate(soonest.getDate() + 27);
+    expect(body.effective_from >= soonest.toISOString().slice(0, 10)).toBe(true);
+  });
+
+  it('other texts do not offer it', async () => {
+    show({ [API]: { body: legal({ waiting: [DRAFT] }) } });
+    const waiting = await screen.findByRole('region', { name: 'Not in force yet' });
+
+    await userEvent.click(within(waiting).getByRole('button', { name: 'Publish' }));
+    const dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).queryByRole('checkbox', { name: /Something gets worse/ })).not.toBeInTheDocument();
+  });
+
   it('a draft is deleted, asked twice', async () => {
     const { calls } = show({
       [API]: { body: legal({ waiting: [DRAFT] }) },

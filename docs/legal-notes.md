@@ -11,7 +11,7 @@ file in the same commit. **To-do** marks what is still to be decided or
 written; it is collected in section 10 so nothing is forgotten, without being
 urgent.
 
-*Last reviewed: October 2026.*
+*Last reviewed: November 2026* (with the privacy policy and membership terms drafts).
 
 ---
 
@@ -23,8 +23,9 @@ urgent.
 - Hosted on a server of the association in Microsoft Azure, region West
   Europe (Netherlands). Microsoft's data processing terms are part of Azure's
   standard terms.
-- The forum (Discourse) is a separate system, signed into through the portal.
-  **To-do:** note where it is hosted.
+- The forum (Discourse) is a separate system, signed into through the portal,
+  hosted like the portal: a VM in Microsoft Azure, West Europe, behind
+  Cloudflare Tunnel.
 - Language of the portal: English only.
 
 ## 2. Personal data the portal holds
@@ -101,6 +102,22 @@ urgent.
 - The last access list sent (names and university emails), to mark changes
   next time.
 
+**Cards and readers** (`docs/cards-plan.md`, `docs/attendance-plan.md`)
+- Cards a member links: a name they choose, a keyed hash of the card's ID and
+  its last characters (never the ID itself), how, when and by whom it was
+  linked, switched off or blocked, when and at which reader it was last used.
+  Seen by the person and the admins. Removed by the person (the row stays,
+  without its ID's hash for linking, so payments still name it); at erasure
+  the hash goes too. A card tapped before it is linked: kept a day.
+- The readers' log (a device's page, `devices.manage`): every tap with the
+  time, the reader, the card's last characters and the portal's answer (a
+  first name, a balance, a refusal) -- 90 days. A device's last 100
+  requests with the network address the reader called from.
+- Attendance stays: who, for which team (or the association), in and out,
+  at which reader, closed for not checking out, corrected by whom and when.
+  Seen by the person, the team (permission *Attendance*) and the admins.
+  Kept with the account, in the export, deleted at erasure.
+
 **Records the system keeps**
 - Audit log: who did what, when (logins, admin actions, payments, changes),
   with before/after values where something was changed. No IP addresses.
@@ -132,23 +149,23 @@ urgent.
 | **Team leads** (fellow members) | Applicants' and members' name, university and private email, phone, cohort, member since, paid until (page and CSV export); notes. | Running the team. |
 | **Team treasurer / association treasurer** | Who paid what for the team, the team's bank details. | Passing the money on to the team. |
 | **Admins** | Everything above. | Running the association. |
-| **Cloudflare** (Cloudflare, Inc., US; EU data processing addendum) | Every request to the portal passes through Cloudflare's network (Cloudflare Tunnel): visitor IP address, the pages and form contents in transit, which Cloudflare decrypts and re-encrypts. Possibly Web Analytics (see below). | Reaching the server without opening it to the internet; protection from attacks. **To-do:** name it in the privacy statement. |
+| **Cloudflare** (Cloudflare, Inc., US; EU data processing addendum) | Every request to the portal and the forum passes through Cloudflare's network (Cloudflare Tunnel): visitor IP address, the pages and form contents in transit, which Cloudflare decrypts and re-encrypts; a security cookie. | Reaching the servers without opening them to the internet; protection from attacks. In the privacy policy draft (§ 4, § 17, § 22). |
 
 No advertising, no tracking pixels, and the portal itself adds no
 analytics. Its pages load nothing from other servers (fonts, scripts and
-styles are served by the portal itself) -- except that the security policy
-allows Cloudflare's Web Analytics script (`static.cloudflareinsights.com`),
-which Cloudflare inserts into pages if Web Analytics is switched on for the
-site in the Cloudflare dashboard. It counts visits without cookies.
-**To-do:** check in the Cloudflare dashboard whether it is on; if so, name it
-in the privacy statement, or switch it off and remove it from the policy
-(`deploy/nginx/aeronautics.conf`). Stripe's payment page is Stripe's own,
-under Stripe's privacy policy.
+styles are served by the portal itself). Cloudflare Web Analytics is off
+(2026-11-18), and the security policy no longer allows its script
+(`content_security.py`): were it switched on in the Cloudflare dashboard, the
+browser would refuse it. Stripe's payment page is Stripe's own, under
+Stripe's privacy policy.
 
 ## 4. Cookies
 
 - One session cookie, set by the portal: keeps a person signed in, holds the
   form protection token. Secure, HttpOnly, SameSite=Lax, valid 7 days.
+- Browser storage, needed for the service: per open tab a random id and when
+  the page last reloaded after an update (session storage); a short-lived
+  token while a card is linked by its QR code (local storage).
 - No other cookies from the portal. Stripe's payment page sets its own.
   Cloudflare may set its own security cookies (e.g. `__cf_bm`, for telling
   bots from people), which are needed for the service too.
@@ -251,12 +268,17 @@ under Stripe's privacy policy.
 - Selling (October 2026): the association and each team keep a price list;
   a sale records the item, the seller and who booked it. What a team sells
   is passed on to it like its fees. A sale can be taken back.
-- Stripe's fees: paid by the association unless set otherwise (Admin ›
-  Money); then a team's fees count less Stripe's fee, and the association
-  may keep a share (0–20 %) of what teams sell for credit.
-- Drafted: membership terms 2026-10-08 § 31, privacy policy 2026-10-08
-  §§ 20, 41. Waiting for approval. A card reader (later) would add a hashed
-  card ID per member: privacy policy and terms then.
+- Stripe's fees: **the teams pay them** (the setting on Admin › Money,
+  decided 2026-11-18): a team's fees and sales count less Stripe's fee. The
+  association keeps no share of what teams sell.
+- Drafted: membership terms 2026-10-08 § 31 (credit), § 32 (cards), § 28
+  (fees); privacy policy 2026-10-08 §§ 20, 40, 41. Waiting for approval.
+
+**Changes to the membership terms** (§ 37 of the draft; decided 2026-11-18)
+- Nothing worse for members: applies from the day set. Something worse:
+  4 weeks' notice by email; whoever objects can leave before, the unused
+  part of their fees refunded on request; otherwise it applies to them.
+  `docs/legal-texts-in-portal-plan.md`, "Telling the members".
 
 ## 9. The statutes and rules of procedure vs. the portal
 
@@ -289,7 +311,7 @@ Rev 1 (17.03.2019) and Rules of Procedure Rev 3 (26.02.2020). Where they no long
 - **Change of status** (Statutes § 7): automatic move to alumni after
   studying, change by written request. The portal: by a change request,
   decided by an admin.
-- **Invitations to the general meeting** (Statutes § 9 (3)): by email to the
+- **Invitations to the general meeting** (Statutes § 10 (3)): by email to the
   address given — the portal holds that address (private email).
 - The signup checkbox names and links the statutes, rules of procedure,
   membership terms and privacy policy, which are accepted together. Since
@@ -320,8 +342,9 @@ Collected so nothing is forgotten; none of it is urgent.
       the portal.
 - [ ] Statutes / rules: team insurance — decide and reword.
 - [ ] Impressum: name the portal (section 11).
-- [ ] Approve and publish the 2026-10-08 drafts: privacy policy (pictures,
-      credit) and membership terms (§ 31 Credit).
+- [ ] Approve and publish the 2026-10-08 drafts: privacy policy and
+      membership terms (revised 2026-11-18; the terms with *Something gets
+      worse*, 4 weeks ahead).
 
 **Decisions**
 - [ ] Whether members already in a team must accept changed team rules.
@@ -331,8 +354,8 @@ Collected so nothing is forgotten; none of it is urgent.
 **Portal**
 - [ ] Check Stripe's "upcoming renewal" and "failed payment" emails are on
       (live and test), and note the reminder's lead time for the terms.
-- [ ] Note where the forum is hosted.
-- [ ] Check whether Cloudflare Web Analytics is on (section 3).
+- [x] Note where the forum is hosted (section 1).
+- [x] Cloudflare Web Analytics is off (2026-11-18, section 3).
 
 ## 11. For the impressum
 
