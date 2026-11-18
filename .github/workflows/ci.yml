@@ -18,13 +18,25 @@ on:
 # - the jobs run side by side, the end-to-end tests in three parts, each on
 #   its own runner with its own fresh server -- as isolated as one run was;
 # - files that passed already are not tested again: every run that passes
-#   leaves a mark named after its files' git tree hash (job "passed"), and a
-#   run on the very same files -- above all on main after merging a pull
-#   request, whose run tested exactly the merged files -- finds it and skips
-#   the tests (job "tested"). Any other change, even a byte, runs everything.
+#   leaves a mark named after its files (job "passed"), and a run on the very
+#   same files -- above all on main after merging a pull request, whose run
+#   tested exactly the merged files -- finds it and skips the tests (job
+#   "tested"). The files counted leave out docs/, but for the two documents the
+#   portal reads (the Microsoft mail guide, the device protocol): a change to
+#   the to-do list or a plan is not tested again. Any other change, even a
+#   byte, runs everything.
 env:
   PYTHON_VERSION: "3.12"
   NODE_VERSION: "24"
+
+# One run per commit at a time. A push to a branch with a pull request starts
+# two runs on the same commit (the push's and the pull request's): side by side
+# both tested everything; queued, the second finds the first one's mark (job
+# "tested") and skips the tests. Never cancelled: the push's run publishes the
+# front end the test server installs.
+concurrency:
+  group: ci-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
 
 # Read-only, except where a job asks for more (publish-frontend, merge-dependabot).
 permissions:
@@ -50,7 +62,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tree="$(git rev-parse 'HEAD^{tree}')"
+          # The commit's files but docs/ -- apart from the two the portal reads.
+          tree="$(git ls-tree -r HEAD \
+            | grep -v -P '\tdocs/(?!microsoft-mail-setup\.md$|device-protocol\.md$)' \
+            | sha1sum | cut -c1-40)"
           echo "tree=${tree}" >> "$GITHUB_OUTPUT"
           found="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=ci-passed-${tree}&per_page=100" \
             --jq '[.artifacts[] | select(.expired | not)
