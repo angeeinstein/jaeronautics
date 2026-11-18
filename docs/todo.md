@@ -36,6 +36,45 @@ update's warning of local changes only for the portal's own files).
 
 ## Open
 
+### Installer: a remembered branch that is gone
+
+- **Added:** 2026-11-18
+- **What:** `install.sh --mode update` without `--branch` uses the branch the
+  server was last updated to. Once that branch is merged and deleted, the
+  update fails three times over ("Remote branch … not found") and stops
+  (seen on the test server with `claude/translation-follow-ups`).
+- **Where:** `install.sh`, the bootstrap clone (around line 1476).
+- **Proposed:** when the remembered branch no longer exists, say so and fall
+  back to `main` (and remember `main`); an explicit `--branch` that does not
+  exist still fails.
+- **Until then:** `--branch main` once; afterwards a plain update follows it.
+
+### gunicorn's control socket on a read-only file system
+
+- **Added:** 2026-11-18
+- **What:** every start logs `Control server error: [Errno 30] Read-only
+  file system: '/var/www/jaeronautics/.gunicorn'` -- gunicorn (since 26)
+  opens a control socket in the working directory, which the service's
+  sandbox (`ProtectSystem=strict`) keeps read-only. Harmless, but an ERROR
+  line at every start.
+- **Where:** `install.sh`, the unit's `ExecStart` (around line 2713).
+- **Proposed:** `--no-control-socket` -- the portal never uses gunicorn's
+  control interface. (Also with gunicorn 27, #82.)
+
+### A Stripe subscription that is gone, cleared again on every page
+
+- **Added:** 2026-11-18
+- **What:** the test server's log repeats `Stripe subscription … for
+  member_id=2 no longer exists; clearing the stale reference` every few
+  minutes: `billing.get_latest_stripe_subscription_for_member` sets
+  `member.stripe_subscription_id = None`, but on a page that only reads,
+  nothing commits it, so the next view asks Stripe and clears it again.
+- **Where:** `aeronautics_members/services/billing.py` (around line 320) and
+  its callers.
+- **Proposed:** clear it for good (commit it where it is found, or queue the
+  clearing); a test that the second lookup no longer asks Stripe. Only on
+  the test server so far (a subscription deleted in Stripe's test mode).
+
 ### Privacy policy and membership terms drafts: brought up to date for the board
 
 - **Added:** 2026-11-18
