@@ -175,6 +175,9 @@ def may_correct_email(user, actor_user):
     return (
         user.member is not None and user.deleted_at is None and user.id != actor_user.id
         and actor_user.can(Permission.APPROVALS_REVIEW)
+        # An account holding permissions is handed over only by somebody who
+        # grants them, and holds all of them too.
+        and (not user.permissions or actor_user.can(Permission.ROLES_MANAGE))
         and covers(actor_user, user)
     )
 
@@ -202,9 +205,9 @@ def correct_private_email(user, new_email, *, actor_user):
     new_email = (new_email or "").strip().lower()
     if user.id == actor_user.id:
         raise PermissionError_("Change your own address in your profile.", code="own_account")
-    if not covers(actor_user, user):
+    if not covers(actor_user, user) or (user.permissions and not actor_user.can(Permission.ROLES_MANAGE)):
         # Their address is a way into somebody else's admin rights: whoever could change it could
-        # reset the password and hold them.
+        # reset the password and hold them. So only somebody who grants permissions, and holds all of theirs.
         raise PermissionError_("This account holds permissions you do not: only somebody who holds all of them can "
                                "change its address.", code="account_has_role")
     if not _EMAIL.fullmatch(new_email):

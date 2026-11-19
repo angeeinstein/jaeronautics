@@ -267,6 +267,23 @@ class TeamNoteOut(Model):
     body: str
 
 
+class TeamPermissionOption(Model):
+    """One team permission on a member's page, for whoever may change theirs."""
+
+    name: TeamPermissionName
+    label: str
+    area: str
+    #: They hold it now (while in the team).
+    held: bool
+    #: Their roles in the team give it.
+    from_roles: bool
+    #: What it brings along (and goes without).
+    needs: list[TeamPermissionName]
+    #: The viewer may tick or untick it: they hold it themselves, and this
+    #: person holds no more in the team than they do.
+    may_change: bool
+
+
 class TeamPersonOut(Model):
     user_id: int
     name: str
@@ -279,6 +296,8 @@ class TeamPersonOut(Model):
     may_review: bool
     may_remove: bool
     may_write_notes: bool
+    #: Their permissions in the team, for whoever may change them; None otherwise.
+    permissions: list[TeamPermissionOption] | None = None
 
 
 def _day(moment):
@@ -315,13 +334,47 @@ def _person_out(team, user_id):
         may_review=teams_service.can_in_team(current_user, team, P.REVIEW_APPLICATIONS),
         may_remove=teams_service.can_in_team(current_user, team, P.REMOVE_MEMBERS),
         may_write_notes=teams_service.can_in_team(current_user, team, P.WRITE_NOTES),
+        permissions=_permission_options(team, person),
     )
+
+
+def _permission_options(team, person):
+    options = teams_service.team_permission_options(current_user, team, person)
+    if options is None:
+        return None
+    area_of = {permission: area for area, permissions in teams_service.TEAM_PERMISSION_AREAS
+               for permission in permissions}
+    return [TeamPermissionOption(
+        name=permission, label=teams_service.TEAM_PERMISSION_LABELS[permission], area=area_of[permission],
+        held=held, from_roles=from_roles, needs=sorted(teams_service.TEAM_NEEDS.get(permission, ())),
+        may_change=may_change) for permission, held, from_roles, may_change in options]
 
 
 @endpoint("GET", "/teams/<slug>/manage/people/<int:user_id>", response=TeamPersonOut, tag=TAG)
 def team_person(slug, user_id):
     """A person as the leads see them: how to reach them, their application, their history, the notes."""
     return _person_out(_managed(slug), user_id)
+
+
+class TeamPermissionsIn(Model):
+    #: Everything they should hold in the team; what a permission needs comes along.
+    permissions: list[TeamPermissionName] = Field(max_length=40)
+
+
+@endpoint("PUT", "/teams/<slug>/manage/people/<int:user_id>/permissions", body=TeamPermissionsIn,
+          response=TeamPersonOut, tag=TAG)
+def team_person_permissions(slug, user_id, body):
+    """Set a member's permissions in the team: their roles', plus or minus exceptions -- within the
+    viewer's own."""
+    team = _managed(slug, P.PERMISSIONS)
+    person, _history = _person(team, user_id)
+    try:
+        teams_service.set_team_member_permissions(current_user, team, person, body.permissions)
+    except ServiceError:
+        db.session.rollback()
+        raise
+    _commit()
+    return _person_out(team, user_id)
 
 
 def _decide(slug, membership_id, permission, action):

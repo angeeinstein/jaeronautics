@@ -108,8 +108,16 @@ class TestAnAdminCorrectsIt:
         return member
 
     def test_not_an_account_with_a_role(self, app, client, emails):
-        member = self._with_a_role()
-        _login(client, _staff("boss@example.org", "admin").id)
+        from aeronautics_members.db_models import UserPermission
+        from aeronautics_members.permissions import Permission
+
+        # An auditor holds less than the admin, so only the missing permission to grant stops it.
+        member = _member()
+        member.user.grant_role(app_module.get_role("auditor"))
+        boss = _staff("boss@example.org", "admin")
+        boss.permission_exceptions.append(UserPermission(permission=Permission.ROLES_MANAGE, granted=False))
+        db.session.commit()
+        _login(client, boss.id)
 
         send(client, "PUT", f"/api/v1/admin/accounts/{member.user_id}/email", {"email": "anna.new@example.com"})
 

@@ -120,6 +120,8 @@ def export_account_data(user):
             "forum_username": user.forum_username,
             "email_verified_at": user.email_verified_at,
             "roles": sorted(role.slug for role in user.roles),
+            "permission_exceptions": [("+" if row.granted else "-") + row.permission
+                                      for row in user.permission_exceptions],
             "erased_at": user.deleted_at,
         },
         "member_profile": None,
@@ -682,6 +684,7 @@ def _erase_user_record(user, now):
     # Any outstanding signed link (password reset, verification, forum entry)
     # stops working once the nonces are gone.
     user.roles.clear()
+    user.permission_exceptions.clear()
     user.deleted_at = now
 
 

@@ -30,7 +30,7 @@ from pathlib import Path
 
 from flask import current_app
 
-from ..db_models import Member, Setting, Team, TeamMembership, TeamRole, User, db
+from ..db_models import Member, Setting, Team, TeamMemberPermission, TeamMembership, TeamRole, User, db
 from ..permissions import Permission
 from . import ConflictError, NotFoundError, ValidationError
 from .audit import log_audit_event
@@ -99,12 +99,15 @@ class TeamPermission:
     #: Upload drafts of the team's own rules, and see them; publishing them is
     #: the association's (docs/legal-texts-in-portal-plan.md).
     RULES = "team.rules"
+    #: Add and take away the team permissions of the team's members, within
+    #: those one holds oneself (docs/permissions-plan.md).
+    PERMISSIONS = "team.permissions"
 
     ALL = frozenset({
         VIEW_MEMBERS, REVIEW_APPLICATIONS, REMOVE_MEMBERS,
         WRITE_NOTES, EXPORT, EDIT_SETTINGS, SEND_ACCESS_LIST,
         VIEW_MONEY, EDIT_BANK_DETAILS, APPOINT_TREASURER, APPOINT_LEADS, EDIT_PRICES, MESSAGES, DEVICES,
-        ATTENDANCE, RULES,
+        ATTENDANCE, RULES, PERMISSIONS,
     })
     #: The team's money, the account it is paid to, its prices and the readers
     #: that sell them -- nothing about people.
@@ -124,6 +127,66 @@ TEAM_ROLE_PERMISSIONS = {
 TEAM_ROLE_LABELS = {
     ROLE_LEAD: "Lead",
     ROLE_TREASURER: "Treasurer",
+}
+
+#: What a team permission needs to be of use: deciding about the team's people
+#: needs seeing them, changing the bank details seeing the money. Coupled, as
+#: the site-wide ones are (permissions.NEEDS): given with it, gone without it.
+TEAM_NEEDS = {
+    **{permission: frozenset({TeamPermission.VIEW_MEMBERS}) for permission in (
+        TeamPermission.REVIEW_APPLICATIONS, TeamPermission.REMOVE_MEMBERS, TeamPermission.WRITE_NOTES,
+        TeamPermission.EXPORT, TeamPermission.APPOINT_TREASURER, TeamPermission.APPOINT_LEADS,
+        TeamPermission.PERMISSIONS)},
+    TeamPermission.EDIT_BANK_DETAILS: frozenset({TeamPermission.VIEW_MONEY}),
+}
+
+
+def with_team_needs(permissions):
+    """``permissions`` and everything they need."""
+    result = set(permissions)
+    while needed := set().union(*(TEAM_NEEDS.get(permission, ()) for permission in result)) - result:
+        result |= needed
+    return result
+
+
+def without_unmet_team_needs(permissions):
+    """``permissions`` less any whose needs are not all among them."""
+    result = set(permissions)
+    while unmet := {permission for permission in result if not TEAM_NEEDS.get(permission, frozenset()) <= result}:
+        result -= unmet
+    return result
+
+
+#: The team permissions as a lead sees them on a member's page, by area.
+TEAM_PERMISSION_AREAS = (
+    ("People", (TeamPermission.VIEW_MEMBERS, TeamPermission.REVIEW_APPLICATIONS, TeamPermission.REMOVE_MEMBERS,
+                TeamPermission.WRITE_NOTES, TeamPermission.EXPORT, TeamPermission.MESSAGES,
+                TeamPermission.ATTENDANCE)),
+    ("Roles and permissions", (TeamPermission.APPOINT_LEADS, TeamPermission.APPOINT_TREASURER,
+                               TeamPermission.PERMISSIONS)),
+    ("Money", (TeamPermission.VIEW_MONEY, TeamPermission.EDIT_BANK_DETAILS, TeamPermission.EDIT_PRICES)),
+    ("The team", (TeamPermission.EDIT_SETTINGS, TeamPermission.RULES, TeamPermission.DEVICES,
+                  TeamPermission.SEND_ACCESS_LIST)),
+)
+
+TEAM_PERMISSION_LABELS = {
+    TeamPermission.VIEW_MEMBERS: "See the members and applications",
+    TeamPermission.REVIEW_APPLICATIONS: "Decide on applications",
+    TeamPermission.REMOVE_MEMBERS: "Remove members",
+    TeamPermission.WRITE_NOTES: "Write notes about people",
+    TeamPermission.EXPORT: "Export the member list",
+    TeamPermission.MESSAGES: "Read the messages to the leads, write to the members",
+    TeamPermission.ATTENDANCE: "Attendance",
+    TeamPermission.APPOINT_LEADS: "Appoint and dismiss leads",
+    TeamPermission.APPOINT_TREASURER: "Appoint and dismiss the treasurer",
+    TeamPermission.PERMISSIONS: "Change members' permissions -- those one holds oneself",
+    TeamPermission.VIEW_MONEY: "See the team's money",
+    TeamPermission.EDIT_BANK_DETAILS: "Change the bank details",
+    TeamPermission.EDIT_PRICES: "Change the price list",
+    TeamPermission.EDIT_SETTINGS: "Change the team's settings",
+    TeamPermission.RULES: "Team rules",
+    TeamPermission.DEVICES: "The team's devices",
+    TeamPermission.SEND_ACCESS_LIST: "Send the access list",
 }
 
 #: Leave a field as it is: settings are saved part by part -- the leads'
@@ -820,13 +883,33 @@ def team_permissions(user, team):
         granted.add(TeamPermission.VIEW_MONEY)
     if team.status != STATUS_ACTIVE:
         return frozenset(granted)
+    return frozenset(granted | own_team_permissions(user, team))
 
-    held = [team_role for team_role in team.roles if team_role.user_id == user.id]
-    if not held or not role_counts(held[0]):
-        return frozenset(granted)
-    for team_role in held:
-        granted |= TEAM_ROLE_PERMISSIONS.get(team_role.role, frozenset())
-    return frozenset(granted)
+
+def _team_exceptions(user, team):
+    return [row for row in team.permission_exceptions if row.user_id == user.id]
+
+
+def _from_team_roles(user, team):
+    """What ``user``'s roles in ``team`` give, whether in force or not."""
+    return with_team_needs(set().union(*(
+        TEAM_ROLE_PERMISSIONS.get(team_role.role, frozenset())
+        for team_role in team.roles if team_role.user_id == user.id)))
+
+
+def own_team_permissions(user, team):
+    """What ``user`` holds in ``team`` as one of its people: their roles there,
+    plus permissions added, less those taken away -- while they are in the
+    team and the association. Not what a site-wide permission gives."""
+    exceptions = _team_exceptions(user, team)
+    holds_role = any(team_role.user_id == user.id for team_role in team.roles)
+    if not exceptions and not holds_role:
+        return set()
+    if not (is_active_association_member(user) and active_team_membership(user, team) is not None):
+        return set()
+    added = {row.permission for row in exceptions if row.granted}
+    taken = {row.permission for row in exceptions if not row.granted}
+    return without_unmet_team_needs(with_team_needs(_from_team_roles(user, team) | added) - taken)
 
 
 def can_in_team(user, team, permission):
@@ -839,6 +922,8 @@ def teams_led_by(user):
         return []
     teams = {team_role.team for team_role in db.session.execute(
         db.select(TeamRole).filter_by(user_id=user.id)
+    ).scalars()} | {row.team for row in db.session.execute(
+        db.select(TeamMemberPermission).filter_by(user_id=user.id, granted=True)
     ).scalars()}
     return sorted(
         (team for team in teams if team_permissions(user, team)),
@@ -895,6 +980,7 @@ def grant_team_role(actor, team, user, role):
     team_role = TeamRole(team=team, user=user, role=role, granted_by_user_id=getattr(actor, "id", None))
     db.session.add(team_role)
     db.session.flush()
+    _tidy_team_exceptions(team, user)
     log_audit_event(
         "teams", "team_role_granted", actor_user=actor, target_user=user,
         metadata={"team": team.slug, "role": role},
@@ -927,9 +1013,91 @@ def revoke_team_role(actor, team, user, role, *, confirmed=False):
 
     db.session.delete(team_role)
     db.session.flush()
+    db.session.expire(team, ["roles"])
+    _tidy_team_exceptions(team, user)
     log_audit_event(
         "teams", "team_role_revoked", actor_user=actor, target_user=user,
         metadata={"team": team.slug, "role": role},
+    )
+    return True
+
+
+def _tidy_team_exceptions(team, user):
+    """Drop the exceptions a change of roles made pointless: added what a
+    role now gives, taken away what no role gives any more."""
+    from_roles = _from_team_roles(user, team)
+    for row in _team_exceptions(user, team):
+        if row.granted == (row.permission in from_roles):
+            team.permission_exceptions.remove(row)
+    db.session.flush()
+
+
+def team_permission_options(actor, team, user):
+    """Every team permission as ``actor`` sees it on ``user``'s page, or None
+    when ``actor`` may not change ``user``'s: ``(permission, held, from_roles,
+    may_change)``."""
+    if actor is None or user is None or actor.id == user.id:
+        return None
+    mine = team_permissions(actor, team)
+    if TeamPermission.PERMISSIONS not in mine or active_team_membership(user, team) is None:
+        return None
+    theirs = own_team_permissions(user, team)
+    within = theirs <= mine
+    from_roles = _from_team_roles(user, team)
+    return [(permission, permission in theirs, permission in from_roles, within and permission in mine)
+            for _area, permissions in TEAM_PERMISSION_AREAS for permission in permissions]
+
+
+def set_team_member_permissions(actor, team, user, requested):
+    """Give one of the team's members exactly ``requested`` in the team: their
+    roles' permissions, plus what is added, less what is taken away.
+
+    ``actor`` changes only permissions they hold in the team themselves, and
+    only for somebody who holds no more there than they do -- a lead adjusts a
+    member, not a fellow lead's rights beyond their own. Not their own. A
+    permission brings what it needs (TEAM_NEEDS).
+    """
+    requested = set(requested)
+    if unknown := requested - TeamPermission.ALL:
+        raise ValidationError(f"Unknown team permission: {', '.join(sorted(unknown))}.",
+                              code="team_permission_unknown")
+    if user is None or active_team_membership(user, team) is None:
+        raise ValidationError("Choose one of the team's members.", code="team_permission_not_member")
+    if actor is not None and actor.id == user.id:
+        raise ConflictError("Somebody else changes your own permissions.", code="team_permission_own")
+    _lock_team(team)
+    mine = team_permissions(actor, team)
+    if TeamPermission.PERMISSIONS not in mine:
+        raise ConflictError("You may not change permissions in this team.", code="team_permission")
+    before = own_team_permissions(user, team)
+    wanted = with_team_needs(requested)
+    if not before <= mine or (before ^ wanted) - mine:
+        raise ConflictError("You can only change permissions you hold yourself in this team, "
+                            "for somebody who holds no more there than you.", code="team_permission_beyond_own")
+
+    from_roles = _from_team_roles(user, team)
+    exceptions = {permission: True for permission in wanted - from_roles}
+    exceptions.update({permission: False for permission in from_roles - wanted})
+    rows = {row.permission: row for row in _team_exceptions(user, team)}
+    if {permission: row.granted for permission, row in rows.items()} == exceptions:
+        return False
+    for permission, row in rows.items():
+        if exceptions.get(permission) is None:
+            team.permission_exceptions.remove(row)
+        else:
+            row.granted = exceptions[permission]
+    for permission, granted in exceptions.items():
+        if permission not in rows:
+            team.permission_exceptions.append(TeamMemberPermission(
+                user_id=user.id, permission=permission, granted=granted,
+                granted_by_user_id=getattr(actor, "id", None)))
+    db.session.flush()
+    after = own_team_permissions(user, team)
+    log_audit_event(
+        "teams", "team_permissions_changed", actor_user=actor, target_user=user,
+        metadata={"team": team.slug, "added": sorted(after - before), "taken_away": sorted(before - after),
+                  "exceptions": sorted(("+" if granted else "-") + permission
+                                       for permission, granted in exceptions.items())},
     )
     return True
 
@@ -1855,6 +2023,8 @@ def forget_for_erasure(user):
             membership.end_reason = END_ACCOUNT_ERASED
     for team_role in db.session.execute(db.select(TeamRole).filter_by(user_id=user.id)).scalars():
         db.session.delete(team_role)
+    for row in db.session.execute(db.select(TeamMemberPermission).filter_by(user_id=user.id)).scalars():
+        db.session.delete(row)
     for note in db.session.execute(db.select(TeamNote).filter_by(user_id=user.id)).scalars():
         db.session.delete(note)
 
