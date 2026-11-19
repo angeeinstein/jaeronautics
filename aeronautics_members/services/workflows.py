@@ -172,7 +172,8 @@ def refresh_member_billing_state(member, force_stripe_sync=False, sync_forum=Fal
 
     changed = False
     stripe_subscription = None
-    has_stripe_reference = bool(member.stripe_customer_id or member.stripe_subscription_id)
+    references = (member.stripe_customer_id, member.stripe_subscription_id)
+    has_stripe_reference = any(references)
 
     if has_stripe_reference and force_stripe_sync:
         stripe_subscription = get_latest_stripe_subscription_for_member(member)
@@ -180,8 +181,10 @@ def refresh_member_billing_state(member, force_stripe_sync=False, sync_forum=Fal
             changed = True
         if stripe_subscription and record_paid_invoices_missing_from_ledger(member, stripe_subscription):
             changed = True
-        # The lookup may have cleared a dead subscription/customer reference.
-        if bool(member.stripe_customer_id or member.stripe_subscription_id) != has_stripe_reference:
+        # The lookup may have cleared a dead subscription or customer reference -- either one: the
+        # subscription alone, with the customer kept, went uncommitted on a page that only commits a
+        # change, and was looked up and cleared again on every view.
+        if (member.stripe_customer_id, member.stripe_subscription_id) != references:
             changed = True
 
     if sync_member_active_state(member, on_date=on_date):

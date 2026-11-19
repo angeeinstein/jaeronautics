@@ -22,9 +22,9 @@ class FakeServices:
         self.failing = set()
         self.glossaries = {}  # what DeepL holds: id -> name
 
-    def __call__(self, url, *, data=None, headers=None, method="POST"):
+    def __call__(self, url, *, data=None, headers=None, method="POST", timeout=None):
         self.calls.append((url, data, headers, method))
-        service = "deepl" if "deepl" in url else "azure"
+        service = "deepl" if "deepl" in url else "llm" if "chat/completions" in url else "azure"
         if service in self.failing:
             raise translation._ServiceError("the key is not accepted")
         if method == "DELETE":
@@ -38,7 +38,13 @@ class FakeServices:
             return {"glossary_id": made}
         if url.endswith("/v2/usage"):
             return {"character_count": 1234, "character_limit": 500000}
-        if service == "deepl" and data.get("glossary_id") and data["glossary_id"] not in self.glossaries:
+        if url.endswith("/chat/completions"):  # a language model with OpenAI's interface
+            if "llm" in self.failing:
+                raise translation._ServiceError("not reached")
+            asked = json.loads(data["messages"][1]["content"].split("\n", 1)[1])
+            return {"choices": [{"finish_reason": "stop", "message": {
+                "content": json.dumps({"translations": [f"[LLM] {text}" for text in asked]})}}]}
+        if service == "deepl" and isinstance(data, dict) and data.get("glossary_id") and data["glossary_id"] not in self.glossaries:
             raise translation._ServiceError("error 404 (Glossary not found)")
         if service == "deepl":
             return {"translations": [{"text": f"[DeepL] {text}"} for text in data["text"]]}
@@ -216,7 +222,7 @@ def test_trying_keeps_deepls_glossary(client, services):
     assert len([call for call in services.calls if call[0].endswith("/v2/glossaries") and call[3] == "POST"]) == 1
 
 
-def test_deepls_characters_this_month(services):
+def test_deepls_characters_used(services):
     _set_up()
 
     assert translation.deepl_usage() == {"used": 1234, "limit": 500000}
@@ -235,8 +241,8 @@ class TestTheSettingsPage:
         shown = client.get("/api/v1/admin/settings/translation").get_json()
 
         assert saved.status_code == 200 and "deepl_key" in saved.get_json()["changed"]
-        assert [s["name"] for s in shown["services"]] == ["azure", "deepl"]
-        assert [s["key_set"] for s in shown["services"]] == [False, True]
+        assert [s["name"] for s in shown["services"]] == ["azure", "deepl", "llm"]
+        assert [s["key_set"] for s in shown["services"]] == [False, True, False]
         assert "secret" not in str(shown) and shown["glossary"] == [["Verein", "association"]]
 
     def test_the_default_glossary_saved_whole(self, client, services):
@@ -289,62 +295,484 @@ def test_a_paragraphs_own_number_kept_as_written(services, monkeypatch):
 
     _title, english = legal_translation.translate_version(SimpleNamespace(title="Teamordnung"))
 
-    assert sent[0]["text"][:2] == ["<p>mit Räumen sorgsam umzugehen;</p>\n", "<p>Text.</p>\n"]
-    assert sent[0]["context"] == translation.CONTEXT
+    assert sent[0]["text"][:3] == ["<h1>Teamordnung</h1>", "<p>mit Räumen sorgsam umzugehen;</p>\n",
+                                   "<p>Text.</p>\n"]
     assert english == ("<p>iii) mit Räumen sorgsam umzugehen;</p>\n<p>(b) Text.</p>\n"
                        "<h2>§ 1 Geltung</h2>\n<p>Ein Satz.</p>\n")
 
 
-class TestASentenceOverSeveralParagraphs:
-    """A lead-in ending in "," or ":" and the paragraphs finishing its sentence are each translated
-    on their own, told of the other as context -- apart and unknowing, DeepL wrote "undertakes to,
-    / i) to behave …"; sent as one text, it ran them into each other."""
+class TestTheWholeTextAsContext:
+    """Every block is translated on its own, told the whole German text -- a heading of one word,
+    or a list item finishing a sentence begun above it, is translated knowing where it stands."""
 
-    LEAD_IN = "<p>Mit dem Beitritt verpflichtet sich jedes Mitglied,</p>\n"
-    BLOCKS = [LEAD_IN, "<p>i) fair zu sein;</p>\n", "<p>ii) zu helfen.</p>\n", "<p>Ein neuer Satz.</p>\n"]
+    BLOCKS = ["<h2>§ 3 Beschwerderecht</h2>\n", "<p>Mit dem Beitritt verpflichtet sich jedes Mitglied,</p>\n",
+              "<p>i) fair zu sein;</p>\n", "<p>ii) zu helfen.</p>\n"]
 
-    def _translate(self, services, monkeypatch):
+    def _translate(self, services, monkeypatch, blocks=None):
+        from types import SimpleNamespace
+
+        from aeronautics_members.services import legal_translation
+
+        monkeypatch.setattr(legal_translation.legal, "blocks", lambda _german: list(blocks or self.BLOCKS))
+        sent = []
+
+        def deepl(url, *, data=None, headers=None, method="POST"):
+            if url.endswith("/v2/translate"):
+                sent.append(data)
+                return {"translations": [{"text": text} for text in data["text"]]}
+            return services(url, data=data, headers=headers, method=method)
+
+        monkeypatch.setattr(translation, "_call", deepl)
+        report = {}
+        _title, english = legal_translation.translate_version(SimpleNamespace(title="Teamordnung"), report=report)
+        return sent, english, report
+
+    def test_each_on_its_own_told_the_whole_text(self, services, monkeypatch):
+        _set_up()
+        sent, english, report = self._translate(services, monkeypatch)
+
+        [blocks] = sent  # the title with the text, as a heading: one request
+        assert blocks["text"][0] == "<h1>Teamordnung</h1>"
+        assert blocks["text"][3] == "<p>fair zu sein;</p>\n"  # on its own, its number off
+        assert blocks["context"] == (
+            "Teamordnung\n§ 3 Beschwerderecht\nMit dem Beitritt verpflichtet sich jedes Mitglied,\n"
+            "i) fair zu sein;\nii) zu helfen.")
+        assert blocks["custom_instructions"] == translation.INSTRUCTIONS and blocks["model_type"] == translation.MODEL
+        assert english == "".join(self.BLOCKS)
+        assert report == {"services": {"deepl"}, "failures": [], "missing": 0}
+
+    def test_another_paragraph_changed_only_that_one_sent(self, services, monkeypatch):
+        # Kept by its own text, not its context: a change elsewhere costs only what changed.
+        _set_up()
+        self._translate(services, monkeypatch)
+
+        sent, _english, report = self._translate(services, monkeypatch,
+                                                 blocks=self.BLOCKS[:3] + ["<p>ii) anderen zu helfen.</p>\n"])
+
+        assert [data["text"] for data in sent] == [["<p>anderen zu helfen.</p>\n"]]
+        assert report["services"] == {"deepl"}  # the kept ones' service too
+
+    def test_kept_and_forgotten(self, services, monkeypatch):
         from types import SimpleNamespace
 
         from aeronautics_members.services import legal_translation
 
         _set_up()
-        monkeypatch.setattr(legal_translation.legal, "blocks", lambda _german: list(self.BLOCKS))
-        sent = []
-
-        def deepl(url, *, data=None, headers=None, method="POST"):
-            if url.endswith("/v2/translate"):
-                sent.append((data["text"], data["context"]))
-                return {"translations": [{"text": text} for text in data["text"]]}
-            return services(url, data=data, headers=headers, method=method)
-
-        monkeypatch.setattr(translation, "_call", deepl)
-        _title, english = legal_translation.translate_version(SimpleNamespace(title="Teamordnung"))
-        return sent, english
-
-    def test_each_on_its_own_told_of_the_other(self, services, monkeypatch):
-        sent, english = self._translate(services, monkeypatch)
-
-        by_text = {text: context for texts, context in sent for text in texts}
-        assert by_text["<p>Ein neuer Satz.</p>\n"] == translation.CONTEXT
-        assert by_text[self.LEAD_IN].endswith("finish: fair zu sein; / zu helfen.")
-        assert by_text["<p>fair zu sein;</p>\n"].endswith("begun by: Mit dem Beitritt verpflichtet sich jedes Mitglied,")
-        assert by_text["<p>zu helfen.</p>\n"] == by_text["<p>fair zu sein;</p>\n"]  # one request for both
-        assert english == "".join(self.BLOCKS)  # each paragraph, its number put back
-
-    def test_kept_by_their_context_and_forgotten_with_it(self, services, monkeypatch):
-        from types import SimpleNamespace
-
-        from aeronautics_members.services import legal_translation
-
         self._translate(services, monkeypatch)
-        assert db.session.query(Translation).count() == 5  # four paragraphs and the title
+        assert db.session.query(Translation).count() == 5  # four blocks and the title
 
         legal_translation.forget_kept(SimpleNamespace(title="Teamordnung"))
 
         assert db.session.query(Translation).count() == 0
 
-    def test_a_translation_kept_without_context_keeps_its_key(self, app):
-        # Kept before there was a context per text: not translated again for nothing.
-        glossary = translation.settings()["glossary"]
-        assert translation._key("<p>x</p>", True, glossary) == translation._key("<p>x</p>", True, glossary, "")
+    def test_a_long_text_told_the_part_around(self, app):
+        context = "".join(f"Absatz {n}. " for n in range(10_000))
+        part = translation._around(context, ["<p>Absatz 9000.</p>"])
+
+        assert len(part) == translation.CONTEXT_MAX and "Absatz 9000." in part
+
+
+class TestDeepLsInstructionsAndModel:
+    def _refusing(self, services, monkeypatch, refused):
+        _set_up()
+        monkeypatch.setattr(translation, "_REFUSED", {})
+        sent = []
+
+        def deepl(url, *, data=None, headers=None, method="POST"):
+            if url.endswith("/v2/translate"):
+                sent.append(sorted(name for name in ("custom_instructions", "model_type") if name in data))
+                if refused & data.keys():
+                    raise translation._ServiceError("error 400 (not supported)", code=400)
+                return {"translations": [{"text": f"[DeepL] {text}"} for text in data["text"]]}
+            return services(url, data=data, headers=headers, method=method)
+
+        monkeypatch.setattr(translation, "_call", deepl)
+        assert translation.translate(["<p>Eins.</p>"]) == ["[DeepL] <p>Eins.</p>"]
+        assert translation.translate(["<p>Zwei.</p>"]) == ["[DeepL] <p>Zwei.</p>"]
+        return sent
+
+    def test_instructions_refused_the_better_model_kept(self, services, monkeypatch):
+        sent = self._refusing(services, monkeypatch, {"custom_instructions"})
+
+        assert sent == [["custom_instructions", "model_type"], ["model_type"], ["model_type"]]
+
+    def test_both_refused_asked_without_from_then_on(self, services, monkeypatch):
+        sent = self._refusing(services, monkeypatch, {"custom_instructions", "model_type"})
+
+        assert sent == [["custom_instructions", "model_type"], ["model_type"], [], []]
+
+    def test_a_key_not_accepted_not_taken_for_a_plan_without_them(self, services, monkeypatch):
+        _set_up()
+        monkeypatch.setattr(translation, "_REFUSED", {})
+        services.failing.add("deepl")
+
+        with pytest.raises(translation.TranslationUnavailable):
+            translation.translate(["<p>Eins.</p>"])
+
+        assert not any(translation._REFUSED.values())
+
+
+class TestAzuresFreeTier:
+    """Azure's free tier refuses more than about 33,000 characters a minute ("too many requests"):
+    on the live server it refused a whole privacy policy, and DeepL stepped in unnoticed."""
+
+    @pytest.fixture
+    def clock(self, monkeypatch):
+        now = {"t": 1000.0, "slept": []}
+
+        def sleep(seconds):
+            now["slept"].append(seconds)
+            now["t"] += seconds
+
+        monkeypatch.setattr(translation, "_sleep", sleep)
+        monkeypatch.setattr(translation, "_clock", lambda: now["t"])
+        return now
+
+    def test_sent_in_portions_paced_when_publishing(self, services, clock):
+        _set_up(deepl="", azure="azure-key")
+        texts = [f"<p>{n} {'x' * 4_000}</p>" for n in range(20)]  # 80,000 characters
+
+        translation.translate(texts, patient=True)
+
+        sent = [call[1] for call in services.calls if "microsofttranslator" in call[0]]
+        assert all(sum(len(item["Text"]) for item in batch) <= translation.AZURE_BATCH_CHARACTERS for batch in sent)
+        assert len(sent) == 10 and clock["slept"]  # waited for the minute to pass
+
+    def test_too_many_requests_waited_for_when_publishing(self, services, clock, monkeypatch):
+        _set_up(azure="azure-key", order="azure,deepl")
+        refusals = {"left": 2}
+
+        def azure(url, *, data=None, headers=None, method="POST"):
+            if "microsofttranslator" in url and refusals["left"]:
+                refusals["left"] -= 1
+                raise translation._ServiceError("too many requests just now", code=429, retry_after=30)
+            return services(url, data=data, headers=headers, method=method)
+
+        monkeypatch.setattr(translation, "_call", azure)
+        report = {}
+
+        assert translation.translate(["<p>Hallo.</p>"], patient=True, report=report) == ["[Azure] <p>Hallo.</p>"]
+        assert clock["slept"] == [30, 30] and report == {"services": {"azure"}, "failures": [], "missing": 0}
+
+    def test_in_a_pages_request_the_next_service_at_once_and_why_kept(self, services, clock, monkeypatch):
+        _set_up(azure="azure-key", order="azure,deepl")
+
+        def azure(url, *, data=None, headers=None, method="POST"):
+            if "microsofttranslator" in url:
+                raise translation._ServiceError("too many requests just now", code=429, retry_after=30)
+            return services(url, data=data, headers=headers, method=method)
+
+        monkeypatch.setattr(translation, "_call", azure)
+        report = {}
+
+        assert translation.translate(["<p>Hallo.</p>"], report=report) == ["[DeepL] <p>Hallo.</p>"]
+        assert clock["slept"] == []
+        assert report == {"services": {"deepl"}, "failures": ["Azure AI Translator: too many requests just now"],
+                          "missing": 0}
+
+    def test_what_azure_managed_kept_the_rest_by_the_next(self, services, clock, monkeypatch):
+        _set_up(azure="azure-key", order="azure,deepl")
+        texts = [f"<p>{n} {'x' * 6_000}</p>" for n in range(3)]  # one portion each
+        answered = {"count": 0}
+
+        def azure(url, *, data=None, headers=None, method="POST"):
+            if "microsofttranslator" in url:
+                answered["count"] += 1
+                if answered["count"] > 1:
+                    raise translation._ServiceError("too many requests just now", code=429, retry_after=30)
+            return services(url, data=data, headers=headers, method=method)
+
+        monkeypatch.setattr(translation, "_call", azure)
+
+        english = translation.translate(texts)
+
+        assert english[0].startswith("[Azure]") and all(text.startswith("[DeepL]") for text in english[1:])
+        sent_to_deepl = [call[1]["text"] for call in services.calls if call[0].endswith("/v2/translate")]
+        assert sent_to_deepl == [texts[1:]]
+
+    def test_retry_after_read(self, app):
+        import io
+        from urllib.error import HTTPError
+
+        def refused(code, headers):
+            return translation._retry_after(HTTPError("https://x", code, "", headers, io.BytesIO(b"")))
+
+        assert refused(429, {"Retry-After": "12"}) == 12
+        assert refused(429, {}) == 60
+        assert refused(500, {"Retry-After": "12"}) is None
+
+
+def _set_up_llm(provider="other", key="", model="a-model", address="http://localhost:11434/v1", order="llm,deepl,azure",
+                deepl="key:fx"):
+    _set_up(deepl=deepl, order=order)
+    for setting, value in ((translation.LLM_PROVIDER_KEY, provider), (translation.LLM_KEY, key),
+                           (translation.LLM_MODEL_KEY, model), (translation.LLM_ADDRESS_KEY, address)):
+        set_setting_value(setting, value)
+    db.session.commit()
+
+
+class TestALanguageModel:
+    """A language model as a third service (docs/legal-translation-plan.md): Anthropic, OpenAI,
+    or another server with OpenAI's interface -- a local Ollama, say."""
+
+    def test_another_server_asked_with_the_whole_text_and_the_glossary(self, services):
+        _set_up_llm()
+
+        english = translation.translate(["<p>Der Vorstand.</p>", "<h2>§ 3 Beschwerderecht</h2>"],
+                                        context="Statuten\n§ 3 Beschwerderecht")
+
+        assert english == ["[LLM] <p>Der Vorstand.</p>", "[LLM] <h2>§ 3 Beschwerderecht</h2>"]
+        [call] = [c for c in services.calls if c[0].endswith("/chat/completions")]
+        url, data, headers, _method = call
+        assert url == "http://localhost:11434/v1/chat/completions" and "Authorization" not in headers
+        assert data["model"] == "a-model" and data["response_format"]["type"] == "json_schema"
+        system = data["messages"][0]["content"]
+        assert "Vorstand -> board" in system and "§ 3 Beschwerderecht" in system and "gender-neutral" in system.lower()
+        assert db.session.query(Translation).filter_by(service="llm").count() == 2
+
+    def test_openai_at_its_own_address_with_the_key(self, services):
+        _set_up_llm(provider="openai", key="sk-test", address="")
+
+        translation.translate(["<p>Eins.</p>"])
+
+        [call] = [c for c in services.calls if c[0].endswith("/chat/completions")]
+        assert call[0] == "https://api.openai.com/v1/chat/completions"
+        assert call[2]["Authorization"] == "Bearer sk-test"
+
+    def test_set_up_only_with_a_model_and_a_key_or_an_address(self, app):
+        _set_up_llm(model="")
+        assert "llm" not in translation.configured()
+        _set_up_llm(provider="anthropic", key="")
+        assert "llm" not in translation.configured()
+        _set_up_llm(provider="anthropic", key="k")
+        assert translation.configured()[0] == "llm"
+        _set_up_llm(provider="other", key="", address="http://ollama.local:11434/v1")
+        assert translation.configured()[0] == "llm"  # a local server may need no key
+
+    @pytest.mark.parametrize("spoil, why", [
+        (lambda texts: texts[:-1], "wrong length"),
+        (lambda texts: [text.replace("<p>", "").replace("</p>", "") if "Zwei" in text else text for text in texts],
+         "HTML differs"),
+        (lambda texts: ["" if "Zwei" in text else text for text in texts], "left empty"),
+    ])
+    def test_an_answer_that_does_not_fit_asked_again_in_halves(self, services, monkeypatch, spoil, why):
+        # One bad paragraph does not send the whole text to the next service: asked again in halves,
+        # only the paragraph the model still gets wrong goes on.
+        _set_up_llm()
+
+        def answer(current, instructions, whole, asked, timeout):
+            texts = json.loads(asked.split("\n", 1)[1])
+            made = [f"[LLM] {text}" for text in texts]
+            return json.dumps({"translations": spoil(made) if any("Zwei" in text for text in texts) else made})
+
+        monkeypatch.setattr(translation, "_ask_openai", answer)
+        report = {}
+
+        english = translation.translate(["<p>Eins.</p>", "<p>Zwei.</p>", "<p>Drei.</p>"], report=report)
+
+        assert english == ["[LLM] <p>Eins.</p>", "[DeepL] <p>Zwei.</p>", "[LLM] <p>Drei.</p>"]
+        assert why in report["failures"][0] and report["services"] == {"llm", "deepl"}
+
+    def test_a_whole_text_in_one_request(self, services, monkeypatch):
+        _set_up_llm()
+        asked = []
+
+        def answer(current, instructions, whole, request, timeout):
+            texts = json.loads(request.split("\n", 1)[1])
+            asked.append(len(texts))
+            return json.dumps({"translations": [f"[LLM] {text}" for text in texts]})
+
+        monkeypatch.setattr(translation, "_ask_openai", answer)
+
+        translation.translate([f"<p>Absatz {n}. {'x' * 300}</p>" for n in range(120)])  # 36,000 characters
+
+        assert asked == [120]
+
+    def test_a_very_long_text_in_portions_asked_all_at_once(self, services, monkeypatch):
+        # Longer than one request takes: its portions go out together (each waits here until all
+        # three have arrived).
+        import threading
+
+        _set_up_llm()
+        texts = [f"<p>{n} {'x' * 40_000}</p>" for n in range(3)]  # a portion each
+        together = threading.Barrier(3, timeout=5)
+
+        def at_once(current, instructions, whole, asked, timeout):
+            together.wait()
+            return json.dumps({"translations": [f"[LLM] {text}" for text in json.loads(asked.split("\n", 1)[1])]})
+
+        monkeypatch.setattr(translation, "_ask_openai", at_once)
+
+        english = translation.translate(texts)
+
+        assert all(text.startswith("[LLM] ") for text in english)
+
+    def test_one_portion_failing_goes_to_the_next_service_alone(self, services, monkeypatch):
+        _set_up_llm()
+        texts = [f"<p>{n} {'x' * 40_000}</p>" for n in range(3)]
+
+        def second_fails(current, instructions, whole, asked, timeout):
+            sent = json.loads(asked.split("\n", 1)[1])
+            if sent[0].startswith("<p>1 "):
+                raise translation._ServiceError("not reached")
+            return json.dumps({"translations": [f"[LLM] {text}" for text in sent]})
+
+        monkeypatch.setattr(translation, "_ask_openai", second_fails)
+
+        english = translation.translate(texts)
+
+        assert [text[:6] for text in english] == ["[LLM] ", "[DeepL", "[LLM] "]
+
+    def test_in_a_pages_request_the_next_service_when_no_time_is_left(self, services, monkeypatch):
+        _set_up_llm()
+        ticks = iter([0.0])  # the request starts at 0; every later look at the clock: 42 s on
+        monkeypatch.setattr(translation, "_clock", lambda: next(ticks, 42.0))
+        monkeypatch.setattr(translation, "_ask_openai", lambda *_a: pytest.fail("asked without time"))
+        report = {}
+
+        assert translation.translate(["<p>Eins.</p>"], report=report) == ["[DeepL] <p>Eins.</p>"]
+        assert "no time left" in report["failures"][0]
+
+    def test_publishing_gives_what_a_fallback_made_to_the_first_once_more(self, services):
+        _set_up_llm()
+        services.failing.add("llm")
+        translation.translate(["<p>Eins.</p>"])  # in the editor: the model away, DeepL stepped in
+        services.failing.clear()
+        report = {}
+
+        english = translation.translate(["<p>Eins.</p>"], patient=True, report=report)
+
+        assert english == ["[LLM] <p>Eins.</p>"] and report["services"] == {"llm"}
+        assert db.session.query(Translation).one().service == "llm"
+
+    def test_what_a_fallback_made_just_now_not_given_to_the_first_again(self, services):
+        # The first service has just failed at it: asking it again at once spends its time twice
+        # (Codex, #85). Only what a fallback made earlier gets another try.
+        _set_up_llm()
+        services.failing.add("llm")
+
+        translation.translate(["<p>Eins.</p>"], patient=True)
+
+        # Asked once (and failing), DeepL once -- not the model a second time.
+        assert len([call for call in services.calls if call[0].endswith("/chat/completions")]) == 1
+        assert len([call for call in services.calls if call[0].endswith("/v2/translate")]) == 1
+
+    def test_in_the_background_a_translation_ends_in_time(self, services, monkeypatch):
+        # The outbox gives a job to another worker after ten minutes, and the worker service ends
+        # a run after 600 seconds: a translation in the background takes at most JOB_SECONDS.
+        _set_up_llm()
+        ticks = iter([0.0])
+        monkeypatch.setattr(translation, "_clock", lambda: next(ticks, translation.JOB_SECONDS - 2.0))
+        monkeypatch.setattr(translation, "_ask_openai", lambda *_a: pytest.fail("asked without time"))
+        report = {}
+
+        assert translation.translate(["<p>Eins.</p>"], patient=True, report=report) == ["[DeepL] <p>Eins.</p>"]
+        assert "no time left" in report["failures"][0]
+
+    def test_publishing_keeps_the_fallbacks_when_the_first_fails_again(self, services):
+        _set_up_llm()
+        services.failing.add("llm")
+        translation.translate(["<p>Eins.</p>"])
+        report = {}
+
+        english = translation.translate(["<p>Eins.</p>"], patient=True, report=report)
+
+        assert english == ["[DeepL] <p>Eins.</p>"] and report["services"] == {"deepl"}
+        assert report["failures"] and "Language model" in report["failures"][0]
+
+    def test_anthropic_asked_with_the_text_cached_and_a_fixed_answer(self, app, monkeypatch):
+        import anthropic
+
+        seen = {}
+
+        class Stream:
+            def __init__(self, **kwargs):
+                seen.update(kwargs)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def get_final_message(self):
+                from types import SimpleNamespace
+                texts = json.loads(seen["messages"][0]["content"].split("\n", 1)[1])
+                return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(
+                    type="text", text=json.dumps({"translations": [f"[A] {t}" for t in texts]}))])
+
+        class Client:
+            def __init__(self, **kwargs):
+                seen["client"] = kwargs
+                from types import SimpleNamespace
+                self.messages = SimpleNamespace(stream=lambda **kw: Stream(**kw))
+
+        monkeypatch.setattr(anthropic, "Anthropic", Client)
+        _set_up_llm(provider="anthropic", key="sk-ant-test", model="the-model")
+
+        english = translation.translate(["<p>Eins.</p>"], context="Statuten\nEins.")
+
+        assert english == ["[A] <p>Eins.</p>"]
+        assert seen["client"]["api_key"] == "sk-ant-test" and seen["model"] == "the-model"
+        assert seen["system"][1]["cache_control"] == {"type": "ephemeral"} and "Statuten" in seen["system"][1]["text"]
+        assert seen["output_config"]["format"]["type"] == "json_schema"
+
+    def test_anthropic_asked_to_think_hard_unless_the_model_does_not_know_effort(self, app, monkeypatch):
+        import anthropic
+        import httpx2
+
+        sent = []
+
+        class Stream:
+            def __init__(self, **kwargs):
+                sent.append(kwargs["output_config"])
+                self.kwargs = kwargs
+
+            def __enter__(self):
+                if "effort" in self.kwargs["output_config"]:
+                    response = httpx2.Response(400, request=httpx2.Request("POST", "https://api.anthropic.com"))
+                    raise anthropic.BadRequestError("effort: not supported by this model", response=response,
+                                                    body=None)
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def get_final_message(self):
+                from types import SimpleNamespace
+                return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(
+                    type="text", text=json.dumps({"translations": ["[A] <p>Eins.</p>"]}))])
+
+        class Client:
+            def __init__(self, **_kwargs):
+                from types import SimpleNamespace
+                self.messages = SimpleNamespace(stream=lambda **kw: Stream(**kw))
+
+        monkeypatch.setattr(anthropic, "Anthropic", Client)
+        monkeypatch.setattr(translation, "_NO_EFFORT", set())
+        _set_up_llm(provider="anthropic", key="sk-ant-test", model="an-older-model")
+
+        assert translation.translate(["<p>Eins.</p>"]) == ["[A] <p>Eins.</p>"]
+        translation.translate(["<p>Zwei.</p>"])
+
+        assert [config.get("effort") for config in sent] == ["high", None, None]
+
+    def test_saved_and_checked(self, client, services):
+        from api_helpers import send
+        from test_admin_reviews import _login, _staff
+
+        _login(client, _staff("boss@example.org", "superadmin").id)
+        body = {"order": ["llm", "deepl", "azure"], "deepl_key": "", "azure_key": "", "azure_region": "",
+                "glossary": [], "llm_provider": "other", "llm_key": "", "llm_model": "a model",
+                "llm_address": "http://localhost:11434/v1/"}
+
+        refused = send(client, "PUT", "/api/v1/admin/settings/translation", body)
+        body["llm_model"] = "a-model"
+        saved = send(client, "PUT", "/api/v1/admin/settings/translation", body)
+        shown = client.get("/api/v1/admin/settings/translation").get_json()
+
+        assert refused.status_code == 400 and saved.status_code == 200
+        assert [s["name"] for s in shown["services"]] == ["llm", "deepl", "azure"]
+        assert shown["llm_model"] == "a-model" and shown["llm_address"] == "http://localhost:11434/v1"
+        body["llm_address"] = "file:///etc/passwd"
+        assert send(client, "PUT", "/api/v1/admin/settings/translation", body).status_code == 400

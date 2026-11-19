@@ -7303,19 +7303,20 @@
         "title": "EmailOut",
         "type": "object"
       },
-      "EnglishOut": {
+      "EnglishIn": {
         "additionalProperties": false,
-        "description": "The German as written, in English by machine -- as members will read it once published.",
         "properties": {
-          "html": {
-            "title": "Html",
+          "again": {
+            "default": false,
+            "title": "Again",
+            "type": "boolean"
+          },
+          "body": {
+            "default": "",
+            "title": "Body",
             "type": "string"
           },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "unavailable": {
+          "revision": {
             "anyOf": [
               {
                 "type": "string"
@@ -7325,12 +7326,79 @@
               }
             ],
             "default": null,
-            "title": "Unavailable"
+            "title": "Revision"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "EnglishIn",
+        "type": "object"
+      },
+      "EnglishOut": {
+        "additionalProperties": false,
+        "description": "The German as written, in English by machine -- as members will read it once published.\nMade in the background: the page asks again while ``state`` is \"making\".",
+        "properties": {
+          "html": {
+            "default": "",
+            "title": "Html",
+            "type": "string"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Problem"
+          },
+          "state": {
+            "enum": [
+              "ready",
+              "making",
+              "unavailable"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "translated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Translated By"
+          },
+          "translation_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Translation Note"
           }
         },
         "required": [
-          "title",
-          "html"
+          "state"
         ],
         "title": "EnglishOut",
         "type": "object"
@@ -9654,6 +9722,30 @@
             ],
             "default": null,
             "title": "English"
+          },
+          "english_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English By"
+          },
+          "english_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English Note"
           },
           "english_problem": {
             "anyOf": [
@@ -19684,7 +19776,8 @@
             "items": {
               "enum": [
                 "deepl",
-                "azure"
+                "azure",
+                "llm"
               ],
               "type": "string"
             },
@@ -19702,11 +19795,47 @@
             "title": "Glossary",
             "type": "array"
           },
+          "llm_address": {
+            "default": "",
+            "maxLength": 255,
+            "title": "Llm Address",
+            "type": "string"
+          },
+          "llm_key": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Llm Key"
+          },
+          "llm_model": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Llm Model",
+            "type": "string"
+          },
+          "llm_provider": {
+            "default": "anthropic",
+            "enum": [
+              "anthropic",
+              "openai",
+              "other"
+            ],
+            "title": "Llm Provider",
+            "type": "string"
+          },
           "order": {
             "items": {
               "enum": [
                 "deepl",
-                "azure"
+                "azure",
+                "llm"
               ],
               "type": "string"
             },
@@ -19762,6 +19891,23 @@
             "title": "Glossary",
             "type": "array"
           },
+          "llm_address": {
+            "title": "Llm Address",
+            "type": "string"
+          },
+          "llm_model": {
+            "title": "Llm Model",
+            "type": "string"
+          },
+          "llm_provider": {
+            "enum": [
+              "anthropic",
+              "openai",
+              "other"
+            ],
+            "title": "Llm Provider",
+            "type": "string"
+          },
           "services": {
             "items": {
               "$ref": "#/components/schemas/TranslationServiceOut"
@@ -19773,6 +19919,9 @@
         "required": [
           "services",
           "azure_region",
+          "llm_provider",
+          "llm_model",
+          "llm_address",
           "glossary"
         ],
         "title": "TranslationOut",
@@ -19792,7 +19941,8 @@
           "name": {
             "enum": [
               "deepl",
-              "azure"
+              "azure",
+              "llm"
             ],
             "title": "Name",
             "type": "string"
@@ -20010,6 +20160,30 @@
             ],
             "default": null,
             "title": "English"
+          },
+          "english_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English By"
+          },
+          "english_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English Note"
           },
           "english_problem": {
             "anyOf": [
@@ -20366,6 +20540,30 @@
             ],
             "title": "English",
             "type": "string"
+          },
+          "english_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English By"
+          },
+          "english_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English Note"
           },
           "english_problem": {
             "anyOf": [
@@ -31917,7 +32115,7 @@
             "description": "Signed in, without the permission."
           }
         },
-        "summary": "The translation services, their order, DeepL's characters this month, and the glossary.",
+        "summary": "The translation services, their order, DeepL's characters used, and the glossary.",
         "tags": [
           "Admin"
         ],
@@ -34109,7 +34307,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CheckIn"
+                "$ref": "#/components/schemas/EnglishIn"
               }
             }
           },
@@ -34167,7 +34365,7 @@
             "description": "Not possible in the current state."
           }
         },
-        "summary": "The editor's *English* view: the German as written, translated paragraph by paragraph --",
+        "summary": "The editor's *English* view: the German as written, translated paragraph by paragraph in the",
         "tags": [
           "Legal"
         ]

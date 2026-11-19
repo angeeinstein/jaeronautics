@@ -58,6 +58,10 @@ class InForce(Model):
     english_problem: str | None = None
     #: An English is shown now -- while it is made again, or after that gave up, the one from before.
     english_shown: bool = False
+    #: Who made the English shown: "DeepL", "DeepL and Azure AI Translator".
+    english_by: str | None = None
+    #: Why the first service in the order did not translate it all.
+    english_note: str | None = None
 
 
 class UpcomingVersionOut(Model):
@@ -95,6 +99,8 @@ class UpcomingVersionOut(Model):
     english: EnglishState | None = None
     english_problem: str | None = None
     english_shown: bool = False
+    english_by: str | None = None
+    english_note: str | None = None
 
 
 class PdfJob(Model):
@@ -157,7 +163,9 @@ def _english(record):
     if record is None or record.status != "published":
         return {}
     state, problem, shown = legal_translation.english_state(record)
-    return {"english": state, "english_problem": problem, "english_shown": shown}
+    by, note = legal_translation.made_by_names(record)
+    return {"english": state, "english_problem": problem, "english_shown": shown, "english_by": by,
+            "english_note": note}
 
 
 def _correcting(version):
@@ -371,6 +379,8 @@ class VersionEnglishOut(Model):
     english: EnglishState
     english_problem: str | None = None
     english_shown: bool = False
+    english_by: str | None = None
+    english_note: str | None = None
 
 
 def _published(record_id):
@@ -387,8 +397,7 @@ def admin_legal_translate_again(record_id):
     record = _published(record_id)
     legal_translation.translate_again(current_user, record)
     db.session.commit()
-    state, problem, shown = legal_translation.english_state(record)
-    return VersionEnglishOut(english=state, english_problem=problem, english_shown=shown)
+    return VersionEnglishOut(**_english(record))
 
 
 @endpoint("DELETE", "/admin/legal/versions/<int:record_id>/english", response=VersionEnglishOut,

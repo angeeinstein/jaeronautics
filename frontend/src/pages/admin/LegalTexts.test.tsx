@@ -309,6 +309,29 @@ describe('the English of a version published here', () => {
     expect(inForce).toHaveTextContent('No English: the translation gave up (DeepL: error 500)');
   });
 
+  it('says which service made it, and why not the first', async () => {
+    const body = published('machine');
+    show({
+      [API]: {
+        body: {
+          ...body,
+          in_force: body.in_force.map((text) => ({
+            ...text,
+            english_by: 'DeepL',
+            english_note: 'Azure AI Translator: too many requests just now',
+          })),
+        },
+      },
+    });
+    const inForce = await screen.findByRole('region', { name: 'In force' });
+    expect(inForce).toHaveTextContent('English by DeepL, as Azure AI Translator failed');
+
+    await userEvent.click(within(inForce).getByRole('button', { name: 'English' }));
+    expect(await screen.findByRole('dialog')).toHaveTextContent(
+      'Azure AI Translator: too many requests just now.',
+    );
+  });
+
   it('is translated again, asked twice', async () => {
     const { calls } = show({
       [API]: { body: published('machine') },

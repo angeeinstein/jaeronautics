@@ -743,6 +743,8 @@ class ExternalWorkItem(db.Model):
     KIND_STRIPE_BOOKS = "stripe_books"
     # A published legal text's English, made by machine (services/legal_translation.py).
     KIND_LEGAL_TRANSLATE = "legal_translate"
+    # A draft's English in the editor, made in the background (services/legal_editor.py).
+    KIND_LEGAL_DRAFT_ENGLISH = "legal_draft_english"
 
     STATUS_PENDING = "pending"
     STATUS_PROCESSING = "processing"
@@ -1922,6 +1924,10 @@ class LegalTextVersion(db.Model):
     #: its body is the translated page as HTML, not Markdown; ``source_hash`` the German it was made from.
     machine_translated = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     source_hash = db.Column(db.String(64), nullable=True)
+    #: Which services translated it ("deepl", "azure", or both, comma-separated), and what the first
+    #: in the order said when it failed and another stepped in.
+    translated_by = db.Column(db.String(40), nullable=True)
+    translation_note = db.Column(db.String(500), nullable=True)
 
     uploaded_by = db.relationship("User", foreign_keys=[uploaded_by_user_id])
     published_by = db.relationship("User", foreign_keys=[published_by_user_id])

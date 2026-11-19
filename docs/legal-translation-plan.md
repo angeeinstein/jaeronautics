@@ -107,9 +107,118 @@ be live translated from German."
 - **Setup guide** for both services: `docs/maintenance.md`, "Setting up a
   translation service".
 
+## Better English, and Azure that works (2026-11-19)
+
+The privacy policy's English was weaker than DeepL is known for ("Right of
+appeal" for *Beschwerderecht*, a verb lost in a long sentence, "his"), and
+the maintainer would not fix it by rewording the German: "if I ever write
+this text again myself or by others, this shouldn't fail the same way".
+
+- **The whole German text as context** (the maintainer's idea): DeepL is
+  told it with every request -- not translated, not counted; up to 50,000
+  characters, for a longer text the part around. Before, a block was told
+  only an English note, and a list item its lead-in. A block is still
+  translated on its own (sent as one text, see above, was worse).
+- **Kept by its own text**, no longer by its context: a change to one
+  paragraph still costs that paragraph. Everything kept before is made anew
+  once (the key changed) -- *Translate again* per version.
+- **DeepL's better model and instructions**: `model_type`
+  `quality_optimized`, and the house style (formal British English,
+  gender-neutral: "they", "their") as `custom_instructions`. A plan that
+  refuses them is asked without, from then on.
+- **Azure's free tier** refuses more than about 33,000 characters a minute
+  ("too many requests"): on the live server it refused the whole privacy
+  policy, and DeepL stepped in unnoticed. Now portions of at most 10,000
+  characters; in the background (publishing) the portal paces itself to
+  30,000 a minute and waits when told to (`Retry-After`), up to four
+  minutes in all; in the editor it goes to the next service at once. What
+  a service managed is kept; only the rest goes to the next one.
+- **Which service made it** is kept with a version's English
+  (`translated_by`, `translation_note`) and shown: Admin › Legal texts
+  ("English by DeepL, as Azure AI Translator failed", the reason in its
+  dialog), the editor's *English* tab.
+- **DeepL's characters:** the Free account made in November 2026 has
+  1,000,000 characters for good, not per month (the maintainer; DeepL's own
+  documentation still says 500,000 a month); the settings page no longer
+  says "this month". At about 40,000 characters for the privacy policy and
+  only changed paragraphs afterwards, they last years. The suggested order:
+  DeepL first (better with context), Azure the fallback -- when DeepL's
+  characters are used up, Azure (2 million a month) steps in by itself.
+
 ## Not built
 
 - Keeping text typed in the last seconds before an editor lost its lock
   (taken over, laptop closed): at most the two seconds before the autosave;
   and the correction window, which has no autosave, "will likely never even
   be used at all" (the maintainer, 2026-11-05).
+
+## A language model as a third service (decided 2026-11-19)
+
+DeepL's Free account has 1,000,000 characters for good, not per month, so
+waiting to see how DeepL with context does is "not really a long-term option
+anyways" (the maintainer). A language model translates legal text better: it
+reads the whole text, keeps to instructions (gender-neutral, British English,
+the glossary in every inflected form, the HTML as it is), and costs a few
+cents a text.
+
+- **A third service, "Language model"**, beside DeepL and Azure, in the same
+  order and fallback. Its **provider** is chosen: **Anthropic** (its own
+  Python package), **OpenAI**, or **another server** with OpenAI's interface
+  -- Ollama, llama.cpp, LM Studio, run locally for free ("If I really want
+  to have this free, I could always just start a local [Ollama] server and
+  connect this"). Settings: provider, key (none needed for a local server),
+  address (another server only), and the **model** -- a field, never in the
+  code (`CLAUDE.md`: no model names in code or documents).
+- **What it is sent:** instructions, the glossary, the whole German text
+  (cached at Anthropic between portions, so it is paid for once), and the
+  paragraphs of a portion as a list; it answers a list in a fixed format
+  (structured output). Each answer is checked: as many paragraphs as sent,
+  the same HTML tags; otherwise that portion goes to the next service.
+- **In the background, also in the editor** (decided 2026-11-19: "having
+  this as a background job seems like the way it should be"). The editor's
+  *English* asks; what is kept already comes back at once, the rest is
+  translated by an outbox job (`legal_draft_english`, one per draft, its
+  text replaced when the writing goes on) while the page asks again every
+  two seconds and shows the English it had before, faded. A try that failed
+  is said and retried with the outbox's backoff. So no request waits on a
+  translator, and a slow local model has all the time it needs. First built
+  with a limit of 45 seconds in the page's request -- not a limit of the
+  server's: gunicorn's `--timeout` does not end a request on one of its
+  threads; Cloudflare gives up after 100 seconds, nginx after 120. *Try it*
+  keeps that limit.
+- **A whole text in one request** to a language model (2026-11-19, the
+  maintainer: "a good idea to give the model the complete text"): in
+  portions it named one body two ways -- *Generalhauptversammlung* as
+  "General Main Assembly" in § 11 and "general assembly" in § 21 --, as no
+  portion saw the others. Now up to 60,000 characters go at once (portions
+  only beyond that, sent together). An answer failing the checks is asked
+  for again in halves, down to one paragraph, so only what the model still
+  gets wrong goes to the next service. The checks: valid JSON of the agreed
+  shape, as many translations as paragraphs, none empty, and each with the
+  same HTML tags, attributes included, in the same order; then the same
+  cleaning as every service's answer. Anthropic's models are asked to think
+  hard (effort "high"; an older model without it, asked without), and the
+  instructions ask for one English form per term, body and role.
+- **Time limits in the background** (Codex, #85): a translation takes at most
+  7 minutes in all (`JOB_SECONDS`), waits and requests together -- the
+  outbox gives a job to another worker after 10, the worker service ends a
+  run after 600 seconds, and its runs claim no new job after 150
+  (`OUTBOX_CLAIM_SECONDS`). And only what a fallback made *earlier* is given
+  to the first service again, not what it made a moment ago in the same run.
+- Before that, a language model's portions were sent **all at once** and the title goes
+  with the text, as a heading (tried on the TDT rules, 2026-11-19: one
+  portion after another, the model managed § 1 to § 13 within the editor's
+  45 seconds, Azure the rest and the title -- "team rules Team Drone Tech").
+- **In the background** a service that asks to wait is waited for, and a
+  paragraph a fallback made earlier -- while the first service failed --
+  gets another try with the first service; if it fails again, the earlier
+  translation stays.
+- **The order** becomes a list reordered by dragging, top first, instead of
+  "Tried first" (`docs/design.md`, "An order").
+- **Translate again in the editor** (asked for while testing, 2026-11-19: "a
+  lot easier than having to modify the glossary"): the *English* tab of a
+  draft translates it afresh, nothing kept used -- after the order or the
+  glossary changed. A language model is told to use English quotation marks
+  (it kept „joanneum Aeronautics“).
+- Not built: a model's own fallback at Anthropic (refusals): the next service
+  in the order steps in instead.

@@ -28,3 +28,6 @@ PyYAML==6.0.3
 # ... and laid out as PDFs (aeronautics_members/legal_pdf.py). Needs Pango from the system
 # (libpango-1.0-0, libpangoft2-1.0-0 -- install.sh installs them).
 weasyprint==70.0
+# The legal texts' English by a language model at Anthropic (services/translation.py) --
+# the one translation service with a package of its own: its official SDK.
+anthropic==2.6.0

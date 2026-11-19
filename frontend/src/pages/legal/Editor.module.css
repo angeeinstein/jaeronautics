@@ -43,3 +43,8 @@
 .history li:last-child {
   border-bottom: 0;
 }
+
+/* The English from before, while the next is made: still readable, plainly not the latest. */
+.outdated {
+  opacity: 0.55;
+}

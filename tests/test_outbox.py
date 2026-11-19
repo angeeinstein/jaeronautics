@@ -128,6 +128,27 @@ class TestProcessing:
         # Key released, so a later change can queue fresh work for this member.
         assert row.dedupe_key is None
 
+    def test_a_run_with_a_time_limit_claims_nothing_new_after_it(self, app, monkeypatch):
+        # The worker service ends a run after 600 seconds; a legal text's translation takes up to
+        # seven minutes. So no item is claimed once the run has gone on for claim_for (#85).
+        now = {"t": 0.0}
+        ran = []
+
+        def slow(item):
+            ran.append(item.id)
+            now["t"] += 100  # each item takes a hundred seconds
+
+        monkeypatch.setitem(outbox._HANDLERS, "test_kind", slow)
+        monkeypatch.setattr(outbox, "_clock", lambda: now["t"])
+        member = make_member(email="slow@example.com")
+        items = [outbox.enqueue("test_kind", member=member, dedupe_key=f"slow-{n}") for n in range(4)]
+        db.session.commit()
+
+        completed, _failed = outbox.process_pending(claim_for=150)
+
+        assert completed == 2 and ran == [items[0].id, items[1].id]  # the third would start at 200 s
+        assert _item(items[2].id).status == ExternalWorkItem.STATUS_PENDING
+
     def test_a_request_while_it_runs_makes_it_run_once_more(self, app, monkeypatch):
         """The run may have read what was true before the new change; folded
         into it and then marked done, the change would never reach the forum."""

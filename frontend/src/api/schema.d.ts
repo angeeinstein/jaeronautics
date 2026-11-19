@@ -2334,7 +2334,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The translation services, their order, DeepL's characters this month, and the glossary. */
+        /** The translation services, their order, DeepL's characters used, and the glossary. */
         get: operations["admin_settings_translation"];
         /** Save them. A changed glossary is used from the next translation on. */
         put: operations["admin_settings_translation_save"];
@@ -2886,7 +2886,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** The editor's *English* view: the German as written, translated paragraph by paragraph -- */
+        /** The editor's *English* view: the German as written, translated paragraph by paragraph in the */
         post: operations["legal_draft_english"];
         delete?: never;
         options?: never;
@@ -6543,20 +6543,65 @@ export interface components {
             /** Email */
             email: string;
         };
+        /** EnglishIn */
+        EnglishIn: {
+            /**
+             * Again
+             * @default false
+             */
+            again?: boolean;
+            /**
+             * Body
+             * @default
+             */
+            body?: string;
+            /**
+             * Revision
+             * @default null
+             */
+            revision?: string | null;
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+        };
         /**
          * EnglishOut
          * @description The German as written, in English by machine -- as members will read it once published.
+         *     Made in the background: the page asks again while ``state`` is "making".
          */
         EnglishOut: {
-            /** Html */
-            html: string;
-            /** Title */
-            title: string;
             /**
-             * Unavailable
+             * Html
+             * @default
+             */
+            html?: string;
+            /**
+             * Problem
              * @default null
              */
-            unavailable?: string | null;
+            problem?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "ready" | "making" | "unavailable";
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+            /**
+             * Translated By
+             * @default null
+             */
+            translated_by?: string | null;
+            /**
+             * Translation Note
+             * @default null
+             */
+            translation_note?: string | null;
         };
         /** EraseIn */
         EraseIn: {
@@ -7314,6 +7359,16 @@ export interface components {
              * @default null
              */
             english?: ("machine" | "hand" | "making" | "failed" | "none") | null;
+            /**
+             * English By
+             * @default null
+             */
+            english_by?: string | null;
+            /**
+             * English Note
+             * @default null
+             */
+            english_note?: string | null;
             /**
              * English Problem
              * @default null
@@ -10663,11 +10718,32 @@ export interface components {
              */
             deepl_key?: string | null;
             /** Forget */
-            forget?: ("deepl" | "azure")[];
+            forget?: ("deepl" | "azure" | "llm")[];
             /** Glossary */
             glossary?: string[][];
+            /**
+             * Llm Address
+             * @default
+             */
+            llm_address?: string;
+            /**
+             * Llm Key
+             * @default null
+             */
+            llm_key?: string | null;
+            /**
+             * Llm Model
+             * @default
+             */
+            llm_model?: string;
+            /**
+             * Llm Provider
+             * @default anthropic
+             * @enum {string}
+             */
+            llm_provider?: "anthropic" | "openai" | "other";
             /** Order */
-            order: ("deepl" | "azure")[];
+            order: ("deepl" | "azure" | "llm")[];
         };
         /**
          * TranslationOut
@@ -10688,6 +10764,15 @@ export interface components {
             deepl_used?: number | null;
             /** Glossary */
             glossary: string[][];
+            /** Llm Address */
+            llm_address: string;
+            /** Llm Model */
+            llm_model: string;
+            /**
+             * Llm Provider
+             * @enum {string}
+             */
+            llm_provider: "anthropic" | "openai" | "other";
             /** Services */
             services: components["schemas"]["TranslationServiceOut"][];
         };
@@ -10701,7 +10786,7 @@ export interface components {
              * Name
              * @enum {string}
              */
-            name: "deepl" | "azure";
+            name: "deepl" | "azure" | "llm";
         };
         /** TranslationTryOut */
         TranslationTryOut: {
@@ -10771,6 +10856,16 @@ export interface components {
              * @default null
              */
             english?: ("machine" | "hand" | "making" | "failed" | "none") | null;
+            /**
+             * English By
+             * @default null
+             */
+            english_by?: string | null;
+            /**
+             * English Note
+             * @default null
+             */
+            english_note?: string | null;
             /**
              * English Problem
              * @default null
@@ -10912,6 +11007,16 @@ export interface components {
              * @enum {string}
              */
             english: "machine" | "hand" | "making" | "failed" | "none";
+            /**
+             * English By
+             * @default null
+             */
+            english_by?: string | null;
+            /**
+             * English Note
+             * @default null
+             */
+            english_note?: string | null;
             /**
              * English Problem
              * @default null
@@ -21528,7 +21633,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CheckIn"];
+                "application/json": components["schemas"]["EnglishIn"];
             };
         };
         responses: {

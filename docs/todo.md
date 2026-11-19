@@ -32,56 +32,56 @@ set apart, deleted price-list items folded into one row, what the teams are
 owed off the dashboard); and the batch of 2026-11-02
 (`claude/update-follow-ups`: cloudflared and the forum's server in the night,
 `deploy/server-night.sh`; the forum and *Shell access* on System health; the
-update's warning of local changes only for the portal's own files).
+update's warning of local changes only for the portal's own files); and the
+batch of 2026-11-19 (`claude/small-fixes`: the legal texts' English told the
+whole German text, Azure's free tier paced, which service made an English
+shown; the installer falling back to `main` from a branch that is gone;
+gunicorn without its control socket; a dead Stripe subscription cleared for
+good).
 
 ## Open
 
-### Installer: a remembered branch that is gone
+### Azure: spaces lost around the glossary's words
 
-- **Added:** 2026-11-18
-- **What:** `install.sh --mode update` without `--branch` uses the branch the
-  server was last updated to. Once that branch is merged and deleted, the
-  update fails three times over ("Remote branch … not found") and stops
-  (seen on the test server with `claude/translation-follow-ups`).
-- **Where:** `install.sh`, the bootstrap clone (around line 1476).
-- **Proposed:** when the remembered branch no longer exists, say so and fall
-  back to `main` (and remember `main`); an explicit `--branch` that does not
-  exist still fails.
-- **Until then:** `--branch main` once; afterwards a plain update follows it.
+- **Added:** 2026-11-19
+- **What:** in Azure's English the words the glossary puts in place lose or
+  gain a space: "memberspresent", "any ordinary memberwho", "the team lead
+  's consent", "these team rules ." -- seen in the TDT rules on the test
+  server, where Azure translated part of the text.
+- **Why:** Azure gets the glossary's English marked not to be translated
+  (`<span class="notranslate">`, `services/translation.py`,
+  `_with_glossary`) and moves the whitespace next to such a mark.
+- **Where:** `_with_glossary` and what comes back from `_azure`.
+- **Ideas:** put the surrounding spaces inside the mark; or after the
+  answer, a space between a glossary word and a letter that follows it,
+  none before punctuation. Azure is the last fallback now (a language model
+  first), so not pressing.
 
-### gunicorn's control socket on a read-only file system
+### DeepL: "Too many glossaries" on the test server
 
-- **Added:** 2026-11-18
-- **What:** every start logs `Control server error: [Errno 30] Read-only
-  file system: '/var/www/jaeronautics/.gunicorn'` -- gunicorn (since 26)
-  opens a control socket in the working directory, which the service's
-  sandbox (`ProtectSystem=strict`) keeps read-only. Harmless, but an ERROR
-  line at every start.
-- **Where:** `install.sh`, the unit's `ExecStart` (around line 2713).
-- **Proposed:** `--no-control-socket` -- the portal never uses gunicorn's
-  control interface. (Also with gunicorn 27, #82.)
-
-### A Stripe subscription that is gone, cleared again on every page
-
-- **Added:** 2026-11-18
-- **What:** the test server's log repeats `Stripe subscription … for
-  member_id=2 no longer exists; clearing the stale reference` every few
-  minutes: `billing.get_latest_stripe_subscription_for_member` sets
-  `member.stripe_subscription_id = None`, but on a page that only reads,
-  nothing commits it, so the next view asks Stripe and clears it again.
-- **Where:** `aeronautics_members/services/billing.py` (around line 320) and
-  its callers.
-- **Proposed:** clear it for good (commit it where it is found, or queue the
-  clearing); a test that the second lookup no longer asks Stripe. Only on
-  the test server so far (a subscription deleted in Stripe's test mode).
+- **Added:** 2026-11-19
+- **What:** the editor's English on the test server said "DeepL: the glossary:
+  a limit of the account is reached (Too many glossaries)" -- DeepL could not
+  make the test server's glossary, so DeepL did not translate there (Azure
+  stepped in). The test and live servers share one DeepL Free key; each keeps
+  and cleans up only its own glossaries (named with its address).
+- **Where:** `services/translation.py`, `_deepl_glossary`.
+- **To find out:** which glossaries the account holds (`GET /v2/glossaries`
+  with the key, or a line in the log listing their names) and how many a Free
+  account may have -- left over from before the cleanup (named with the live
+  server's address, which only the live server removes), or simply a limit
+  of one or two per account. Then: clean up what is left over, or a key per
+  server. Less pressing since a language model translates first.
 
 ### Privacy policy and membership terms drafts: brought up to date for the board
 
 - **Added:** 2026-11-18
-- **Being built** on `claude/legal-drafts-review`. The drafts
-  `legal/{privacy-policy,membership-terms}/de/2026-10-08.md` (still the
-  files; not edited in the portal yet) were checked against the portal; then
-  approved by the board and published from Admin › Legal texts.
+- **Built** (`claude/legal-drafts-review`, merged as #83); what is left is
+  publishing. The drafts were checked against the portal and are drafts in
+  the live portal now (*Edit* pressed, 2026-11-18). The privacy policy waits
+  for a better English (`claude/small-fixes`: the whole text as DeepL's
+  context, Azure paced): once installed, publish it and press *Translate
+  again* if its English was made before, then read it.
 - **Privacy policy, decided (2026-11-18):**
   - Add: the readers' tap log (90 days, time, reader, the card's last
     characters, the answer -- a first name, a balance, a refusal; admins).

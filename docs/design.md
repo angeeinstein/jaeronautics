@@ -187,6 +187,14 @@ heading in small capitals between white and the muted grey -- lighter than
 help text, quieter than the entries. Not cyan: that is the current page's
 (2026-10-18).
 
+**An order** -- where things are tried one after another (the translation
+services: the first that manages it is used), a list of them, reordered by
+dragging a row's handle; top is tried first. Also by keyboard (the handle
+focused, Space, the arrows, Space) and by an up and a down button on each
+row for a phone. Not "Tried first" with a toggle: that stops working at three
+(the maintainer, 2026-11-19: "the most intuitive"; "this principle could work
+for other stuff as well"). `components/OrderList.tsx`.
+
 **Menus and dialogs** -- surface fill, hairline border, header and footer
 bands, and the one real shadow (`0 12px 32px rgba(0,0,0,0.45)`).
 

@@ -303,9 +303,14 @@ def admin_settings_forum_test():
 # --- Translation (docs/legal-translation-plan.md) ---------------------------------------
 
 
+TranslationService = Literal["deepl", "azure", "llm"]
+#: Where the language model runs: Anthropic, OpenAI, or another server with OpenAI's interface.
+LlmProvider = Literal["anthropic", "openai", "other"]
+
+
 class TranslationServiceOut(Model):
-    #: deepl or azure.
-    name: Literal["deepl", "azure"]
+    #: deepl, azure, or llm (a language model).
+    name: TranslationService
     label: str
     #: A key is set (never shown).
     key_set: bool
@@ -316,24 +321,34 @@ class TranslationOut(Model):
 
     services: list[TranslationServiceOut]
     azure_region: str
+    llm_provider: LlmProvider
+    #: The language model, by its name at the provider.
+    llm_model: str
+    #: Another server's address (its OpenAI interface).
+    llm_address: str
     #: Each a German term and its English one.
     glossary: list[list[str]]
-    #: DeepL's characters this month, when DeepL is set up and answers.
+    #: DeepL's characters used and its limit, when DeepL is set up and answers: a month's on a
+    #: plan that renews, all there is on one that does not (a Free account of November 2026).
     deepl_used: int | None = None
     deepl_limit: int | None = None
 
 
 class TranslationIn(Model):
     #: The services in the order they are tried; the first that translates it is used.
-    order: list[Literal["deepl", "azure"]]
+    order: list[TranslationService]
     #: Empty keeps the one set.
     deepl_key: str | None = Field(None, max_length=255)
     azure_key: str | None = Field(None, max_length=255)
     azure_region: str = Field("", max_length=40)
+    llm_provider: LlmProvider = "anthropic"
+    llm_key: str | None = Field(None, max_length=500)
+    llm_model: str = Field("", max_length=100)
+    llm_address: str = Field("", max_length=255)
     #: Each a German term and its English one.
     glossary: list[list[str]] = Field(default_factory=list, max_length=200)
     #: Keys to remove.
-    forget: list[Literal["deepl", "azure"]] = Field(default_factory=list)
+    forget: list[TranslationService] = Field(default_factory=list)
 
 
 def _translation_out():
@@ -345,12 +360,13 @@ def _translation_out():
         services=[TranslationServiceOut(name=name, label=translation.NAMES[name],
                                         key_set=bool(current[f"{name}_key"])) for name in current["order"]],
         azure_region=current["azure_region"], glossary=[list(entry) for entry in current["glossary"]],
+        llm_provider=current["llm_provider"], llm_model=current["llm_model"], llm_address=current["llm_address"],
         deepl_used=usage["used"] if usage else None, deepl_limit=usage["limit"] if usage else None)
 
 
 @endpoint("GET", "/admin/settings/translation", response=TranslationOut, permissions=CREDENTIALS, tag=TAG)
 def admin_settings_translation():
-    """The translation services, their order, DeepL's characters this month, and the glossary."""
+    """The translation services, their order, DeepL's characters used, and the glossary."""
     return _translation_out()
 
 
@@ -364,7 +380,8 @@ def admin_settings_translation_save(body):
 
     changed = translation.save_settings(
         current_user, order=body.order, deepl_key=body.deepl_key, azure_key=body.azure_key,
-        azure_region=body.azure_region, glossary=[list(entry) for entry in body.glossary], forget=body.forget)
+        azure_region=body.azure_region, glossary=[list(entry) for entry in body.glossary], forget=body.forget,
+        llm_provider=body.llm_provider, llm_key=body.llm_key, llm_model=body.llm_model, llm_address=body.llm_address)
     if changed and translation.configured():
         legal_translation.wake_waiting()
     db.session.commit()

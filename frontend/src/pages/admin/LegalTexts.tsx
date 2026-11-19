@@ -54,9 +54,11 @@ import classes from './LegalTexts.module.css';
 type LegalOut = Schemas['LegalOut'];
 type Waiting = LegalOut['waiting'][number];
 type InForceText = LegalOut['in_force'][number];
-type EnglishState = NonNullable<InForceText['english']>;
 /** A version published here: what its English is, and the dialog to make it again or remove it. */
-type WithEnglish = Pick<InForceText, 'title' | 'record_id' | 'english' | 'english_problem' | 'english_shown'>;
+type WithEnglish = Pick<
+  InForceText,
+  'title' | 'record_id' | 'english' | 'english_problem' | 'english_shown' | 'english_by' | 'english_note'
+>;
 
 /** While an English is being made, the page asks again this often. */
 const MAKING_EVERY_MS = 3000;
@@ -167,12 +169,24 @@ function NewVersion({ data }: { data: LegalOut }) {
   );
 }
 
-/** ``shown``: an English is there -- while it is made again, or after that gave up, the one before. */
-function englishLine(state: EnglishState, problem: string | null | undefined, shown: boolean | undefined) {
+/** The services a note says failed ("Azure AI Translator: too many requests …; …"). */
+const SERVICE_NAMES = ['DeepL', 'Azure AI Translator'];
+
+/** ``english_shown``: an English is there -- while it is made again, or after that gave up, the one before. */
+function englishLine(text: WithEnglish) {
+  const { english: state, english_problem: problem, english_shown: shown } = text;
   const why = problem ? ` (${problem})` : '';
   switch (state) {
-    case 'machine':
-      return 'English made by machine';
+    case null:
+    case undefined:
+      return '';
+    case 'machine': {
+      if (!text.english_by) return 'English made by machine';
+      const failed = SERVICE_NAMES.filter((name) => text.english_note?.includes(`${name}: `));
+      return failed.length
+        ? `English by ${text.english_by}, as ${failed.join(' and ')} failed`
+        : `English by ${text.english_by}`;
+    }
     case 'hand':
       return 'English by hand';
     case 'making':
@@ -191,7 +205,7 @@ function EnglishText({ text }: { text: WithEnglish }) {
   if (!text.english) return null;
   return (
     <Text size="sm" c={text.english === 'failed' ? 'var(--ja-danger)' : 'dimmed'}>
-      {englishLine(text.english, text.english_problem, text.english_shown)}
+      {englishLine(text)}
     </Text>
   );
 }
@@ -224,8 +238,11 @@ function English({ text, onClose }: { text: WithEnglish; onClose: () => void }) 
   return (
     <Modal opened onClose={onClose} title={`English: ${text.title}`}>
       <Stack gap="md">
-        {text.english ? (
-          <Text>{englishLine(text.english, text.english_problem, text.english_shown)}.</Text>
+        {text.english ? <Text>{englishLine(text)}.</Text> : null}
+        {text.english === 'machine' && text.english_note ? (
+          <Text size="sm" c="dimmed">
+            {text.english_note.replace(/\.?$/, '.')}
+          </Text>
         ) : null}
         <Text size="sm" c="dimmed">
           Translate again makes it anew from the German, with the glossary as it is now; nothing translated

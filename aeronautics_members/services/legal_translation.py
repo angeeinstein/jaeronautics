@@ -12,9 +12,11 @@ The page is translated block by block (``legal_texts.blocks``), each kept by
 its exact text, so a version that differs from the last in one paragraph
 costs that paragraph. A paragraph's own number -- ``i)``, ``a)``, ``3)`` --
 is taken off before and put back after: a translator writes some of them as
-``(i)`` and leaves others, so they would no longer match. A paragraph whose
-sentence the next ones finish ("verpflichtet sich jedes Mitglied," / "i) sich
-… zu verhalten;") and those paragraphs are each told of the other, as context.
+``(i)`` and leaves others, so they would no longer match. Every block is
+sent knowing the whole German text, as context (DeepL; Azure takes none): a
+paragraph whose sentence the next ones finish ("verpflichtet sich jedes
+Mitglied," / "i) sich … zu verhalten;"), a heading of one word. Which
+services made the English, and why the first did not, is kept with it.
 
 In Admin › Legal texts a version's English can be made again from scratch
 (``translate_again``) or taken away (``remove_english``).
@@ -42,63 +44,57 @@ def source_hash(record):
 #: A paragraph that starts with its own number: ``<p>iii) …``, ``<p>(a) …``, ``<li>2) …``.
 _NUMBERED = re.compile(r"^(\s*<(?:p|li)>)(\(?(?:[ivxlcdm]{1,6}|[a-z]|\d{1,3})\))[ \t]+", re.IGNORECASE)
 _OPENING = re.compile(r"^\s*<(?:p|li)>")
-#: One paragraph, as a block is.
-_PARAGRAPH = re.compile(r"\s*<p>(?:(?!</p>).)*</p>\s*", re.DOTALL)
-#: How much of a neighbouring paragraph is told to DeepL as context.
-NEAR_MAX = 600
 
 
 def _plain(block):
-    return html.unescape(re.sub(r"<[^>]+>", "", block)).strip()
+    return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", block)).split())
 
 
 def _plan(german):
-    """What is sent of a version: its blocks with their numbers taken off, the numbers, and for each
-    block what DeepL is told of its neighbours ("" for nothing).
+    """What is sent of a version: its blocks with their numbers taken off, the numbers, and the whole
+    German text as plain text -- the context each block is translated in.
 
-    A paragraph ending in "," or ":" and the paragraphs after it that finish its sentence (starting
-    with a small letter, after their number) are each told of the other: translated apart and
-    unknowing, the two halves read "undertakes to, / i) to behave …". Each is still translated on
-    its own -- sent as one text, DeepL ran the paragraphs into each other and lost the glossary
-    and the gender-neutral wording (tried on 2026-11-17)."""
-    blocks, numbers = [], []
+    Each block is still translated on its own, and kept by its own text: sent as one text, DeepL
+    ran the paragraphs into each other and lost the glossary and the gender-neutral wording (tried
+    on 2026-11-17). Told only of its neighbours, a list item was translated well, but a heading of
+    one word not ("Beschwerderecht" -- of which right?)."""
+    blocks, numbers, whole = [], [], [german.title]
     for block in legal.blocks(german):
+        whole.append(_plain(block))
         numbered = _NUMBERED.match(block)
         numbers.append(numbered.group(2) if numbered else None)
         blocks.append(numbered.group(1) + block[numbered.end():] if numbered else block)
-    near, index = [""] * len(blocks), 0
-    while index < len(blocks):
-        items = []
-        if _PARAGRAPH.fullmatch(blocks[index]) and _plain(blocks[index]).endswith((",", ":")):
-            following = index + 1
-            while (following < len(blocks) and _PARAGRAPH.fullmatch(blocks[following])
-                   and _plain(blocks[following])[:1].islower()):
-                items.append(following)
-                following += 1
-        if items:
-            lead = _plain(blocks[index])[:NEAR_MAX]
-            listed = " / ".join(_plain(blocks[item]) for item in items)[:NEAR_MAX]
-            near[index] = f"This paragraph begins a sentence that the following list items finish: {listed}"
-            for item in items:
-                near[item] = f"This list item finishes the sentence begun by: {lead}"
-            index = items[-1] + 1
-        else:
-            index += 1
-    return blocks, numbers, near
+    return blocks, numbers, "\n".join(line for line in whole if line)
 
 
-def translate_version(german):
-    """``(title, html)``: a German Version's title and page in English."""
-    blocks, numbers, near = _plan(german)
-    english = translation.translate(blocks, near=near)
-    [title] = translation.translate([german.title], as_html=False)
+def _heading(title):
+    """The title, sent as a heading with the text: one request less -- in the editor a second one
+    for the title alone found the time used up, and the next service wrote "team rules …"."""
+    return f"<h1>{html.escape(title, quote=False)}</h1>"
+
+
+def translate_version(german, *, patient=False, report=None, only_kept=False):
+    """``(title, html)``: a German Version's title and page in English. ``patient``, ``report`` and
+    ``only_kept`` as for ``translation.translate``."""
+    blocks, numbers, context = _plan(german)
+    title, *english = translation.translate([_heading(german.title), *blocks], context=context,
+                                            patient=patient, report=report, only_kept=only_kept)
+    title = " ".join(html.unescape(re.sub(r"<[^>]+>", "", title)).split())
     return title, "".join(_numbered(text, number) for text, number in zip(english, numbers))
 
 
 def forget_kept(german):
     """The kept translations of a version's texts forgotten, so they are asked for again."""
-    blocks, _numbers, near = _plan(german)
-    return translation.forget(blocks, near=near) + translation.forget([german.title], as_html=False)
+    blocks, _numbers, _context = _plan(german)
+    return translation.forget([_heading(german.title), *blocks])
+
+
+def made_by(report):
+    """``(translated_by, note)`` of a ``report``: the services, comma-separated in the order of
+    SERVICES, and the failures, joined."""
+    services = [name for name in translation.SERVICES if name in report.get("services", ())]
+    note = "; ".join(dict.fromkeys(report.get("failures", [])))
+    return ",".join(services) or None, (note[:497] + "...") if len(note) > 500 else (note or None)
 
 
 def _numbered(english, number):
@@ -120,7 +116,8 @@ def make_english(record):
     wanted = source_hash(record)
     if english is not None and english.machine_translated and english.source_hash == wanted:
         return english
-    title, page = translate_version(legal.record(record.id))
+    report = {}
+    title, page = translate_version(legal.record(record.id), patient=True, report=report)
     if english is not None:
         # Made again: the page's render cache follows the count (legal_texts._from_record).
         english.edit_count = (english.edit_count or 0) + 1
@@ -134,6 +131,7 @@ def make_english(record):
     english.published_at, english.published_by = record.published_at, record.published_by
     english.title, english.revision, english.body = title, record.revision, page
     english.machine_translated, english.source_hash = True, wanted
+    english.translated_by, english.translation_note = made_by(report)
     english.corrected_at = record.corrected_at
     db.session.flush()
     return english
@@ -192,6 +190,19 @@ def english_state(record):
     if english is None:
         return "none", None, False
     return ("machine" if english.machine_translated else "hand"), None, True
+
+
+def made_by_names(record):
+    """``(by, note)`` of a published version's English made by machine: "DeepL", "DeepL and Azure AI
+    Translator", and why the first service in the order did not translate it all."""
+    english = english_of(record)
+    if english is None or not english.machine_translated or not english.translated_by:
+        return None, None
+    return names(english.translated_by.split(",")), english.translation_note
+
+
+def names(services):
+    return " and ".join(translation.NAMES[name] for name in services if name in translation.NAMES) or None
 
 
 def _published_german(record):

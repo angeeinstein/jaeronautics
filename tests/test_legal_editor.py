@@ -217,40 +217,111 @@ class TestWho:
 
 
 class TestTheEnglishView:
-    def test_the_german_as_written_in_english_only_new_blocks_sent(self, client, boss, monkeypatch):  # noqa: F811
+    """The editor's English, made in the background (docs/legal-translation-plan.md): the page asks,
+    a job translates what is not kept yet, the page asks again and gets it."""
+
+    @pytest.fixture
+    def translator(self, monkeypatch):
         from aeronautics_members.services import translation
 
-        sent = []
+        state = {"sent": [], "failures": [], "fail": None}
 
-        def fake(blocks, as_html=True, near=None):
-            sent.extend(blocks)
-            return [f"EN:{block}" for block in blocks]
+        def fake(blocks, as_html, current, only=None, context="", patient=False, patience=None):
+            if state["fail"]:
+                raise translation.TranslationUnavailable(state["fail"])
+            state["sent"].extend(blocks)
+            state["patient"] = patient
+            return [(f"EN:{block}", "deepl") for block in blocks], list(state["failures"])
 
-        monkeypatch.setattr(translation, "_by_a_service", lambda blocks, as_html, current, only=None, near="":
-                            (fake(blocks, as_html), "deepl"))
+        monkeypatch.setattr(translation, "_by_a_service", fake)
         monkeypatch.setattr(translation, "configured", lambda current=None: ["deepl"])
+        return state
+
+    def _ask(self, client, record, text, **extra):
+        return send(client, "POST", f"/api/v1/legal/drafts/{record.id}/english", {**text, **extra}).get_json()
+
+    def _draft(self, client, boss):  # noqa: F811
         record = editor.start_draft(boss, "statutes", template=_template())
         db.session.commit()
         _login(client, boss.id)
+        return record
+
+    def test_made_in_the_background_then_only_new_blocks(self, client, boss, translator):  # noqa: F811
+        from aeronautics_members.services import outbox
+
+        record = self._draft(client, boss)
         text = {"title": "Statuten", "body": "## § 1 Name\n\nEins.\n\n## § 2 Zweck\n\nZwei."}
 
-        first = send(client, "POST", f"/api/v1/legal/drafts/{record.id}/english", text).get_json()
-        text["body"] = text["body"].replace("Zwei.", "Zwei, geändert.")
-        sent.clear()
-        send(client, "POST", f"/api/v1/legal/drafts/{record.id}/english", text)
+        assert self._ask(client, record, text)["state"] == "making"
+        assert translator["sent"] == []  # nothing translated in the page's request
+        outbox.process_pending()
+        ready = self._ask(client, record, text)
 
-        assert first["title"] == "EN:Statuten" and "EN:<p>Eins.</p>" in first["html"]
-        assert sent == ["<p>Zwei, geändert.</p>\n"]
+        assert ready["state"] == "ready" and ready["title"] == "EN:Statuten" and "EN:<p>Eins.</p>" in ready["html"]
+        assert ready["translated_by"] == "DeepL" and translator["patient"]
+
+        text["body"] = text["body"].replace("Zwei.", "Zwei, geändert.")
+        translator["sent"].clear()
+        assert self._ask(client, record, text)["state"] == "making"
+        outbox.process_pending()
+        assert self._ask(client, record, text)["state"] == "ready"
+        assert translator["sent"] == ["<p>Zwei, geändert.</p>\n"]
+
+    def test_asking_again_while_it_is_made_queues_nothing_more(self, client, boss, translator):  # noqa: F811
+        from aeronautics_members.db_models import ExternalWorkItem
+
+        record = self._draft(client, boss)
+        text = {"title": "Statuten", "body": "## § 1 Name\n\nEins."}
+
+        for _ in range(3):  # the page asks every two seconds
+            assert self._ask(client, record, text)["state"] == "making"
+
+        [item] = db.session.query(ExternalWorkItem).filter_by(kind=ExternalWorkItem.KIND_LEGAL_DRAFT_ENGLISH).all()
+        assert item.payload["part"]["body"] == "## § 1 Name\n\nEins." and not item.asked_again
+
+        text["body"] = "## § 1 Name\n\nEins, neu."  # typed on: the waiting job takes the new text
+        self._ask(client, record, text)
+        [item] = db.session.query(ExternalWorkItem).filter_by(kind=ExternalWorkItem.KIND_LEGAL_DRAFT_ENGLISH).all()
+        assert item.payload["part"]["body"] == "## § 1 Name\n\nEins, neu."
+
+    def test_translated_again_and_why_not_by_the_first(self, client, boss, translator):  # noqa: F811
+        from aeronautics_members.services import outbox
+
+        record = self._draft(client, boss)
+        text = {"title": "Statuten", "body": "## § 1 Name\n\nEins."}
+        self._ask(client, record, text)
+        outbox.process_pending()
+        translator["sent"].clear()
+        translator["failures"] = ["Language model: no such model"]
+
+        # *Translate again*: nothing kept is used -- every block and the title asked anew.
+        assert self._ask(client, record, text, again=True)["state"] == "making"
+        outbox.process_pending()
+        ready = self._ask(client, record, text)
+
+        assert sorted(translator["sent"]) == sorted(
+            ["<h1>Statuten</h1>", "<h2 id=\"paragraph-1\">§ 1 Name</h2>\n", "<p>Eins.</p>\n"])
+        assert ready["translation_note"] == "Language model: no such model"
+
+    def test_a_failed_try_said_while_it_is_tried_again(self, client, boss, translator):  # noqa: F811
+        from aeronautics_members.services import outbox
+
+        record = self._draft(client, boss)
+        text = {"title": "Statuten", "body": "## § 1 Name\n\nEins."}
+        translator["fail"] = "DeepL: the key is not accepted"
+        self._ask(client, record, text)
+
+        outbox.process_pending()
+        answer = self._ask(client, record, text)
+
+        assert answer["state"] == "making" and "the key is not accepted" in answer["problem"]
 
     def test_says_when_no_service_is_set_up(self, client, boss):  # noqa: F811
-        record = editor.start_draft(boss, "statutes", template=_template())
-        db.session.commit()
-        _login(client, boss.id)
+        record = self._draft(client, boss)
 
-        answer = send(client, "POST", f"/api/v1/legal/drafts/{record.id}/english",
-                      {"title": "Statuten", "body": "## § 1 Name\n\nEins."}).get_json()
+        answer = self._ask(client, record, {"title": "Statuten", "body": "## § 1 Name\n\nEins."})
 
-        assert answer["html"] == "" and "No translation service" in answer["unavailable"]
+        assert answer["state"] == "unavailable" and "No translation service" in answer["problem"]
 
 
 class TestTheApi:
