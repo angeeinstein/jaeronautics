@@ -388,11 +388,12 @@ def markdown_file(german):
     return as_file(record, legal.AUTHORITATIVE, content(record)["german"]), name
 
 
-def english(record, part, report=None):
+def english(record, part, report=None, again=False):
     """The editor's *English* view: the German as written, translated by machine, ``(title, html)`` --
     each block of it kept, so typing sends only what changed. ``("", "")`` while the text cannot be
     laid out; TranslationUnavailable when no service translates it. ``report``: as for
-    ``translation.translate``."""
+    ``translation.translate``. ``again``: nothing kept is used -- *Translate again*, after the
+    order of the services or the glossary changed."""
     part = _clean(part, "german")
     with tempfile.TemporaryDirectory() as folder:
         path, slug, _language, team, _found = legal_pdf._uploaded(
@@ -401,8 +402,11 @@ def english(record, part, report=None):
             return "", ""
         try:
             version, _problems = legal._check(path, slug, legal.AUTHORITATIVE, team)
-            return (legal_translation.translate_version(version, report=report) if version is not None
-                    else ("", ""))
+            if version is None:
+                return "", ""
+            if again:
+                legal_translation.forget_kept(version)
+            return legal_translation.translate_version(version, report=report)
         finally:
             legal.forget([path])
 

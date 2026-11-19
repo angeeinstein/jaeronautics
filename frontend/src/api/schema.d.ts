@@ -6543,6 +6543,29 @@ export interface components {
             /** Email */
             email: string;
         };
+        /** EnglishIn */
+        EnglishIn: {
+            /**
+             * Again
+             * @default false
+             */
+            again?: boolean;
+            /**
+             * Body
+             * @default
+             */
+            body?: string;
+            /**
+             * Revision
+             * @default null
+             */
+            revision?: string | null;
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
+        };
         /**
          * EnglishOut
          * @description The German as written, in English by machine -- as members will read it once published.
@@ -21598,7 +21621,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CheckIn"];
+                "application/json": components["schemas"]["EnglishIn"];
             };
         };
         responses: {

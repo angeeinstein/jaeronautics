@@ -7303,6 +7303,40 @@
         "title": "EmailOut",
         "type": "object"
       },
+      "EnglishIn": {
+        "additionalProperties": false,
+        "properties": {
+          "again": {
+            "default": false,
+            "title": "Again",
+            "type": "boolean"
+          },
+          "body": {
+            "default": "",
+            "title": "Body",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Revision"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "EnglishIn",
+        "type": "object"
+      },
       "EnglishOut": {
         "additionalProperties": false,
         "description": "The German as written, in English by machine -- as members will read it once published.",
@@ -34263,7 +34297,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CheckIn"
+                "$ref": "#/components/schemas/EnglishIn"
               }
             }
           },

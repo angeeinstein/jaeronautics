@@ -38,7 +38,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { useDebouncedValue, useMediaQuery } from '@mantine/hooks';
-import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { EditorView } from '@codemirror/view';
 import {
   IconArrowBackUp,
@@ -859,28 +859,55 @@ function Preview({ recordId, part }: { recordId: number; part: Part }) {
  */
 function EnglishView({ recordId, part }: { recordId: number; part: Part }) {
   const [written] = useDebouncedValue(part, TRANSLATE_AFTER_MS);
+  const queryClient = useQueryClient();
+  const queryKey = ['legal', 'editor', recordId, 'english', written] as const;
+  const ask = (again: boolean) =>
+    call(
+      api.POST('/api/v1/legal/drafts/{record_id}/english', {
+        params: { path: { record_id: recordId } },
+        body: { ...written, again },
+      }),
+    );
   const translated = useQuery({
-    queryKey: ['legal', 'editor', recordId, 'english', written] as const,
-    queryFn: () =>
-      call(
-        api.POST('/api/v1/legal/drafts/{record_id}/english', {
-          params: { path: { record_id: recordId } },
-          body: written,
-        }),
-      ),
+    queryKey,
+    queryFn: () => ask(false),
     placeholderData: keepPreviousData,
     staleTime: Infinity,
   });
+  // Made anew, nothing kept used: after the order of the services or the glossary changed.
+  const again = useMutation({
+    mutationFn: () => ask(true),
+    onSuccess: (made) => {
+      queryClient.setQueryData(queryKey, made);
+    },
+    onError: notifyFailed,
+  });
+  const againButton = (
+    <Button
+      variant="default"
+      size="xs"
+      w="fit-content"
+      loading={again.isPending}
+      onClick={() => {
+        again.mutate();
+      }}
+    >
+      Translate again
+    </Button>
+  );
   if (translated.isPending) return <LoadingState />;
   if (translated.isError) {
     return <ErrorState error={translated.error} onRetry={() => void translated.refetch()} />;
   }
   if (translated.data.unavailable) {
     return (
-      <Alert color="yellow" variant="light" title="No English just now">
-        {translated.data.unavailable.replace(/\.?$/, '.')} Publishing does not wait for it: the English is
-        made once a service answers.
-      </Alert>
+      <Stack gap="sm">
+        <Alert color="yellow" variant="light" title="No English just now">
+          {translated.data.unavailable.replace(/\.?$/, '.')} Publishing does not wait for it: the English is
+          made once a service answers.
+        </Alert>
+        {againButton}
+      </Stack>
     );
   }
   return (
@@ -893,6 +920,7 @@ function EnglishView({ recordId, part }: { recordId: number; part: Part }) {
           ? ` Not all by the first service: ${translated.data.translation_note}`
           : ''}
       </Text>
+      {againButton}
       <h2 className={classes.previewTitle} lang="en">
         {translated.data.title}
       </h2>

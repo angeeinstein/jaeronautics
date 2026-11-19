@@ -277,7 +277,12 @@ class EnglishOut(Model):
     translation_note: str | None = None
 
 
-@endpoint("POST", "/legal/drafts/<int:record_id>/english", response=EnglishOut, body=CheckIn, tag=TAG)
+class EnglishIn(CheckIn):
+    #: *Translate again*: nothing translated before is used.
+    again: bool = False
+
+
+@endpoint("POST", "/legal/drafts/<int:record_id>/english", response=EnglishOut, body=EnglishIn, tag=TAG)
 def legal_draft_english(record_id, body):
     """The editor's *English* view: the German as written, translated paragraph by paragraph --
     each kept, so only what changed is sent to the translator."""
@@ -288,7 +293,7 @@ def legal_draft_english(record_id, body):
     record = editor.editable(current_user, record_id)
     report = {}
     try:
-        title, html = editor.english(record, body.model_dump(), report)
+        title, html = editor.english(record, body.model_dump(exclude={"again"}), report, again=body.again)
     except TranslationUnavailable as exc:
         db.session.rollback()
         return EnglishOut(title="", html="", unavailable=str(exc))

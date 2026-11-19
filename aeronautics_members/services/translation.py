@@ -666,7 +666,8 @@ its statutes, rules of procedure, membership terms, privacy policy and its teams
 explain nothing.
 - Gender-neutral: a member or any other person is "they" and "their", never "he", "his", "she" or "her".
 - Keep every HTML tag and its attributes exactly as they are, in the same places; translate only the text \
-between them. Leave email addresses, web addresses and names as they are.
+between them. Leave email addresses, web addresses and names as they are, and use English quotation \
+marks ("...") where the German has its own („...“).
 - Each text you are given is a part of the whole German text, which follows for context: a heading, a \
 paragraph, or a list item that finishes a sentence begun before it. Translate each so that it reads right \
 in its place.

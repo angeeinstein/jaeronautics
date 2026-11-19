@@ -175,7 +175,14 @@ describe('the editor', () => {
     expect(await screen.findByText('The association is called.', {}, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.getByText(/Made by machine from the German/)).toBeInTheDocument();
     const sent = calls.find((call) => new URL(call.url).pathname === `${API}/english`);
-    expect(await sent?.clone().json()).toMatchObject({ title: 'Statuten' });
+    expect(await sent?.clone().json()).toMatchObject({ title: 'Statuten', again: false });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Translate again' }));
+
+    await waitFor(async () => {
+      const asked = calls.filter((call) => new URL(call.url).pathname === `${API}/english`);
+      expect(await asked.at(-1)?.clone().json()).toMatchObject({ title: 'Statuten', again: true });
+    });
   });
 
   it('says so when no translation service answers', async () => {

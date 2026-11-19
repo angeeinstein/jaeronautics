@@ -181,5 +181,10 @@ cents a text.
   it fails again, the earlier translation stays.
 - **The order** becomes a list reordered by dragging, top first, instead of
   "Tried first" (`docs/design.md`, "An order").
+- **Translate again in the editor** (asked for while testing, 2026-11-19: "a
+  lot easier than having to modify the glossary"): the *English* tab of a
+  draft translates it afresh, nothing kept used -- after the order or the
+  glossary changed. A language model is told to use English quotation marks
+  (it kept „joanneum Aeronautics“).
 - Not built: a model's own fallback at Anthropic (refusals): the next service
   in the order steps in instead.

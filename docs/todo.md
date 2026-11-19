@@ -41,6 +41,22 @@ good).
 
 ## Open
 
+### DeepL: "Too many glossaries" on the test server
+
+- **Added:** 2026-11-19
+- **What:** the editor's English on the test server said "DeepL: the glossary:
+  a limit of the account is reached (Too many glossaries)" -- DeepL could not
+  make the test server's glossary, so DeepL did not translate there (Azure
+  stepped in). The test and live servers share one DeepL Free key; each keeps
+  and cleans up only its own glossaries (named with its address).
+- **Where:** `services/translation.py`, `_deepl_glossary`.
+- **To find out:** which glossaries the account holds (`GET /v2/glossaries`
+  with the key, or a line in the log listing their names) and how many a Free
+  account may have -- left over from before the cleanup (named with the live
+  server's address, which only the live server removes), or simply a limit
+  of one or two per account. Then: clean up what is left over, or a key per
+  server. Less pressing since a language model translates first.
+
 ### Privacy policy and membership terms drafts: brought up to date for the board
 
 - **Added:** 2026-11-18
