@@ -56,7 +56,23 @@ the treasurers have the bank account, and the chairperson signs contracts.
    - **Granularity:** split where somebody would decide separately, not per
      button -- perhaps 50-60 permissions, not 200.
 
-## Proposed split (to confirm when building starts)
+5. **Super admin is full trust, not a template** (proposed 2026-11-19, the
+   maintainer: unticking "manage cards" for a super admin "wouldn't really
+   make much sense, because as a super admin I can basically do everything
+   with the server"). A super admin holds every permission, those added to
+   the portal later too -- "all" in the code, not a list --, and takes no
+   exceptions: whoever can install updates, download a backup and grant
+   permissions could undo any restriction. Their *Access* tab shows all
+   ticked and greyed, with one line saying why. Somebody trusted with less is
+   an admin, or holds single permissions, with exceptions. Only a super admin
+   makes somebody one; the last cannot go (`PROTECTED_PERMISSIONS`). "Nobody
+   grants what they do not hold" needs no exception then.
+6. **The split below and the *Auditor* role: agreed** (2026-11-19). Seeing
+   is cheap to give, changing stays narrow: "there is not much that I would
+   hide from anybody ... they can always ask how much money their
+   association holds, and we are more or less obliged to tell them anyway".
+
+## The split
 
 Where today one permission covers seeing and changing, and the cases above
 want them apart:
@@ -72,7 +88,8 @@ want them apart:
 - **Accounts:** `accounts.view` today also opens much of an account's page;
   seeing / changing a member's details, checked page by page.
 
-A role **"Auditor"** (finances read-only: team money, credit, Stripe's book;
+A role **"Auditor"** -- what the maintainer had in mind for the
+university's auditors (finances read-only: team money, credit, Stripe's book;
 nothing changed, no members' details beyond what a booking names) would be
 generic -- Austrian associations must have two auditors (VerG § 5 (5)) --
 and fit the university's financial auditors.

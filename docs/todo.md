@@ -52,7 +52,9 @@ good).
   credit, Stripe's book), perhaps a read-only *Auditor* role.
 - **Where:** `docs/permissions-plan.md` -- what was decided, the cases, the
   proposed split.
-- **Open:** the split and the *Auditor* role, confirmed when building starts.
+- **Agreed:** the split and the *Auditor* role (2026-11-19). **Open:** the
+  maintainer's yes to super admin as full trust (holds everything, takes no
+  exceptions), then a last talk-through before building.
 
 ### Azure: spaces lost around the glossary's words
 
