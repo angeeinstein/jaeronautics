@@ -155,7 +155,7 @@ class TestWhatThePageMayOffer:
         root = _staff("root@example.org", "superadmin")
         signed_in(client, root)
 
-        assert "cannot change your own roles" in _get(client, root.id)["access"]["roles_locked"]
+        assert "cannot change your own access" in _get(client, root.id)["access"]["roles_locked"]
 
     def test_an_erased_account_offers_no_access_changes(self, client, member):
         from datetime import datetime

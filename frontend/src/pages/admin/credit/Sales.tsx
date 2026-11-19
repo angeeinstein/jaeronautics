@@ -14,6 +14,7 @@ import { IconChartBar } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 
 import { api, call, type Schemas } from '../../../api/client';
+import { can, useMe } from '../../../api/session';
 import { AppLink } from '../../../app/AppLink';
 import { SalesPointMenus } from '../../../components/devices/SalesPointMenus';
 import { PageHeader } from '../../../components/PageHeader';
@@ -86,14 +87,17 @@ function Sellers({ sellers }: { sellers: SellerSales[] }) {
 }
 
 export function Sales() {
+  const manage = can(useMe().data, 'credit.manage');
   const sales = useQuery({ queryKey: salesKey, queryFn: () => call(api.GET('/api/v1/admin/sales')) });
   const prices = useQuery({
     queryKey: associationPricesKey,
     queryFn: () => call(api.GET('/api/v1/admin/credit/items')),
   });
+  // The sales points' menus are changed only, so fetched only for whoever may.
   const devices = useQuery({
     queryKey: associationDevicesKey,
     queryFn: () => call(api.GET('/api/v1/admin/credit/devices')),
+    enabled: manage,
   });
   useLiveRefresh(salesKey, EVERY_MINUTE);
   const association = sales.data?.sellers.find((seller) => seller.team_slug === null);
@@ -122,6 +126,7 @@ export function Sales() {
                 queryKey={associationPricesKey}
                 sales={association}
                 salesKey={salesKey}
+                readOnly={!manage}
                 add={(body) => call(api.POST('/api/v1/admin/credit/items', { body }))}
                 change={(id: number, body: ItemChange) =>
                   call(

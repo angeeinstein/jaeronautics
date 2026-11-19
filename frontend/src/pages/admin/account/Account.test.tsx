@@ -58,30 +58,7 @@ function account(overrides: Partial<AccountOut> = {}): AccountOut {
       has_picture: true,
     },
     teams: { roles: [], memberships: [] },
-    access: {
-      options: [
-        {
-          slug: 'admin',
-          label: 'Admin',
-          description: 'Administers members.',
-          held: false,
-          covered_by: 'Super Admin',
-          permissions: ['Open the admin workspace'],
-        },
-        {
-          slug: 'superadmin',
-          label: 'Super Admin',
-          description: 'Installs updates.',
-          held: true,
-          covered_by: null,
-          permissions: ['Install a new version and roll one back'],
-        },
-      ],
-      effective_permissions: ['Install a new version and roll one back', 'Open the admin workspace'],
-      roles_locked: null,
-      removal_warning: null,
-      disable_blockers: [],
-    },
+    access: superadminAccess(),
     recent_activity: [],
     actions: {
       sync_billing: true,
@@ -157,7 +134,7 @@ describe('the head of the page', () => {
       'Membership',
       'Forum',
       'Cards',
-      'Roles',
+      'Access',
       'Activity',
     ]);
   });
@@ -230,58 +207,154 @@ describe('profile', () => {
   });
 });
 
-describe('roles', () => {
-  it('say which role covers which, and that permissions combine', async () => {
-    show(account(), { hash: '#roles' });
+describe('access', () => {
+  it('a super admin: all ticked and greyed, and why', async () => {
+    show(account(), { hash: '#access' });
 
     expect(await screen.findByText('included in Super Admin')).toBeInTheDocument();
-    expect(screen.getByText(/combined permissions of every role chosen/)).toBeInTheDocument();
+    expect(screen.getByText(/holds every permission, those added later too/)).toBeInTheDocument();
+    const cards = screen.getByRole('checkbox', { name: /Manage cards/ });
+    expect(cards).toBeChecked();
+    expect(cards).toBeDisabled();
   });
 
-  it('keep what an account and a role can do folded until asked', async () => {
-    show(account(), { hash: '#roles' });
+  it('keep what a role can do folded until asked', async () => {
+    show(account(), { hash: '#access' });
 
-    const can = await screen.findByRole('button', { name: /What this account can do now \(2\)/ });
-    expect(screen.queryByText('Open the admin workspace')).toBeNull();
+    const [role] = await screen.findAllByRole('button', { name: /What this role can do/ });
+    expect(screen.queryByRole('list')).toBeNull();
 
-    await userEvent.click(can);
+    await userEvent.click(role ?? never());
 
-    expect(screen.getByText('Open the admin workspace')).toBeInTheDocument();
+    expect(screen.getByRole('list')).toHaveTextContent('Open the admin workspace');
   });
 
-  it('save the whole set after a second click', async () => {
-    const { calls } = show(account(), {
-      hash: '#roles',
+  it('a role ticks its permissions; one unticked is saved as taken away', async () => {
+    const { calls } = show(account({ access: memberAccess() }), {
+      hash: '#access',
       answers: { [`PUT ${ACCOUNT}/roles`]: { body: { changed: true, redundant: [] } } },
     });
 
     await userEvent.click(await screen.findByRole('checkbox', { name: /^Admin/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'Save roles' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Yes, change the roles' }));
+    expect(screen.getByRole('checkbox', { name: /Change the money/ })).toBeChecked();
+    await userEvent.click(screen.getByRole('checkbox', { name: /Manage cards/ }));
+    expect(screen.getByText('taken away')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Save access' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Yes, change the access' }));
 
-    expect(await sent(calls, 'PUT', `${ACCOUNT}/roles`)).toEqual({ roles: ['superadmin', 'admin'] });
+    expect(await sent(calls, 'PUT', `${ACCOUNT}/roles`)).toEqual({
+      roles: ['admin'],
+      permissions: ['admin.access', 'money.manage', 'money.view'],
+    });
+  });
+
+  it('a permission brings what it needs, and goes with it', async () => {
+    show(account({ access: memberAccess() }), { hash: '#access' });
+
+    await userEvent.click(await screen.findByRole('checkbox', { name: /Change the money/ }));
+
+    expect(screen.getByRole('checkbox', { name: /See the money/ })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /Open the admin workspace/ })).toBeChecked();
+    expect(screen.getAllByText('added')).toHaveLength(3);
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /Open the admin workspace/ }));
+
+    expect(screen.getByRole('checkbox', { name: /Change the money/ })).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Save access' })).toBeDisabled();
+  });
+
+  it('what the person looking does not hold stays greyed', async () => {
+    show(account({ access: memberAccess({ notMine: 'system.update' }) }), { hash: '#access' });
+
+    expect(await screen.findByRole('checkbox', { name: /Install a new version/ })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: /Manage cards/ })).toBeEnabled();
   });
 
   it('nothing to save until something changes', async () => {
-    show(account(), { hash: '#roles' });
+    show(account({ access: memberAccess() }), { hash: '#access' });
 
-    expect(await screen.findByRole('button', { name: 'Save roles' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Save access' })).toBeDisabled();
   });
 
   it('one’s own cannot be changed, and the page says so', async () => {
-    show(
-      account({
-        access: { ...(account().access ?? never()), roles_locked: 'You cannot change your own roles.' },
-      }),
-      {
-        hash: '#roles',
-      },
-    );
+    show(account({ access: { ...superadminAccess(), roles_locked: 'You cannot change your own access.' } }), {
+      hash: '#access',
+    });
 
-    expect(await screen.findByText('You cannot change your own roles.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Save roles' })).toBeNull();
+    expect(await screen.findByText('You cannot change your own access.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save access' })).toBeNull();
   });
 });
+
+type Access = NonNullable<AccountOut['access']>;
+
+const PERMISSIONS: [string, string, string, string[]][] = [
+  ['admin.access', 'Open the admin workspace', 'Admin workspace', []],
+  ['cards.manage', 'Manage cards', 'Cards and devices', ['admin.access']],
+  ['money.view', 'See the money', 'Teams and money', ['admin.access']],
+  ['money.manage', 'Change the money', 'Teams and money', ['admin.access', 'money.view']],
+  ['system.update', 'Install a new version', 'Settings and server', ['admin.access']],
+];
+const ADMIN = ['admin.access', 'cards.manage', 'money.manage', 'money.view'];
+
+function roles(held: string[]): Access['options'] {
+  return [
+    {
+      slug: 'admin',
+      label: 'Admin',
+      description: 'Administers members.',
+      held: held.includes('admin'),
+      covered_by: held.includes('superadmin') ? 'Super Admin' : null,
+      permissions: ['Open the admin workspace'],
+      permission_names: ADMIN,
+      may_change: true,
+    },
+    {
+      slug: 'superadmin',
+      label: 'Super Admin',
+      description: 'Installs updates.',
+      held: held.includes('superadmin'),
+      covered_by: null,
+      permissions: ['Install a new version and roll one back'],
+      permission_names: PERMISSIONS.map(([name]) => name),
+      may_change: true,
+    },
+  ];
+}
+
+function permissions(held: (name: string) => boolean, notMine = ''): Access['permissions'] {
+  return PERMISSIONS.map(([name, label, area, needs]) => ({
+    name,
+    label,
+    area,
+    needs,
+    held: held(name),
+    from_roles: held(name),
+    may_change: name !== notMine,
+  }));
+}
+
+function superadminAccess(): Access {
+  return {
+    options: roles(['superadmin']),
+    permissions: permissions(() => true),
+    superadmin: true,
+    effective_permissions: PERMISSIONS.map(([, label]) => label),
+    roles_locked: null,
+    removal_warning: null,
+    disable_blockers: [],
+  };
+}
+
+function memberAccess({ notMine = '' } = {}): Access {
+  return {
+    ...superadminAccess(),
+    options: roles([]),
+    permissions: permissions(() => false, notMine),
+    superadmin: false,
+    effective_permissions: [],
+  };
+}
 
 describe('the danger zone', () => {
   const erasure: Schemas['ErasureOut'] = {

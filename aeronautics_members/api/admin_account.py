@@ -149,9 +149,9 @@ class RoleOption(Model):
     #: What the role lets somebody do.
     permissions: list[str]
     #: The same, by name: what ticking the role ticks.
-    permission_names: list[str] = []
+    permission_names: list[str]
     #: Whether the person looking may give or take it (only what they hold; super admin only by one).
-    may_change: bool = True
+    may_change: bool
 
 
 class PermissionOption(Model):
@@ -176,12 +176,12 @@ class Access(Model):
 
     options: list[RoleOption]
     #: Every permission, grouped, with what the account holds and why.
-    permissions: list[PermissionOption] = []
+    permissions: list[PermissionOption]
     #: A super admin holds every permission and takes no exceptions: nothing to tick.
-    superadmin: bool = False
+    superadmin: bool
     #: What the account can do now, from all its roles.
     effective_permissions: list[str]
-    #: Why the roles cannot be changed here at all (one's own account).
+    #: Why the access cannot be changed here at all: one's own, a super admin's, one holding more.
     roles_locked: str | None
     #: Why clearing every role would be refused, said before anybody tries.
     removal_warning: str | None
@@ -353,6 +353,16 @@ def _permission_labels(permissions):
     return sorted(PERMISSION_LABELS.get(permission, permission) for permission in permissions)
 
 
+def _why_locked(own, superadmin, holds_more):
+    if own:
+        return "You cannot change your own access. Another administrator can, or grant-superadmin on the server."
+    if superadmin:
+        return "A super admin's access is changed only by a super admin."
+    if holds_more:
+        return "This account holds permissions you do not: only somebody who holds all of them changes its access."
+    return None
+
+
 def _access(user):
     if not current_user.can(Permission.ROLES_MANAGE):
         return None
@@ -365,7 +375,7 @@ def _access(user):
     i_am_superadmin = is_superadmin(current_user)
     target_superadmin = SUPERADMIN in held
     # A super admin is changed only by a super admin; one's own access by somebody else.
-    changeable = not own and (i_am_superadmin or not target_superadmin)
+    changeable = not own and (i_am_superadmin or not target_superadmin) and user.permissions <= mine
     options = []
     for slug in assignable_roles():
         covering = covering_role(slug, held)
@@ -405,8 +415,7 @@ def _access(user):
         permissions=permissions,
         superadmin=target_superadmin,
         effective_permissions=_permission_labels(user.permissions),
-        roles_locked=("You cannot change your own roles. Another administrator can, or grant-superadmin on the "
-                      "server." if user.id == current_user.id else None),
+        roles_locked=_why_locked(own, target_superadmin and not i_am_superadmin, not user.permissions <= mine),
         removal_warning=removal_warning,
         disable_blockers=disable_blockers,
     )

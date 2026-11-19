@@ -21,6 +21,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { api, call } from '../../../api/client';
+import { can, useMe } from '../../../api/session';
 import { ErrorState, LoadingState } from '../../../components/States';
 import { formatDate, formatDateTime, formatEuros } from '../../../lib/format';
 import { notifyFailed } from '../../../lib/notify';
@@ -167,7 +168,9 @@ function differenceLine(difference: Difference): string {
     .join(' · ');
 }
 
+/** The switch, for whoever may change the money's settings; nothing for whoever only looks. */
 function EmailSwitch({ on }: { on: boolean }) {
+  const manage = can(useMe().data, 'teams.money');
   const client = useQueryClient();
   const save = useMutation({
     mutationFn: async (next: boolean) => {
@@ -177,6 +180,7 @@ function EmailSwitch({ on }: { on: boolean }) {
     onSuccess: () => client.invalidateQueries({ queryKey: ['admin', 'money'] }),
     onError: notifyFailed,
   });
+  if (!manage) return null;
   return (
     <Checkbox
       label="Email differences to the admins and the treasurer"

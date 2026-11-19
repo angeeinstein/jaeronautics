@@ -26,6 +26,9 @@ def _user(email, *roles):
 
 
 def _login(client, user):
+    from flask import g
+
+    g.pop("_login_user", None)  # the tests share one application context
     with client.session_transaction() as session:
         session["_user_id"] = str(user.id)
 
@@ -147,6 +150,21 @@ class TestOnlyWhatOneHolds:
         refused = _set(client, boss, ["admin"])
 
         assert refused.status_code == 409 and boss.can(Permission.SYSTEM_UPDATE)
+
+    def test_an_account_holding_more_is_out_of_reach(self, client):
+        boss = _user("boss@example.org", "superadmin")
+        admin = _user("admin@example.org", "admin")
+        backup = _user("backup@example.org", "admin")
+        _login(client, boss)
+        _set(client, backup, ["admin"], ROLE_PERMISSIONS["admin"] | {Permission.SYSTEM_BACKUP})
+        _login(client, admin)
+
+        page = client.get(f"/api/v1/admin/accounts/{backup.id}").get_json()["access"]
+        refused = _set(client, backup, [])
+
+        assert refused.status_code == 409 and backup.can(Permission.ACCOUNTS_VIEW)
+        assert "holds permissions you do not" in page["roles_locked"]
+        assert not any(option["may_change"] for option in page["permissions"] + page["options"])
 
     def test_a_super_admin_out_of_an_admins_reach(self, client):
         # Otherwise an admin could change the super admin's address, reset the password and hold it.

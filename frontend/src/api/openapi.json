@@ -3,7 +3,7 @@
     "schemas": {
       "Access": {
         "additionalProperties": false,
-        "description": "Roles and switching the account off -- for whoever manages access.",
+        "description": "Roles, permissions and switching the account off -- for whoever manages access.",
         "properties": {
           "disable_blockers": {
             "items": {
@@ -24,6 +24,13 @@
               "$ref": "#/components/schemas/RoleOption"
             },
             "title": "Options",
+            "type": "array"
+          },
+          "permissions": {
+            "items": {
+              "$ref": "#/components/schemas/PermissionOption"
+            },
+            "title": "Permissions",
             "type": "array"
           },
           "removal_warning": {
@@ -47,10 +54,16 @@
               }
             ],
             "title": "Roles Locked"
+          },
+          "superadmin": {
+            "title": "Superadmin",
+            "type": "boolean"
           }
         },
         "required": [
           "options",
+          "permissions",
+          "superadmin",
           "effective_permissions",
           "roles_locked",
           "removal_warning",
@@ -11438,7 +11451,8 @@
                 "team.messages",
                 "team.devices",
                 "team.attendance",
-                "team.rules"
+                "team.rules",
+                "team.permissions"
               ],
               "type": "string"
             },
@@ -11577,6 +11591,7 @@
                 "approvals.review",
                 "cards.manage",
                 "credit.manage",
+                "credit.view",
                 "devices.manage",
                 "forum.admin",
                 "forum.moderate",
@@ -11584,6 +11599,7 @@
                 "legal.publish",
                 "legal.texts",
                 "logs.view",
+                "messages.answer",
                 "messages.receive",
                 "notifications.manage",
                 "notifications.receive",
@@ -11593,7 +11609,8 @@
                 "system.backup",
                 "system.update",
                 "teams.manage",
-                "teams.money"
+                "teams.money",
+                "teams.money.view"
               ],
               "type": "string"
             },
@@ -14098,6 +14115,54 @@
         "title": "PeriodQuery",
         "type": "object"
       },
+      "PermissionOption": {
+        "additionalProperties": false,
+        "description": "One permission on a person's Access tab (docs/permissions-plan.md).",
+        "properties": {
+          "area": {
+            "title": "Area",
+            "type": "string"
+          },
+          "from_roles": {
+            "title": "From Roles",
+            "type": "boolean"
+          },
+          "held": {
+            "title": "Held",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "may_change": {
+            "title": "May Change",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "needs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Needs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "area",
+          "held",
+          "from_roles",
+          "needs",
+          "may_change"
+        ],
+        "title": "PermissionOption",
+        "type": "object"
+      },
       "PersonCardsOut": {
         "additionalProperties": false,
         "properties": {
@@ -15670,6 +15735,17 @@
             "title": "Label",
             "type": "string"
           },
+          "may_change": {
+            "title": "May Change",
+            "type": "boolean"
+          },
+          "permission_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permission Names",
+            "type": "array"
+          },
           "permissions": {
             "items": {
               "type": "string"
@@ -15688,7 +15764,9 @@
           "description",
           "held",
           "covered_by",
-          "permissions"
+          "permissions",
+          "permission_names",
+          "may_change"
         ],
         "title": "RoleOption",
         "type": "object"
@@ -15696,6 +15774,22 @@
       "RolesIn": {
         "additionalProperties": false,
         "properties": {
+          "permissions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Permissions"
+          },
           "roles": {
             "items": {
               "type": "string"
@@ -18694,7 +18788,8 @@
                 "team.messages",
                 "team.devices",
                 "team.attendance",
-                "team.rules"
+                "team.rules",
+                "team.permissions"
               ],
               "type": "string"
             },
@@ -18888,6 +18983,129 @@
         "title": "TeamPayment",
         "type": "object"
       },
+      "TeamPermissionOption": {
+        "additionalProperties": false,
+        "description": "One team permission on a member's page, for whoever may change theirs.",
+        "properties": {
+          "area": {
+            "title": "Area",
+            "type": "string"
+          },
+          "from_roles": {
+            "title": "From Roles",
+            "type": "boolean"
+          },
+          "held": {
+            "title": "Held",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "may_change": {
+            "title": "May Change",
+            "type": "boolean"
+          },
+          "name": {
+            "enum": [
+              "team.view_members",
+              "team.review_applications",
+              "team.remove_members",
+              "team.write_notes",
+              "team.export",
+              "team.edit_settings",
+              "team.send_access_list",
+              "team.view_money",
+              "team.edit_bank_details",
+              "team.appoint_treasurer",
+              "team.appoint_leads",
+              "team.edit_prices",
+              "team.messages",
+              "team.devices",
+              "team.attendance",
+              "team.rules",
+              "team.permissions"
+            ],
+            "title": "Name",
+            "type": "string"
+          },
+          "needs": {
+            "items": {
+              "enum": [
+                "team.view_members",
+                "team.review_applications",
+                "team.remove_members",
+                "team.write_notes",
+                "team.export",
+                "team.edit_settings",
+                "team.send_access_list",
+                "team.view_money",
+                "team.edit_bank_details",
+                "team.appoint_treasurer",
+                "team.appoint_leads",
+                "team.edit_prices",
+                "team.messages",
+                "team.devices",
+                "team.attendance",
+                "team.rules",
+                "team.permissions"
+              ],
+              "type": "string"
+            },
+            "title": "Needs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "area",
+          "held",
+          "from_roles",
+          "needs",
+          "may_change"
+        ],
+        "title": "TeamPermissionOption",
+        "type": "object"
+      },
+      "TeamPermissionsIn": {
+        "additionalProperties": false,
+        "properties": {
+          "permissions": {
+            "items": {
+              "enum": [
+                "team.view_members",
+                "team.review_applications",
+                "team.remove_members",
+                "team.write_notes",
+                "team.export",
+                "team.edit_settings",
+                "team.send_access_list",
+                "team.view_money",
+                "team.edit_bank_details",
+                "team.appoint_treasurer",
+                "team.appoint_leads",
+                "team.edit_prices",
+                "team.messages",
+                "team.devices",
+                "team.attendance",
+                "team.rules",
+                "team.permissions"
+              ],
+              "type": "string"
+            },
+            "maxItems": 40,
+            "title": "Permissions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "permissions"
+        ],
+        "title": "TeamPermissionsIn",
+        "type": "object"
+      },
       "TeamPersonOut": {
         "additionalProperties": false,
         "properties": {
@@ -18933,6 +19151,21 @@
                 "type": "null"
               }
             ]
+          },
+          "permissions": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TeamPermissionOption"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Permissions"
           },
           "picture_url": {
             "anyOf": [
@@ -24442,7 +24675,7 @@
           "Credit"
         ],
         "x-permissions": [
-          "credit.manage"
+          "credit.view"
         ]
       }
     },
@@ -24624,7 +24857,7 @@
           "Credit"
         ],
         "x-permissions": [
-          "credit.manage"
+          "credit.view"
         ]
       },
       "post": {
@@ -24926,7 +25159,7 @@
           "Credit"
         ],
         "x-permissions": [
-          "credit.manage"
+          "credit.view"
         ]
       }
     },
@@ -28213,7 +28446,7 @@
           "Messages"
         ],
         "x-permissions": [
-          "messages.receive"
+          "messages.answer"
         ]
       }
     },
@@ -28307,7 +28540,7 @@
           "Messages"
         ],
         "x-permissions": [
-          "messages.receive"
+          "messages.answer"
         ]
       }
     },
@@ -28401,7 +28634,7 @@
           "Messages"
         ],
         "x-permissions": [
-          "messages.receive"
+          "messages.answer"
         ]
       }
     },
@@ -28445,7 +28678,7 @@
           "Admin"
         ],
         "x-permissions": [
-          "teams.money"
+          "teams.money.view"
         ]
       }
     },
@@ -28547,7 +28780,7 @@
           "Admin"
         ],
         "x-permissions": [
-          "teams.money"
+          "teams.money.view"
         ]
       }
     },
@@ -28639,7 +28872,7 @@
           "Admin"
         ],
         "x-permissions": [
-          "teams.money"
+          "teams.money.view"
         ]
       }
     },
@@ -28819,7 +29052,7 @@
           "Admin"
         ],
         "x-permissions": [
-          "teams.money"
+          "teams.money.view"
         ]
       }
     },
@@ -29597,7 +29830,7 @@
           "Credit"
         ],
         "x-permissions": [
-          "credit.manage"
+          "credit.view"
         ]
       }
     },
@@ -39081,6 +39314,95 @@
           }
         },
         "summary": "A note about somebody, for the leads and the admins. Not shown to them, but part of their data.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/people/{user_id}/permissions": {
+      "put": {
+        "operationId": "team_person_permissions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamPermissionsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamPersonOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Set a member's permissions in the team: their roles', plus or minus exceptions -- within the",
         "tags": [
           "Teams"
         ]

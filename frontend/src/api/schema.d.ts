@@ -3877,6 +3877,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{slug}/manage/people/{user_id}/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set a member's permissions in the team: their roles', plus or minus exceptions -- within the */
+        put: operations["team_person_permissions"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{slug}/manage/prices": {
         parameters: {
             query?: never;
@@ -4157,7 +4174,7 @@ export interface components {
     schemas: {
         /**
          * Access
-         * @description Roles and switching the account off -- for whoever manages access.
+         * @description Roles, permissions and switching the account off -- for whoever manages access.
          */
         Access: {
             /** Disable Blockers */
@@ -4166,10 +4183,14 @@ export interface components {
             effective_permissions: string[];
             /** Options */
             options: components["schemas"]["RoleOption"][];
+            /** Permissions */
+            permissions: components["schemas"]["PermissionOption"][];
             /** Removal Warning */
             removal_warning: string | null;
             /** Roles Locked */
             roles_locked: string | null;
+            /** Superadmin */
+            superadmin: boolean;
         };
         /** AccessListIn */
         AccessListIn: {
@@ -7973,7 +7994,7 @@ export interface components {
             /** Name */
             name: string;
             /** Permissions */
-            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices" | "team.attendance" | "team.rules")[];
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices" | "team.attendance" | "team.rules" | "team.permissions")[];
             /** Slug */
             slug: string;
         };
@@ -8027,7 +8048,7 @@ export interface components {
             /** Last Name */
             last_name: string | null;
             /** Permissions */
-            permissions: ("accounts.billing" | "accounts.privacy" | "accounts.view" | "admin.access" | "announcements.send" | "approvals.review" | "cards.manage" | "credit.manage" | "devices.manage" | "forum.admin" | "forum.moderate" | "forum.moderator" | "legal.publish" | "legal.texts" | "logs.view" | "messages.receive" | "notifications.manage" | "notifications.receive" | "roles.manage" | "settings.credentials" | "settings.general" | "system.backup" | "system.update" | "teams.manage" | "teams.money")[];
+            permissions: ("accounts.billing" | "accounts.privacy" | "accounts.view" | "admin.access" | "announcements.send" | "approvals.review" | "cards.manage" | "credit.manage" | "credit.view" | "devices.manage" | "forum.admin" | "forum.moderate" | "forum.moderator" | "legal.publish" | "legal.texts" | "logs.view" | "messages.answer" | "messages.receive" | "notifications.manage" | "notifications.receive" | "roles.manage" | "settings.credentials" | "settings.general" | "system.backup" | "system.update" | "teams.manage" | "teams.money" | "teams.money.view")[];
             /** Picture Url */
             picture_url: string | null;
             /** Roles */
@@ -8812,6 +8833,26 @@ export interface components {
              */
             start?: string | null;
         };
+        /**
+         * PermissionOption
+         * @description One permission on a person's Access tab (docs/permissions-plan.md).
+         */
+        PermissionOption: {
+            /** Area */
+            area: string;
+            /** From Roles */
+            from_roles: boolean;
+            /** Held */
+            held: boolean;
+            /** Label */
+            label: string;
+            /** May Change */
+            may_change: boolean;
+            /** Name */
+            name: string;
+            /** Needs */
+            needs: string[];
+        };
         /** PersonCardsOut */
         PersonCardsOut: {
             /** Items */
@@ -9341,6 +9382,10 @@ export interface components {
             held: boolean;
             /** Label */
             label: string;
+            /** May Change */
+            may_change: boolean;
+            /** Permission Names */
+            permission_names: string[];
             /** Permissions */
             permissions: string[];
             /** Slug */
@@ -9348,6 +9393,11 @@ export interface components {
         };
         /** RolesIn */
         RolesIn: {
+            /**
+             * Permissions
+             * @default null
+             */
+            permissions?: string[] | null;
             /** Roles */
             roles: string[];
         };
@@ -10361,7 +10411,7 @@ export interface components {
             /** Name */
             name: string;
             /** Permissions */
-            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices" | "team.attendance" | "team.rules")[];
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices" | "team.attendance" | "team.rules" | "team.permissions")[];
             /** Photos */
             photos: components["schemas"]["PhotoOut"][];
             /** Picture Url */
@@ -10414,6 +10464,34 @@ export interface components {
             /** Refunded */
             refunded: number;
         };
+        /**
+         * TeamPermissionOption
+         * @description One team permission on a member's page, for whoever may change theirs.
+         */
+        TeamPermissionOption: {
+            /** Area */
+            area: string;
+            /** From Roles */
+            from_roles: boolean;
+            /** Held */
+            held: boolean;
+            /** Label */
+            label: string;
+            /** May Change */
+            may_change: boolean;
+            /**
+             * Name
+             * @enum {string}
+             */
+            name: "team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices" | "team.attendance" | "team.rules" | "team.permissions";
+            /** Needs */
+            needs: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices" | "team.attendance" | "team.rules" | "team.permissions")[];
+        };
+        /** TeamPermissionsIn */
+        TeamPermissionsIn: {
+            /** Permissions */
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices" | "team.attendance" | "team.rules" | "team.permissions")[];
+        };
         /** TeamPersonOut */
         TeamPersonOut: {
             details: components["schemas"]["DetailsOut"];
@@ -10430,6 +10508,11 @@ export interface components {
             /** Notes */
             notes: components["schemas"]["TeamNoteOut"][];
             now: components["schemas"]["NowOut"] | null;
+            /**
+             * Permissions
+             * @default null
+             */
+            permissions?: components["schemas"]["TeamPermissionOption"][] | null;
             /**
              * Picture Url
              * @default null
@@ -25125,6 +25208,69 @@ export interface operations {
         responses: {
             /** @description OK */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamPersonOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_person_permissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamPermissionsIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

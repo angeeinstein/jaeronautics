@@ -144,13 +144,14 @@ def describe_role_change(user, requested_slugs, requested_permissions=None, *, a
     if actor_user is not None and not is_superadmin(actor_user) and (
             SUPERADMIN in requested) != (SUPERADMIN in current):
         blockers.append(("superadmin_only", "Only a super admin can make somebody a super admin, or unmake one."))
-    if actor_user is not None:
-        beyond = (losing | gaining) - actor_user.permissions
-        if beyond:
-            blockers.append((
-                "beyond_own",
-                "You can only give or take away permissions you hold yourself.",
-            ))
+    if actor_user is not None and ((losing | gaining) - actor_user.permissions or not covers(actor_user, user)):
+        # Within what one holds, and for somebody who holds no more than oneself -- as their
+        # address, their switch and their erasure (covers).
+        blockers.append((
+            "beyond_own",
+            "You can only give or take away permissions you hold yourself, for somebody who holds "
+            "no more than you.",
+        ))
 
     for permission, consequence in PROTECTED_PERMISSIONS.items():
         if permission not in losing:

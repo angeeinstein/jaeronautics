@@ -21,13 +21,13 @@ import { DangerZoneTab } from './DangerZoneTab';
 import { ForumTab } from './ForumTab';
 import { MembershipTab } from './MembershipTab';
 import { ProfileTab } from './ProfileTab';
-import { RolesTab } from './RolesTab';
+import { AccessTab } from './AccessTab';
 import { type Account as AccountData, accountQuery } from './shared';
 import { TeamsTab } from './TeamsTab';
 import { formatEuros } from '../../../lib/format';
 import { EVERY_MINUTE, useLiveRefresh } from '../../../lib/live';
 
-const TABS = ['profile', 'membership', 'forum', 'teams', 'cards', 'roles', 'danger', 'activity'] as const;
+const TABS = ['profile', 'membership', 'forum', 'teams', 'cards', 'access', 'danger', 'activity'] as const;
 type Tab = (typeof TABS)[number];
 
 /** The one state worth saying beside the name: what stops the account, else the membership. */
@@ -93,7 +93,7 @@ export function Account() {
     forum: 'Forum',
     teams: teamsTitle,
     cards: 'Cards',
-    roles: 'Roles',
+    access: 'Access',
     danger: 'Danger zone',
     activity: 'Activity',
   };
@@ -163,8 +163,8 @@ export function Account() {
         <Tabs.Panel value="cards">
           <CardsTab userId={data.id} />
         </Tabs.Panel>
-        <Tabs.Panel value="roles">
-          <RolesTab account={data} />
+        <Tabs.Panel value="access">
+          <AccessTab account={data} />
         </Tabs.Panel>
         <Tabs.Panel value="danger">
           <DangerZoneTab account={data} />

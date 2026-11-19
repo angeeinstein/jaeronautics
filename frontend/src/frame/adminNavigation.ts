@@ -71,7 +71,7 @@ export function adminSidebar(me: Me): SidebarContent {
       {
         label: 'Money',
         items: [
-          can(me, 'teams.money') ? { label: 'Money', to: '/admin/money', icon: IconCurrencyEuro } : null,
+          can(me, 'teams.money.view') ? { label: 'Money', to: '/admin/money', icon: IconCurrencyEuro } : null,
           me.credit_admin ? { label: 'Credit', to: '/admin/credit', icon: IconCoins } : null,
           me.credit_admin ? { label: 'Sales', to: '/admin/sales', icon: IconTag } : null,
         ],
@@ -79,7 +79,7 @@ export function adminSidebar(me: Me): SidebarContent {
       {
         label: 'Messages',
         items: [
-          can(me, 'messages.receive')
+          can(me, 'messages.answer')
             ? { label: 'Messages', to: '/admin/messages', icon: IconMail, count: me.counts.messages_open }
             : null,
           can(me, 'announcements.send')

@@ -15,6 +15,7 @@ import { useSearchParams } from 'react-router';
 import { IconBrandStripe, IconUsersGroup } from '@tabler/icons-react';
 
 import { api, call } from '../../../api/client';
+import { can, useMe } from '../../../api/session';
 import { AppLink } from '../../../app/AppLink';
 import { DayInput } from '../../../components/DayInput';
 import { PageHeader } from '../../../components/PageHeader';
@@ -232,6 +233,7 @@ function OnStripe({ today, start }: { today: string; start: string | null }) {
 }
 
 export function Money() {
+  const manage = can(useMe().data, 'teams.money');
   const money = useQuery(moneyQuery);
   useLiveRefresh(moneyQuery.queryKey, EVERY_MINUTE);
 
@@ -265,7 +267,7 @@ export function Money() {
             </Text>
             <TeamsTable money={money.data} />
           </Panel>
-          <FeeSettings />
+          {manage ? <FeeSettings /> : null}
           <OnStripe today={money.data.today} start={money.data.records_since ?? null} />
         </Stack>
       )}

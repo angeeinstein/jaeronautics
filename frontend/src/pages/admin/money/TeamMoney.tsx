@@ -21,6 +21,7 @@ import {
 } from '@tabler/icons-react';
 
 import { api, ApiError, call } from '../../../api/client';
+import { can, useMe } from '../../../api/session';
 import { ConfirmButton } from '../../../components/ConfirmButton';
 import { DayInput } from '../../../components/DayInput';
 import { Details } from '../../../components/Details';
@@ -424,8 +425,28 @@ function Payments({ money }: { money: TeamMoneyOut }) {
   );
 }
 
+/** Where the money goes, for whoever only looks (an auditor). */
+function BankShown({ money }: { money: TeamMoneyOut }) {
+  return (
+    <Panel icon={IconBuildingBank} title="Bank details">
+      {money.bank.iban ? (
+        <Details
+          items={[
+            ['Account holder', money.bank.account_holder],
+            ['IBAN', <span className="ja-figures">{grouped(money.bank.iban)}</span>],
+            ['BIC', money.bank.bic],
+          ]}
+        />
+      ) : (
+        <EmptyState>No bank details yet.</EmptyState>
+      )}
+    </Panel>
+  );
+}
+
 export function TeamMoney() {
   const { slug = '' } = useParams();
+  const manage = can(useMe().data, 'teams.money');
   const money = useQuery(teamMoneyQuery(slug));
   useLiveRefresh(teamMoneyQuery(slug).queryKey, EVERY_MINUTE);
   const title = money.data?.team.name ?? slug;
@@ -452,12 +473,18 @@ export function TeamMoney() {
                 <Stack gap="lg">
                   <Balance money={money.data} />
                   <MoneyStatement statement={money.data.statement} />
-                  {/* Keyed by what was recorded, so the form starts afresh from the new balance. */}
-                  <TransferPanel
-                    key={`${String(money.data.open)}-${String(money.data.transfers.length)}`}
-                    money={money.data}
-                  />
-                  <BankPanel key={JSON.stringify(money.data.bank)} money={money.data} />
+                  {manage ? (
+                    <>
+                      {/* Keyed by what was recorded, so the form starts afresh from the new balance. */}
+                      <TransferPanel
+                        key={`${String(money.data.open)}-${String(money.data.transfers.length)}`}
+                        money={money.data}
+                      />
+                      <BankPanel key={JSON.stringify(money.data.bank)} money={money.data} />
+                    </>
+                  ) : (
+                    <BankShown money={money.data} />
+                  )}
                 </Stack>
               ),
             },

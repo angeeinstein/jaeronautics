@@ -152,6 +152,80 @@ describe('a person', () => {
   });
 });
 
+describe('a member’s permissions in the team', () => {
+  const option = (
+    name: Schemas['TeamPermissionOption']['name'],
+    label: string,
+    area: string,
+    fields: Partial<Schemas['TeamPermissionOption']> = {},
+  ): Schemas['TeamPermissionOption'] => ({
+    name,
+    label,
+    area,
+    held: false,
+    from_roles: false,
+    needs: [],
+    may_change: true,
+    ...fields,
+  });
+  const member: Schemas['TeamPersonOut'] = {
+    ...applicant,
+    now: { ...(applicant.now ?? never()), status: 'active', status_label: 'Member' },
+    permissions: [
+      option('team.view_members', 'See the members and applications', 'People'),
+      option('team.write_notes', 'Write notes about people', 'People', { needs: ['team.view_members'] }),
+      option('team.view_money', 'See the team’s money', 'Money', { held: true, from_roles: true }),
+      option('team.edit_bank_details', 'Change the bank details', 'Money', {
+        needs: ['team.view_money'],
+        may_change: false,
+      }),
+    ],
+  };
+
+  it('one added brings what it needs; one taken away is said; saved after asking again', async () => {
+    const { calls } = show(
+      <Person />,
+      {
+        [`${API}/people/7`]: { body: member },
+        [`PUT ${API}/people/7/permissions`]: { body: member },
+      },
+      '/teams/rocket/manage/people/7',
+      '/teams/:slug/manage/people/:userId',
+    );
+
+    await userEvent.click(await screen.findByRole('checkbox', { name: /Write notes/ }));
+    expect(screen.getByRole('checkbox', { name: /See the members/ })).toBeChecked();
+    await userEvent.click(screen.getByRole('checkbox', { name: /See the team’s money/ }));
+    expect(screen.getByText('taken away')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /Change the bank details/ })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save permissions' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Yes, change the permissions' }));
+
+    await waitFor(() => {
+      expect(calls.some((call) => call.method === 'PUT')).toBe(true);
+    });
+    const request = calls.find((call) => call.method === 'PUT') ?? never();
+    expect(await request.clone().json()).toEqual({ permissions: ['team.view_members', 'team.write_notes'] });
+  });
+
+  it('not shown to whoever may not change them', async () => {
+    show(
+      <Person />,
+      { [`${API}/people/7`]: { body: applicant } },
+      '/teams/rocket/manage/people/7',
+      '/teams/:slug/manage/people/:userId',
+    );
+
+    expect(await screen.findByText('I like rockets.')).toBeInTheDocument();
+    expect(screen.queryByText('Permissions')).toBeNull();
+  });
+});
+
+function never(): never {
+  throw new Error('fixture incomplete');
+}
+
 describe('roles', () => {
   const lena = { user_id: 1, name: 'Lena Lead', picture_url: null, in_force: true };
   const anna = { user_id: 7, name: 'Anna Berger', detail: null, in_team: true };

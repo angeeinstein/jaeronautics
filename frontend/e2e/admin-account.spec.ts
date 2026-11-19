@@ -54,15 +54,15 @@ test.describe('one account', () => {
     await expect(erase).toBeDisabled();
   });
 
-  test('one’s own roles are not changed here', async ({ page }) => {
+  test('one’s own access is not changed here', async ({ page }) => {
     await page.goto('/admin/accounts?q=admin%40example.org');
     await page
       .getByRole('table', { name: 'Accounts' })
       .getByRole('link', { name: 'admin@example.org' })
       .click();
-    await page.getByRole('tab', { name: 'Roles' }).click();
+    await page.getByRole('tab', { name: 'Access' }).click();
 
-    await expect(page.getByText(/cannot change your own roles/)).toBeVisible();
+    await expect(page.getByText(/cannot change your own access/)).toBeVisible();
   });
 
   test('on a phone nothing sticks out of the page', async ({ page, isMobile }) => {
@@ -71,7 +71,7 @@ test.describe('one account', () => {
     await page.getByRole('table', { name: 'Accounts' }).getByRole('link', { name: 'Carla Cancel' }).click();
     await expect(page.getByRole('tablist')).toBeVisible();
 
-    for (const tab of ['Profile', 'Membership', 'Forum', 'Roles', 'Danger zone']) {
+    for (const tab of ['Profile', 'Membership', 'Forum', 'Access', 'Danger zone']) {
       await page.getByRole('tab', { name: tab }).click();
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
