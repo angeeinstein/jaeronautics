@@ -136,3 +136,10 @@ words: it will not be there later.
   branch when it is ready to be tried or merged -- not after every commit;
   the checks run locally first. Changes only to `docs/` skip CI's tests by
   themselves (`docs/maintenance.md`, "Files tested once").
+- Every pull request Claude opens is watched until it is merged or closed
+  (2026-11-19): CI failures and review comments -- Codex's above all -- are
+  looked into and fixed on the same branch. After a round of fixes, Codex is
+  asked to review again (a comment `@codex review`), until it finds nothing
+  more ("Finding and fixing errors is always a good thing"). A comment that
+  does not hold is answered with why, not changed for. The fixes of one
+  round go out in one push (Actions minutes, above).
