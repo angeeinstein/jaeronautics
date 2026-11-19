@@ -56,7 +56,7 @@ the treasurers have the bank account, and the chairperson signs contracts.
    - **Granularity:** split where somebody would decide separately, not per
      button -- perhaps 50-60 permissions, not 200.
 
-5. **Super admin is full trust, not a template** (proposed 2026-11-19, the
+5. **Super admin is full trust, not a template** (agreed 2026-11-19, the
    maintainer: unticking "manage cards" for a super admin "wouldn't really
    make much sense, because as a super admin I can basically do everything
    with the server"). A super admin holds every permission, those added to
@@ -84,14 +84,13 @@ the treasurers have the bank account, and the chairperson signs contracts.
   admin role can never change an administrator's account.
 - **Few of them, but more than one.** Entra: fewer than five Global
   Administrators, and two emergency accounts. Google: more than three super
-  admins can affect recovery. Proposed here: the *Access* page says so when
-  there is only one super admin (a lost password then locks the portal's
-  top role away -- today only the server's command line helps), and when
-  there are more than four.
+  admins can affect recovery. A warning on the *Access* page about it was
+  turned down (`docs/todo.md`, "Turned down"): one super admin for now, more
+  later, and the command line can always put it right.
 - **Not for everyday work, and with a second factor.** AWS: the root user
   not for everyday tasks, MFA required. Google: the super admin apart from
-  daily admin work. The portal has no second factor yet -- an item of its
-  own (`docs/todo.md`), not part of this one.
+  daily admin work. The portal has no second factor yet -- an idea for later
+  (`docs/todo.md`, "Ideas for later"), not part of this.
 - Not taken over: just-in-time elevation (Entra PIM) -- for organisations of
   thousands, not an association.
 

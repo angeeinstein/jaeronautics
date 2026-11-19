@@ -52,9 +52,9 @@ good).
   credit, Stripe's book), perhaps a read-only *Auditor* role.
 - **Where:** `docs/permissions-plan.md` -- what was decided, the cases, the
   proposed split.
-- **Agreed:** the split and the *Auditor* role (2026-11-19). **Open:** the
-  maintainer's yes to super admin as full trust (holds everything, takes no
-  exceptions), then a last talk-through before building.
+- **Agreed (2026-11-19):** the split and the *Auditor* role; super admin as
+  full trust (holds everything, takes no exceptions); no warning about how
+  many super admins there are.
 
 ### Azure: spaces lost around the glossary's words
 
@@ -317,6 +317,15 @@ good).
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
 
+- **Two-factor sign-in** -- 2026-11-19. A second factor (passkeys, or an
+  authenticator app) at least for super admins, perhaps optional for
+  everyone: today a super admin's password alone opens every member's data,
+  the credentials and the backups. Came up with the permissions
+  (`docs/permissions-plan.md`, "How other platforms do it": AWS requires MFA
+  for its root user, Microsoft and Google expect it of their top admins).
+  The maintainer: "also on my mind, but not for the moment ... a bit
+  later" -- an idea, not on the open list.
+
 - **The server log in the portal** -- 2026-10-16. The journal of the portal's
   services readable on a phone, for when SSH is not at hand ("if some issue
   occurs and I don't have access to a computer"). Put off: not urgent, the
@@ -447,6 +456,11 @@ Talked about, not agreed as work. Not built unless the maintainer brings them up
 What the maintainer did not want, and why -- a record, not a ban. Any of it
 may be suggested again, saying what has changed since. Only what the
 maintainer explicitly says must never change is marked so.
+
+- **A warning on the *Access* page when there is only one super admin, or
+  more than four** (2026-11-19, from how Microsoft and Google advise it).
+  The maintainer is the only one for now and means to add more later, and
+  a lost super admin can be put right from the server's command line.
 
 - **Small points of the security review of 2026-10-17, left as they are**
   (2026-10-19). The rest of that review is fixed (`claude/audit-fixes`).
