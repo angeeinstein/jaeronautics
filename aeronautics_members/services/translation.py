@@ -101,13 +101,18 @@ WAIT_MAX_SECONDS = 240
 #: --timeout does not end a request on one of its threads; Cloudflare gives up after 100 seconds,
 #: nginx after 120 -- but a person waits, and a server thread is held, all that time.
 REQUEST_SECONDS = 45
-#: A language model: characters of German per request -- its answer, as long, must come back in
-#: one piece -- and how long one request may take when publishing (a local model is slow).
-LLM_BATCH_CHARACTERS = 8_000
-LLM_MAX_TOKENS = 32_000
-LLM_TIMEOUT_SECONDS = 300
-#: A language model's portions asked at once (a long text is four or five).
+#: A language model gets a whole text in one request, as a rule -- in portions, it named one body
+#: two ways ("General Main Assembly", "general assembly"), as no portion saw the others. Its
+#: answer, as long, must come back in one piece; with its thinking, within LLM_MAX_TOKENS.
+LLM_BATCH_CHARACTERS = 60_000
+LLM_BATCH_TEXTS = 1_000
+LLM_MAX_TOKENS = 64_000
+#: How long one request may take in the background (a local model is slow).
+LLM_TIMEOUT_SECONDS = 600
+#: A longer text's portions asked at once.
 LLM_AT_ONCE = 6
+#: How much a model thinks before answering (Anthropic's effort): a legal text is worth it.
+LLM_EFFORT = "high"
 GLOSSARY_MAX = 200
 #: The start of the name of every glossary this portal makes at DeepL.
 GLOSSARY_NAME = "jaeronautics legal texts"
@@ -134,9 +139,12 @@ class TranslationUnavailable(Exception):
 
 
 class _ServiceError(Exception):
-    def __init__(self, message, *, code=None, retry_after=None):
+    def __init__(self, message, *, code=None, retry_after=None, wrong_answer=False):
         super().__init__(message)
         self.code = code
+        #: The service answered, but not as asked (a language model's answer failed the checks):
+        #: asked again for fewer texts, it may well manage.
+        self.wrong_answer = wrong_answer
         #: Seconds the service asked to wait before the next try ("too many requests").
         self.retry_after = retry_after
 
@@ -336,9 +344,10 @@ def _batches(texts, name):
 def _portions(texts, indexes, name):
     """Of ``texts``, those at ``indexes`` in portions (lists of indexes) as ``_batches`` makes them."""
     most = {AZURE: AZURE_BATCH_CHARACTERS, LLM: LLM_BATCH_CHARACTERS}.get(name, BATCH_CHARACTERS)
+    count = LLM_BATCH_TEXTS if name == LLM else BATCH
     portion, size = [], 0
     for index in indexes:
-        if portion and (len(portion) == BATCH or size + len(texts[index]) > most):
+        if portion and (len(portion) == count or size + len(texts[index]) > most):
             yield portion
             portion, size = [], 0
         portion.append(index)
@@ -419,25 +428,28 @@ def _with_service(name, texts, left, done, as_html, current, context, patience):
         batch = [texts[index] for index in portion]
         if name == DEEPL:
             return _deepl(batch, as_html, current, context, patience)
-        if name == LLM:
-            return _llm(batch, as_html, current, context, patience)
         return _azure(batch, as_html, current, patience)  # Azure takes no context
 
     def keep(portion, english):
         for index, text in zip(portion, english):
-            done[index] = (clean_html(text) if as_html else text, name)
+            if text is not None:
+                done[index] = (clean_html(text) if as_html else text, name)
 
     portions = list(_portions(texts, left, name))
-    if name == LLM and len(portions) > 1:
+    if name == LLM:
         with ThreadPoolExecutor(max_workers=LLM_AT_ONCE) as pool:
-            asked = [(portion, pool.submit(one, portion)) for portion in portions]
+            # The app's logger taken along: the threads have no application context.
+            asked = [(portion, pool.submit(_llm_in_halves, [texts[index] for index in portion], as_html, current,
+                                           context, patience, current_app.logger)) for portion in portions]
         failed, failure = [], None
         for portion, answer in asked:
             try:
-                keep(portion, answer.result())
+                english, why = answer.result()
             except _ServiceError as exc:
-                failed += portion
-                failure = failure or exc
+                english, why = [None] * len(portion), exc
+            keep(portion, english)
+            failed += [index for index, text in zip(portion, english) if text is None]
+            failure = failure or why
         return failed, failure
     for at, portion in enumerate(portions):
         try:
@@ -717,6 +729,8 @@ marks ("...") where the German has its own („...“).
 - Each text you are given is a part of the whole German text, which follows for context: a heading, a \
 paragraph, or a list item that finishes a sentence begun before it. Translate each so that it reads right \
 in its place.
+- Be consistent: translate a German term the same way wherever it occurs, and give every body, role and \
+name one English form throughout (the glossary's, where it has one).
 - Answer with JSON: {"translations": [...]}, one English string for each text given, in the same order -- \
 exactly as many as were given."""
 
@@ -739,6 +753,25 @@ def _tags(text):
     return [" ".join(tag.split()) for tag in re.findall(r"<[^>]*>", text)]
 
 
+def _llm_in_halves(texts, as_html, current, context, patience, log):
+    """``(english, why)``: the texts by a language model, ``None`` for any it did not manage. An
+    answer that fails the checks is asked for again in halves, down to a single text, so one bad
+    paragraph does not send a whole text to the next service."""
+    try:
+        return _llm(texts, as_html, current, context, patience), None
+    except _ServiceError as exc:
+        if not exc.wrong_answer or len(texts) < 2:
+            if len(texts) == 1 or exc.wrong_answer:
+                return [None] * len(texts), exc
+            raise
+        log.info("A language model's answer for %s texts failed the checks (%s); asking for them in halves.",
+                 len(texts), exc)
+    half = len(texts) // 2
+    first, why_first = _llm_in_halves(texts[:half], as_html, current, context, patience, log)
+    second, why_second = _llm_in_halves(texts[half:], as_html, current, context, patience, log)
+    return first + second, why_first or why_second
+
+
 def _llm(texts, as_html, current, context="", patience=None):
     """The texts in English by a language model: one request per portion, the answer a list in a
     fixed format, checked -- as many texts as sent, and with HTML the same tags -- or the portion
@@ -751,14 +784,14 @@ def _llm(texts, as_html, current, context="", patience=None):
     try:
         made = json.loads(answer)["translations"]
     except (ValueError, TypeError, KeyError) as exc:
-        raise _ServiceError("an answer that is not the list asked for") from exc
+        raise _ServiceError("an answer that is not the list asked for", wrong_answer=True) from exc
     if not isinstance(made, list) or len(made) != len(texts) or not all(isinstance(text, str) for text in made):
-        raise _ServiceError("an answer of the wrong length")
+        raise _ServiceError("an answer of the wrong length", wrong_answer=True)
     for german, english in zip(texts, made):
         if german.strip() and not english.strip():
-            raise _ServiceError("a text left empty")
+            raise _ServiceError("a text left empty", wrong_answer=True)
         if as_html and _tags(german) != _tags(english):
-            raise _ServiceError("an answer whose HTML differs from the text's")
+            raise _ServiceError("an answer whose HTML differs from the text's", wrong_answer=True)
     return made
 
 
@@ -771,12 +804,27 @@ def _ask_anthropic(current, instructions, whole, asked, timeout):
     if whole:
         system.append({"type": "text", "text": whole, "cache_control": {"type": "ephemeral"}})
     client = anthropic.Anthropic(api_key=current["llm_key"], timeout=timeout, max_retries=1)
+    model = current["llm_model"]
+
+    def send(output_config):
+        with client.messages.stream(model=model, max_tokens=LLM_MAX_TOKENS, system=system,
+                                    messages=[{"role": "user", "content": asked}],
+                                    output_config=output_config) as stream:
+            return stream.get_final_message()
+
+    output_config = {"format": {"type": "json_schema", "schema": _ANSWER}}
     try:
-        with client.messages.stream(
-                model=current["llm_model"], max_tokens=LLM_MAX_TOKENS, system=system,
-                messages=[{"role": "user", "content": asked}],
-                output_config={"format": {"type": "json_schema", "schema": _ANSWER}}) as stream:
-            message = stream.get_final_message()
+        if model in _NO_EFFORT:
+            message = send(output_config)
+        else:
+            try:
+                message = send({**output_config, "effort": LLM_EFFORT})
+            except anthropic.BadRequestError as exc:
+                if "effort" not in str(exc.message).lower():
+                    raise
+                # An older model without effort: asked without, and from then on.
+                _NO_EFFORT.add(model)
+                message = send(output_config)
     except anthropic.RateLimitError as exc:
         retry = exc.response.headers.get("retry-after") if exc.response is not None else None
         raise _ServiceError(f"too many requests just now ({exc.message})", code=429,
@@ -793,8 +841,12 @@ def _ask_anthropic(current, instructions, whole, asked, timeout):
     if message.stop_reason == "refusal":
         raise _ServiceError("it declined to translate this")
     if message.stop_reason == "max_tokens":
-        raise _ServiceError("the answer was too long")
+        raise _ServiceError("the answer was too long", wrong_answer=True)
     return "".join(block.text for block in message.content if block.type == "text")
+
+
+#: Models that refused the effort setting (older ones), asked without it until the portal restarts.
+_NO_EFFORT = set()
 
 
 def _ask_openai(current, instructions, whole, asked, timeout):
@@ -813,7 +865,7 @@ def _ask_openai(current, instructions, whole, asked, timeout):
     if said.get("refusal"):
         raise _ServiceError("it declined to translate this")
     if choice.get("finish_reason") == "length":
-        raise _ServiceError("the answer was too long")
+        raise _ServiceError("the answer was too long", wrong_answer=True)
     return said.get("content") or ""
 
 

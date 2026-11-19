@@ -186,7 +186,20 @@ cents a text.
   server's: gunicorn's `--timeout` does not end a request on one of its
   threads; Cloudflare gives up after 100 seconds, nginx after 120. *Try it*
   keeps that limit.
-- A language model's portions are sent **all at once** and the title goes
+- **A whole text in one request** to a language model (2026-11-19, the
+  maintainer: "a good idea to give the model the complete text"): in
+  portions it named one body two ways -- *Generalhauptversammlung* as
+  "General Main Assembly" in § 11 and "general assembly" in § 21 --, as no
+  portion saw the others. Now up to 60,000 characters go at once (portions
+  only beyond that, sent together). An answer failing the checks is asked
+  for again in halves, down to one paragraph, so only what the model still
+  gets wrong goes to the next service. The checks: valid JSON of the agreed
+  shape, as many translations as paragraphs, none empty, and each with the
+  same HTML tags, attributes included, in the same order; then the same
+  cleaning as every service's answer. Anthropic's models are asked to think
+  hard (effort "high"; an older model without it, asked without), and the
+  instructions ask for one English form per term, body and role.
+- Before that, a language model's portions were sent **all at once** and the title goes
   with the text, as a heading (tried on the TDT rules, 2026-11-19: one
   portion after another, the model managed § 1 to § 13 within the editor's
   45 seconds, Azure the rest and the title -- "team rules Team Drone Tech").

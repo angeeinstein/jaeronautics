@@ -549,28 +549,52 @@ class TestALanguageModel:
         _set_up_llm(provider="other", key="", address="http://ollama.local:11434/v1")
         assert translation.configured()[0] == "llm"  # a local server may need no key
 
-    @pytest.mark.parametrize("answer, why", [
-        (["one"], "wrong length"),
-        (["<p>Eins.</p>", "Two, its tags lost."], "HTML differs"),
-        (["<p>Eins.</p>", ""], "left empty"),
+    @pytest.mark.parametrize("spoil, why", [
+        (lambda texts: texts[:-1], "wrong length"),
+        (lambda texts: [text.replace("<p>", "").replace("</p>", "") if "Zwei" in text else text for text in texts],
+         "HTML differs"),
+        (lambda texts: ["" if "Zwei" in text else text for text in texts], "left empty"),
     ])
-    def test_an_answer_that_does_not_fit_goes_to_the_next_service(self, services, monkeypatch, answer, why):
+    def test_an_answer_that_does_not_fit_asked_again_in_halves(self, services, monkeypatch, spoil, why):
+        # One bad paragraph does not send the whole text to the next service: asked again in halves,
+        # only the paragraph the model still gets wrong goes on.
         _set_up_llm()
-        monkeypatch.setattr(translation, "_ask_openai", lambda *_a: json.dumps({"translations": answer}))
+
+        def answer(current, instructions, whole, asked, timeout):
+            texts = json.loads(asked.split("\n", 1)[1])
+            made = [f"[LLM] {text}" for text in texts]
+            return json.dumps({"translations": spoil(made) if any("Zwei" in text for text in texts) else made})
+
+        monkeypatch.setattr(translation, "_ask_openai", answer)
         report = {}
 
-        english = translation.translate(["<p>Eins.</p>", "<p>Zwei.</p>"], report=report)
+        english = translation.translate(["<p>Eins.</p>", "<p>Zwei.</p>", "<p>Drei.</p>"], report=report)
 
-        assert english == ["[DeepL] <p>Eins.</p>", "[DeepL] <p>Zwei.</p>"]
-        assert why in report["failures"][0] and report["services"] == {"deepl"}
+        assert english == ["[LLM] <p>Eins.</p>", "[DeepL] <p>Zwei.</p>", "[LLM] <p>Drei.</p>"]
+        assert why in report["failures"][0] and report["services"] == {"llm", "deepl"}
 
-    def test_a_long_text_asked_all_at_once(self, services, monkeypatch):
-        # One portion after another, a long text took longer than the editor's request may: its
-        # portions go out together (each waits here until all three have arrived).
+    def test_a_whole_text_in_one_request(self, services, monkeypatch):
+        _set_up_llm()
+        asked = []
+
+        def answer(current, instructions, whole, request, timeout):
+            texts = json.loads(request.split("\n", 1)[1])
+            asked.append(len(texts))
+            return json.dumps({"translations": [f"[LLM] {text}" for text in texts]})
+
+        monkeypatch.setattr(translation, "_ask_openai", answer)
+
+        translation.translate([f"<p>Absatz {n}. {'x' * 300}</p>" for n in range(120)])  # 36,000 characters
+
+        assert asked == [120]
+
+    def test_a_very_long_text_in_portions_asked_all_at_once(self, services, monkeypatch):
+        # Longer than one request takes: its portions go out together (each waits here until all
+        # three have arrived).
         import threading
 
         _set_up_llm()
-        texts = [f"<p>{n} {'x' * 7_000}</p>" for n in range(3)]  # a portion each
+        texts = [f"<p>{n} {'x' * 40_000}</p>" for n in range(3)]  # a portion each
         together = threading.Barrier(3, timeout=5)
 
         def at_once(current, instructions, whole, asked, timeout):
@@ -585,7 +609,7 @@ class TestALanguageModel:
 
     def test_one_portion_failing_goes_to_the_next_service_alone(self, services, monkeypatch):
         _set_up_llm()
-        texts = [f"<p>{n} {'x' * 7_000}</p>" for n in range(3)]
+        texts = [f"<p>{n} {'x' * 40_000}</p>" for n in range(3)]
 
         def second_fails(current, instructions, whole, asked, timeout):
             sent = json.loads(asked.split("\n", 1)[1])
@@ -668,6 +692,46 @@ class TestALanguageModel:
         assert seen["client"]["api_key"] == "sk-ant-test" and seen["model"] == "the-model"
         assert seen["system"][1]["cache_control"] == {"type": "ephemeral"} and "Statuten" in seen["system"][1]["text"]
         assert seen["output_config"]["format"]["type"] == "json_schema"
+
+    def test_anthropic_asked_to_think_hard_unless_the_model_does_not_know_effort(self, app, monkeypatch):
+        import anthropic
+        import httpx2
+
+        sent = []
+
+        class Stream:
+            def __init__(self, **kwargs):
+                sent.append(kwargs["output_config"])
+                self.kwargs = kwargs
+
+            def __enter__(self):
+                if "effort" in self.kwargs["output_config"]:
+                    response = httpx2.Response(400, request=httpx2.Request("POST", "https://api.anthropic.com"))
+                    raise anthropic.BadRequestError("effort: not supported by this model", response=response,
+                                                    body=None)
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def get_final_message(self):
+                from types import SimpleNamespace
+                return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(
+                    type="text", text=json.dumps({"translations": ["[A] <p>Eins.</p>"]}))])
+
+        class Client:
+            def __init__(self, **_kwargs):
+                from types import SimpleNamespace
+                self.messages = SimpleNamespace(stream=lambda **kw: Stream(**kw))
+
+        monkeypatch.setattr(anthropic, "Anthropic", Client)
+        monkeypatch.setattr(translation, "_NO_EFFORT", set())
+        _set_up_llm(provider="anthropic", key="sk-ant-test", model="an-older-model")
+
+        assert translation.translate(["<p>Eins.</p>"]) == ["[A] <p>Eins.</p>"]
+        translation.translate(["<p>Zwei.</p>"])
+
+        assert [config.get("effort") for config in sent] == ["high", None, None]
 
     def test_saved_and_checked(self, client, services):
         from api_helpers import send
