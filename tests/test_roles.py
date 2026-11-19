@@ -49,12 +49,13 @@ class TestCapabilities:
         assert user.is_admin is True
         assert user.has_role(ROLE_ADMIN) is False  # the row itself is not granted
 
-    def test_an_admin_cannot_update_or_manage_credentials_or_roles(self, app):
+    def test_an_admin_cannot_update_or_manage_credentials_but_grants_permissions(self, app):
+        # Granting is the board's day-to-day (2026-11-19); the server stays the super admin's.
         user = _user("plain@example.com", ROLE_ADMIN)
 
         assert user.can(Permission.SYSTEM_UPDATE) is False
         assert user.can(Permission.SETTINGS_CREDENTIALS) is False
-        assert user.can(Permission.ROLES_MANAGE) is False
+        assert user.can(Permission.ROLES_MANAGE) is True
         # But everything an administrator is for still works.
         assert user.can(Permission.ACCOUNTS_VIEW) is True
         assert user.can(Permission.APPROVALS_REVIEW) is True
@@ -178,14 +179,16 @@ class TestSettingRoles:
     def _set(self, client, user_id, *slugs):
         return send(client, "PUT", f"/api/v1/admin/accounts/{user_id}/roles", {"roles": list(slugs)})
 
-    def test_an_admin_cannot_change_anyones_roles(self, client):
-        admin = _user("nogrant@example.com", ROLE_ADMIN)
+    def test_an_admin_grants_what_they_hold_but_never_super_admin(self, client):
+        admin = _user("grants@example.com", ROLE_ADMIN)
         target = make_member(email="target@example.com")
         _login(client, admin.id)
 
-        self._set(client, target.user_id, ROLE_ADMIN)
+        assert self._set(client, target.user_id, ROLE_ADMIN).status_code == 200
+        refused = self._set(client, target.user_id, ROLE_ADMIN, ROLE_SUPERADMIN)
 
-        assert target.user.has_role(ROLE_ADMIN) is False
+        assert target.user.has_role(ROLE_ADMIN) is True
+        assert refused.status_code == 409 and target.user.can(Permission.SYSTEM_UPDATE) is False
 
     def test_an_admin_cannot_promote_themselves(self, client):
         admin = _user("selfpromote@example.com", ROLE_ADMIN)
@@ -239,11 +242,8 @@ class TestSettingRoles:
 
         change = describe_role_change(boss, [ROLE_ADMIN])
 
-        # One per protected capability that would lose its last holder: this
-        # account is the only one that can install an update *and* the only one
-        # that can grant access.
-        assert {code for code, _message in change["blockers"]} == {"last_holder"}
-        assert len(change["blockers"]) == 2
+        # Only installing an update would lose its last holder: an admin grants access too.
+        assert [code for code, _message in change["blockers"]] == ["last_holder"]
 
     def test_the_refusal_says_what_would_be_lost(self, app):
         boss = _user("explain@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
@@ -252,7 +252,6 @@ class TestSettingRoles:
 
         messages = " ".join(message for _code, message in change["blockers"])
         assert "install an update" in messages
-        assert "grant access to anyone else" in messages
 
     def test_a_second_holder_makes_it_allowed(self, app):
         boss = _user("one@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
@@ -352,15 +351,14 @@ class TestTheUiHidesWhatItDoesNotOffer:
         assert billing.get_json()["secret_key_set"] is True and b"supersecret" not in billing.data
         assert forum.get_json()["api_key_set"] is True and b"supersecret" not in forum.data
 
-    def test_an_admin_sees_no_role_buttons(self, client):
-        admin = _user("norolebuttons@example.com", ROLE_ADMIN)
+    def test_a_treasurer_sees_no_role_buttons(self, client):
+        treasurer = _user("norolebuttons@example.com", "treasurer")
         target = make_member(email="someone@example.com")
-        _login(client, admin.id)
+        _login(client, treasurer.id)
 
-        body = client.get(f"/api/v1/admin/accounts/{target.user_id}").get_json()
+        response = client.get(f"/api/v1/admin/accounts/{target.user_id}")
 
-        assert body["access"] is None
-        assert body["actions"]["manage_access"] is False
+        assert response.status_code == 403  # not even the accounts
 
 
 class TestErasureKeepsSomebodyInCharge:

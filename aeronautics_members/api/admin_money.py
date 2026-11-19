@@ -29,6 +29,8 @@ from ..services.notifications import flush_marked_notification_channels
 from ._core import Model, UtcDateTime, endpoint
 
 TAG = "Admin"
+#: Seeing every team's money and Stripe's book (an auditor), and acting on it.
+VIEW = [Permission.TEAMS_MONEY_VIEW]
 PERMISSIONS = [Permission.TEAMS_MONEY]
 
 
@@ -64,7 +66,7 @@ class MoneyOut(Model):
     records_since: date | None = None
 
 
-@endpoint("GET", "/admin/money", response=MoneyOut, permissions=PERMISSIONS, tag=TAG)
+@endpoint("GET", "/admin/money", response=MoneyOut, permissions=VIEW, tag=TAG)
 def admin_money():
     """Every team that charges or ever earned anything: earned, transferred, open."""
     rows = [
@@ -200,7 +202,7 @@ def _overview_out(since, until):
     )
 
 
-@endpoint("GET", "/admin/money/overview", response=OverviewOut, query=OverviewQuery, permissions=PERMISSIONS,
+@endpoint("GET", "/admin/money/overview", response=OverviewOut, query=OverviewQuery, permissions=VIEW,
           tag=TAG)
 def admin_money_overview(query):
     """The money on Stripe for a period, by what it was for, from the portal's copy of Stripe's
@@ -209,7 +211,7 @@ def admin_money_overview(query):
     return _overview_out(since, until)
 
 
-@endpoint("POST", "/admin/money/fetch", response=OverviewOut, query=OverviewQuery, permissions=PERMISSIONS,
+@endpoint("POST", "/admin/money/fetch", response=OverviewOut, query=OverviewQuery, permissions=VIEW,
           tag=TAG)
 def admin_money_fetch(query):
     """Fetch what is new in Stripe's book now, check it, and answer with the overview.
@@ -392,7 +394,7 @@ def _team_money_out(team):
     )
 
 
-@endpoint("GET", "/admin/money/<slug>", response=TeamMoneyOut, permissions=PERMISSIONS, tag=TAG)
+@endpoint("GET", "/admin/money/<slug>", response=TeamMoneyOut, permissions=VIEW, tag=TAG)
 def admin_team_money(slug):
     """One team's money: the balance, where transfers go, and every payment and transfer."""
     return _team_money_out(_team(slug))

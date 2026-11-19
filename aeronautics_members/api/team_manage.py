@@ -73,8 +73,8 @@ class ManageOut(Model):
 
 def _frame_team(slug):
     """The team for its frame: whoever manages its people, or sees its money -- the
-    association's treasurer for every team, also archived or with teams off."""
-    if current_user.can(Permission.TEAMS_MONEY):
+    association's treasurer and auditors for every team, also archived or with teams off."""
+    if current_user.can(Permission.TEAMS_MONEY_VIEW):
         try:
             team = teams_service.get_team(slug)
         except ServiceError:

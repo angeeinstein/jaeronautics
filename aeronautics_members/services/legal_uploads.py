@@ -28,8 +28,8 @@ from datetime import timedelta
 from flask import current_app
 
 from .. import legal_pdf
-from ..db_models import LegalTextVersion, Member, Role, TeamMembership, User, db
-from ..permissions import Permission, roles_with
+from ..db_models import LegalTextVersion, Member, TeamMembership, db
+from ..permissions import Permission
 from . import ConflictError, NotFoundError, ValidationError
 from . import legal_texts as legal
 from . import legal_translation
@@ -414,13 +414,9 @@ def tell_the_members(actor, record, summary=None, *, worse=False):
 
 
 def _publishers():
-    slugs = roles_with(Permission.LEGAL_PUBLISH)
-    if not slugs:
-        return []
-    return db.session.execute(
-        db.select(User.email).where(User.email_verified_at.is_not(None), User.deleted_at.is_(None),
-                                    User.roles.any(Role.slug.in_(slugs)))
-        .order_by(User.email.asc())).scalars().all()
+    from .access import holder_emails
+
+    return holder_emails(Permission.LEGAL_PUBLISH)
 
 
 def _tell_the_association(team, record):

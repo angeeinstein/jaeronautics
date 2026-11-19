@@ -18,7 +18,7 @@ from sqlalchemy.orm import selectinload
 
 from ..db_models import ImportedForumProfile, Member, Role, User, db
 from ..member_categories import CATEGORY_ORDER
-from ..permissions import ROLE_PERMISSIONS, Permission, role_label, roles_with
+from ..permissions import ROLE_PERMISSIONS, Permission, role_label
 
 PAGE_SIZE = 50
 
@@ -163,7 +163,9 @@ def _narrow(query, *, search="", role="all", account="all", kind=DEFAULT_KIND):
     # for Role.slug == "admin" would miss a role added later, and would have
     # to be edited every time one is -- which permissions.py exists to avoid.
     if role == "staff":
-        query = query.where(User.roles.any(Role.slug.in_(roles_with(Permission.ADMIN_ACCESS))))
+        from .access import holders
+
+        query = query.where(User.id.in_([user.id for user in holders(Permission.ADMIN_ACCESS)] or [0]))
     elif role == "none":
         query = query.where(~User.roles.any())
     elif role != "all":

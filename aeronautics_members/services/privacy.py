@@ -429,6 +429,10 @@ def describe_deletion_impact(user, actor_user=None):
         impact["blockers"].append("last_superadmin")
     if impact["is_self"]:
         impact["blockers"].append("self_deletion_via_admin_page")
+    # An account holding a permission the person erasing it does not -- an admin erasing a super
+    # admin -- is beyond them (services/access.py, covers).
+    if actor_user is not None and not impact["is_self"] and not user.permissions <= actor_user.permissions:
+        impact["blockers"].append("holds_more")
 
     if impact["subscription_active"]:
         impact["warnings"].append("subscription_will_be_cancelled")
@@ -490,6 +494,11 @@ def erase_account(user, *, actor_user=None, initiated_by=INITIATED_BY_ADMIN, not
             "Administrators cannot erase their own account from the admin page; "
             "use the account page so the confirmation goes to your mailbox.",
             code="self_deletion_via_admin_page",
+        )
+    if initiated_by == INITIATED_BY_ADMIN and "holds_more" in impact["blockers"]:
+        raise ConflictError(
+            "This account holds permissions you do not; only somebody who holds all of them can erase it.",
+            code="holds_more",
         )
 
     member = user.member

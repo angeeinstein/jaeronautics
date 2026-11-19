@@ -811,8 +811,13 @@ def team_permissions(user, team):
         return frozenset()
     if user.can(Permission.TEAMS_MANAGE):
         return TeamPermission.ALL
-    # The association's treasurer: every team's money, nothing about its people.
-    granted = set(TeamPermission.MONEY) if user.can(Permission.TEAMS_MONEY) else set()
+    # The association's treasurer: every team's money, nothing about its people; an auditor:
+    # every team's money, seen.
+    granted = set()
+    if user.can(Permission.TEAMS_MONEY):
+        granted |= TeamPermission.MONEY
+    elif user.can(Permission.TEAMS_MONEY_VIEW):
+        granted.add(TeamPermission.VIEW_MONEY)
     if team.status != STATUS_ACTIVE:
         return frozenset(granted)
 

@@ -150,7 +150,7 @@ def _forum_ready(member):
 
 
 def _messages_open():
-    if not current_user.can(Permission.MESSAGES_RECEIVE):
+    if not current_user.can(Permission.MESSAGES_ANSWER):
         return 0
     from ..services.messages import open_count
 
@@ -168,7 +168,7 @@ def _credit_admin():
     from ..db_models import CreditAccount, db
     from ..services import credit
 
-    if not current_user.can(Permission.CREDIT_MANAGE):
+    if not current_user.can(Permission.CREDIT_VIEW):
         return False
     return credit.enabled() or db.session.execute(db.select(CreditAccount.user_id).limit(1)).first() is not None
 

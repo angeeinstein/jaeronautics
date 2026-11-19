@@ -121,7 +121,7 @@ def admin_attendance():
 @admin_bp.route("/admin/credit", methods=["GET"])
 @admin_bp.route("/admin/credit/<int:user_id>", methods=["GET"])
 @login_required
-@requires(Permission.CREDIT_MANAGE)
+@requires(Permission.CREDIT_VIEW)
 def admin_credit(user_id=None):
     """Everybody's credit, and one person's (frontend/src/pages/admin/credit/)."""
     return app_shell()
@@ -129,7 +129,7 @@ def admin_credit(user_id=None):
 
 @admin_bp.route("/admin/sales", methods=["GET"])
 @login_required
-@requires(Permission.CREDIT_MANAGE)
+@requires(Permission.CREDIT_VIEW)
 def admin_sales():
     """What is sold for credit: by seller and item, the association's price list and its
     sales points' menus (frontend/src/pages/admin/credit/Sales.tsx)."""
@@ -138,7 +138,7 @@ def admin_sales():
 
 @admin_bp.route("/admin/credit/receipt/<int:entry_id>", methods=["GET"])
 @login_required
-@requires(Permission.CREDIT_MANAGE)
+@requires(Permission.CREDIT_VIEW)
 def credit_receipt(entry_id):
     """Stripe's receipt for somebody's top-up."""
     from ..services import NotFoundError, credit
@@ -154,7 +154,7 @@ def credit_receipt(entry_id):
 
 @admin_bp.route("/admin/credit/export.csv", methods=["GET"])
 @login_required
-@requires(Permission.CREDIT_MANAGE)
+@requires(Permission.CREDIT_VIEW)
 def credit_export():
     """Every entry of everybody's credit, oldest first; accounts by number."""
     import csv
@@ -192,7 +192,7 @@ def admin_reviews():
 
 @admin_bp.route("/admin/messages", methods=["GET"])
 @login_required
-@requires(Permission.MESSAGES_RECEIVE)
+@requires(Permission.MESSAGES_ANSWER)
 def admin_messages():
     """The contact form's messages (frontend/src/pages/admin/Messages.tsx)."""
     return app_shell()

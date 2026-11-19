@@ -312,7 +312,7 @@ def team_export(slug):
 
 
 def _money_team_or_404(slug):
-    if not current_user.can(Permission.TEAMS_MONEY):
+    if not current_user.can(Permission.TEAMS_MONEY_VIEW):
         team = _team_or_404(slug)
     else:
         try:
@@ -353,7 +353,7 @@ def team_money_export(slug):
 
 @teams_bp.route("/admin/money", methods=["GET"])
 @login_required
-@requires(Permission.TEAMS_MONEY)
+@requires(Permission.TEAMS_MONEY_VIEW)
 def admin_money():
     """Money, the association's side: drawn by the new front end (frontend/src/pages/admin/money/)."""
     return app_shell()
@@ -361,7 +361,7 @@ def admin_money():
 
 @teams_bp.route("/admin/money/<slug>", methods=["GET"])
 @login_required
-@requires(Permission.TEAMS_MONEY)
+@requires(Permission.TEAMS_MONEY_VIEW)
 def admin_team_money(slug):
     return app_shell()
 

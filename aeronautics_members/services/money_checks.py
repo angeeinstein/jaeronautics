@@ -29,7 +29,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from flask import current_app
 
 from ..config import MEMBERSHIP_TIMEZONE
-from ..db_models import MembershipPeriod, MoneyDifference, Payment, Role, StripeBooking, User, db
+from ..db_models import MembershipPeriod, MoneyDifference, Payment, StripeBooking, db
 from .clock import get_now_utc
 from .stripe_books import CREDIT, MEMBERSHIP, RECEIVED, REFUNDED, RETURNED, TAKEN_BACK, TEAM, state
 
@@ -274,14 +274,10 @@ def recently_resolved(days=30):
 
 def recipients():
     """The admins and the treasurers: whoever gets the admin emails or looks after the money."""
-    from ..permissions import Permission, roles_with
+    from ..permissions import Permission
+    from .access import holder_emails
 
-    slugs = roles_with(Permission.NOTIFICATIONS_RECEIVE) | roles_with(Permission.TEAMS_MONEY)
-    return db.session.execute(
-        db.select(User.email).where(User.email_verified_at.is_not(None), User.deleted_at.is_(None),
-                                    User.roles.any(Role.slug.in_(slugs)))
-        .order_by(User.email)
-    ).scalars().all()
+    return holder_emails(Permission.NOTIFICATIONS_RECEIVE, Permission.TEAMS_MONEY)
 
 
 def email_new(now=None):

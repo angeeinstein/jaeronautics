@@ -6,7 +6,7 @@ from sqlalchemy import UniqueConstraint
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .member_categories import DEFAULT_CATEGORY, MemberCategory, category_label
-from .permissions import Permission, permissions_for
+from .permissions import Permission, effective_permissions, permissions_for
 
 
 db = SQLAlchemy()
@@ -29,6 +29,23 @@ class UserRole(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     role_id = db.Column(db.Integer, db.ForeignKey("roles.id"), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+
+class UserPermission(db.Model):
+    """An exception to a person's roles (docs/permissions-plan.md): a permission added to what
+    their roles give (``granted``), or taken away from it. A super admin takes none."""
+
+    __tablename__ = "user_permissions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "permission", name="uq_user_permissions_user_permission"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    permission = db.Column(db.String(80), nullable=False)
+    granted = db.Column(db.Boolean, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    granted_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
 
 class Role(db.Model):
@@ -86,6 +103,10 @@ class User(UserMixin, db.Model):
         "ImportedForumProfile", back_populates="user", uselist=False
     )
     roles = db.relationship("Role", secondary="user_roles", back_populates="users")
+    #: Permissions added to the roles or taken away from them (UserPermission).
+    permission_exceptions = db.relationship(
+        "UserPermission", foreign_keys="UserPermission.user_id", cascade="all, delete-orphan",
+        order_by="UserPermission.permission")
     requested_profile_changes = db.relationship(
         "MemberProfileChangeRequest",
         back_populates="requested_by",
@@ -179,8 +200,13 @@ class User(UserMixin, db.Model):
 
     @property
     def permissions(self):
-        """Everything this account may do, from the roles it holds."""
-        return permissions_for(role.slug for role in self.roles)
+        """Everything this account may do: its roles, with its exceptions (permissions added or
+        taken away)."""
+        exceptions = self.permission_exceptions
+        return effective_permissions(
+            (role.slug for role in self.roles),
+            added=[row.permission for row in exceptions if row.granted],
+            taken=[row.permission for row in exceptions if not row.granted])
 
     def can(self, permission):
         """The access check. Nothing outside permissions.py asks about roles.
@@ -888,6 +914,8 @@ class Team(db.Model):
     roles = db.relationship("TeamRole", back_populates="team", cascade="all, delete-orphan")
     memberships = db.relationship("TeamMembership", back_populates="team", cascade="all, delete-orphan")
     notes = db.relationship("TeamNote", back_populates="team", cascade="all, delete-orphan")
+    permission_exceptions = db.relationship("TeamMemberPermission", back_populates="team",
+                                            cascade="all, delete-orphan")
     photos = db.relationship("TeamPhoto", back_populates="team", cascade="all, delete-orphan",
                              order_by="TeamPhoto.position")
 
@@ -915,6 +943,29 @@ class TeamRole(db.Model):
     team = db.relationship("Team", back_populates="roles")
     user = db.relationship("User", foreign_keys=[user_id])
     granted_by = db.relationship("User", foreign_keys=[granted_by_user_id])
+
+
+class TeamMemberPermission(db.Model):
+    """An exception to what somebody's roles in a team give them there (docs/permissions-plan.md):
+    a team permission added (``granted``) -- to a member with no role, say -- or taken away.
+    Counts, as a role does, while they are a member of the team and of the association."""
+
+    __tablename__ = "team_member_permissions"
+    __table_args__ = (
+        UniqueConstraint("team_id", "user_id", "permission", name="uq_team_member_permissions"),
+        db.Index("ix_team_member_permissions_team_user", "team_id", "user_id"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    permission = db.Column(db.String(80), nullable=False)
+    granted = db.Column(db.Boolean, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    granted_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    team = db.relationship("Team", back_populates="permission_exceptions")
+    user = db.relationship("User", foreign_keys=[user_id])
 
 
 class TeamMembership(db.Model):

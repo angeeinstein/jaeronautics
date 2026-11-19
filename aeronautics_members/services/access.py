@@ -1,4 +1,4 @@
-"""Changing which roles an account holds.
+"""Changing which roles and permissions an account holds (docs/permissions-plan.md).
 
 One function decides this, for one reason: the interesting part is not granting
 a role, it is refusing to grant or remove one, and those refusals have to hold
@@ -21,15 +21,28 @@ The guards, and why each exists:
   them counts as cover.
 * **Not an erased account.** Its rows survive as the record; it cannot sign in,
   and handing it a role would be an odd thing to find later.
+* **Only what one holds.** Whoever grants (``roles.manage``, in the admin role)
+  gives or takes away only permissions they hold themselves; a super admin --
+  every permission, no exceptions -- is made, or unmade, only by a super admin.
+  And an account holding a permission its actor does not -- its address, its
+  switch, its erasure -- is out of their reach (``covers``): otherwise an admin
+  could change a super admin's address and reset its password.
+
+A person holds roles, plus exceptions: permissions added to what the roles
+give, or taken away (``UserPermission``). The page sends the roles and every
+permission ticked; the exceptions are what differs from the roles.
 """
 
-from ..db_models import Role, User, db
+from ..db_models import User, UserPermission, db
 from ..permissions import (
+    ALL_PERMISSIONS,
     PROTECTED_PERMISSIONS,
     ROLE_PERMISSIONS,
+    SUPERADMIN,
+    effective_permissions,
     minimal_roles,
     permissions_for,
-    roles_with,
+    with_needs,
 )
 from . import ConflictError, ValidationError
 from .clock import get_now_utc
@@ -40,30 +53,60 @@ def assignable_roles():
     return sorted(ROLE_PERMISSIONS)
 
 
+def is_superadmin(user):
+    return user is not None and user.deleted_at is None and any(role.slug == SUPERADMIN for role in user.roles)
+
+
+def holders(permission, *, include_disabled=True):
+    """The accounts that hold ``permission`` now -- by a role or an exception --, not erased.
+
+    Asked person by person: with exceptions, which roles carry a permission no longer says who
+    holds it (somebody may have it added, or taken away)."""
+    query = db.select(User).where(
+        User.deleted_at.is_(None),
+        db.or_(User.roles.any(), User.permission_exceptions.any(UserPermission.granted.is_(True))))
+    if not include_disabled:
+        query = query.where(User.disabled_at.is_(None))
+    return [user for user in db.session.execute(query).scalars() if user.can(permission)]
+
+
+def holder_emails(*permissions, include_disabled=True):
+    """The verified addresses of whoever holds any of ``permissions``: whom an email for them goes to."""
+    found = {}
+    for permission in permissions:
+        for user in holders(permission, include_disabled=include_disabled):
+            if user.email_verified_at is not None:
+                found[user.id] = user.email
+    return sorted(found.values())
+
+
 def _active_holders_excluding(permission, user_id):
-    """How many other accounts could still exercise ``permission``."""
-    slugs = roles_with(permission)
-    if not slugs:
-        return 0
-    return db.session.scalar(
-        db.select(db.func.count())
-        .select_from(User)
-        .where(
-            User.roles.any(Role.slug.in_(slugs)),
-            User.deleted_at.is_(None),
-            # A switched-off admin cannot administer anything, so counting them
-            # as cover would let the last working one be disabled or stripped.
-            User.disabled_at.is_(None),
-            User.id != user_id,
-        )
-    ) or 0
+    """How many other accounts could still exercise ``permission``.
+
+    A switched-off admin cannot administer anything, so counting them as cover would let the
+    last working one be disabled or stripped."""
+    return sum(1 for user in holders(permission, include_disabled=False) if user.id != user_id)
 
 
-def describe_role_change(user, requested_slugs):
-    """What changing ``user``'s roles to ``requested_slugs`` would do.
+def covers(actor, user):
+    """Whether ``actor`` holds every permission ``user`` holds -- and so may act on the things
+    that are a way into them: their access, their address, switching them off, erasing them."""
+    return actor is not None and user.permissions <= actor.permissions
 
-    Returned rather than raised so a caller can show the consequence before
-    asking for confirmation, and so the refusal reasons are testable directly.
+
+def _exceptions(user):
+    added = {row.permission for row in user.permission_exceptions if row.granted}
+    taken = {row.permission for row in user.permission_exceptions if not row.granted}
+    return added, taken
+
+
+def describe_role_change(user, requested_slugs, requested_permissions=None, *, actor_user=None):
+    """What changing ``user``'s roles to ``requested_slugs`` -- and, when given, their
+    permissions to exactly ``requested_permissions`` -- would do.
+
+    ``requested_permissions`` None keeps the exceptions as they are. Each permission ticked
+    brings what it needs. Returned rather than raised so a caller can show the consequence
+    before asking for confirmation, and so the refusal reasons are testable directly.
     """
     if user is None:
         raise ValidationError("An account is required.")
@@ -72,6 +115,9 @@ def describe_role_change(user, requested_slugs):
     unknown = asked_for - set(ROLE_PERMISSIONS)
     if unknown:
         raise ValidationError(f"Unknown role(s): {', '.join(sorted(unknown))}")
+    unknown = set(requested_permissions or ()) - ALL_PERMISSIONS
+    if unknown:
+        raise ValidationError(f"Unknown permission(s): {', '.join(sorted(unknown))}")
 
     # Ticking Admin as well as Super Admin describes the same account as Super
     # Admin alone, so only one of those may be stored -- otherwise the same
@@ -79,11 +125,32 @@ def describe_role_change(user, requested_slugs):
     # This removes nothing the account can do: the covering role grants it all.
     requested = minimal_roles(asked_for)
     current = {role.slug for role in user.roles}
-    losing = permissions_for(current) - permissions_for(requested)
+    before = user.permissions
+    from_roles = with_needs(permissions_for(requested))
+    if SUPERADMIN in requested:
+        added, taken = set(), set()  # holds everything; takes no exceptions
+    elif requested_permissions is None:
+        added, taken = _exceptions(user)
+    else:
+        wanted = with_needs(requested_permissions)
+        added, taken = wanted - from_roles, from_roles - wanted
+    after = effective_permissions(requested, added, taken)
+    losing = before - after
+    gaining = after - before
 
     blockers = []
     if user.deleted_at is not None:
         blockers.append(("erased", "This account was erased and cannot be given access."))
+    if actor_user is not None and not is_superadmin(actor_user) and (
+            SUPERADMIN in requested) != (SUPERADMIN in current):
+        blockers.append(("superadmin_only", "Only a super admin can make somebody a super admin, or unmake one."))
+    if actor_user is not None:
+        beyond = (losing | gaining) - actor_user.permissions
+        if beyond:
+            blockers.append((
+                "beyond_own",
+                "You can only give or take away permissions you hold yourself.",
+            ))
 
     for permission, consequence in PROTECTED_PERMISSIONS.items():
         if permission not in losing:
@@ -95,6 +162,7 @@ def describe_role_change(user, requested_slugs):
                 "Give another account the role first.",
             ))
 
+    before_added, before_taken = _exceptions(user)
     return {
         "current": sorted(current),
         "requested": sorted(requested),
@@ -102,14 +170,18 @@ def describe_role_change(user, requested_slugs):
         "granted": sorted(requested - current),
         "revoked": sorted(current - requested),
         "permissions_lost": sorted(losing),
-        "permissions_gained": sorted(permissions_for(requested) - permissions_for(current)),
+        "permissions_gained": sorted(gaining),
+        "added": sorted(added),
+        "taken": sorted(taken),
         "blockers": blockers,
-        "changed": requested != current,
+        "changed": requested != current or (added, taken) != (before_added, before_taken),
     }
 
 
-def set_account_roles(user, requested_slugs, *, actor_user):
-    """Make ``user``'s roles exactly ``requested_slugs``. Returns the change.
+def set_account_roles(user, requested_slugs, *, actor_user, requested_permissions=None):
+    """Make ``user``'s roles exactly ``requested_slugs`` -- and, when given, their permissions
+    exactly ``requested_permissions`` (the exceptions are what differs from the roles). Returns
+    the change.
 
     Does not commit: the caller owns the transaction so the change and its audit
     entry land together.
@@ -121,7 +193,7 @@ def set_account_roles(user, requested_slugs, *, actor_user):
             code="self_role_change",
         )
 
-    change = describe_role_change(user, requested_slugs)
+    change = describe_role_change(user, requested_slugs, requested_permissions, actor_user=actor_user)
     if change["blockers"]:
         code, message = change["blockers"][0]
         raise ConflictError(message, code=code)
@@ -135,6 +207,18 @@ def set_account_roles(user, requested_slugs, *, actor_user):
         user.revoke_role(slug)
     for slug in change["granted"]:
         user.grant_role(get_role(slug))
+    wanted = {permission: True for permission in change["added"]}
+    wanted.update({permission: False for permission in change["taken"]})
+    for row in list(user.permission_exceptions):
+        if wanted.get(row.permission) is None or wanted[row.permission] != row.granted:
+            user.permission_exceptions.remove(row)
+    kept = {row.permission for row in user.permission_exceptions}
+    for permission, granted in wanted.items():
+        if permission not in kept:
+            user.permission_exceptions.append(UserPermission(
+                permission=permission, granted=granted,
+                granted_by_user_id=actor_user.id if actor_user is not None else None))
+    db.session.flush()
 
     return change
 
@@ -163,6 +247,11 @@ def describe_account_disable(user, *, actor_user, disable=True):
     if not disable and not user.is_disabled:
         return {"blockers": [], "changed": False}
 
+    if actor_user is not None and not covers(actor_user, user):
+        blockers.append((
+            "beyond_own",
+            "This account holds permissions you do not. Only somebody who holds all of them can switch it off or on.",
+        ))
     if disable:
         if actor_user is not None and actor_user.id == user.id:
             blockers.append((
