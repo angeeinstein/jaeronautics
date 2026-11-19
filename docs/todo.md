@@ -41,22 +41,6 @@ good).
 
 ## Open
 
-### Permissions per person, roles as templates
-
-- **Added:** 2026-11-04 (an idea); agreed 2026-11-19.
-- **What:** a feature, its own branch (`claude/permissions`): roles stay as
-  generic templates, a person holds roles plus exceptions (permissions
-  added or taken away); every permission shown on a person's *Access* tab;
-  team permissions in the same catalogue, adjusted by a team's leads within
-  their team. Some permissions split into seeing and changing (team money,
-  credit, Stripe's book), perhaps a read-only *Auditor* role.
-- **Where:** `docs/permissions-plan.md` -- what was decided, the cases, the
-  proposed split.
-- **Agreed (2026-11-19):** the split and the *Auditor* role; super admin as
-  full trust (holds everything, takes no exceptions); no warning about how
-  many super admins there are; *Grant permissions* a permission of its own,
-  in the admin role, granting within what one holds, never super admin.
-
 ### Azure: spaces lost around the glossary's words
 
 - **Added:** 2026-11-19

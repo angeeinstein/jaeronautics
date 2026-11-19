@@ -830,6 +830,8 @@ def seed(app, app_module, subscriptions):
          "path": "/teams/rocket-team/manage/attendance", "click": "table[aria-label='Hours per person'] button:has-text('Anna')"},
         {"name": "admin--account-cards", "user": "admin@example.org",
          "path": f"/admin/accounts/{active.user.id}#cards"},
+        {"name": "admin--account-access", "user": "admin@example.org",
+         "path": f"/admin/accounts/{active.user.id}#access"},
         {"name": "teams--messages", "user": "active@example.org", "path": "/teams/rocket-team/manage/messages"},
     ]
 

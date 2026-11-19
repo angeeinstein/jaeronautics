@@ -1,7 +1,9 @@
 # Permissions per person, roles as templates
 
 Talked about on 2026-11-04 (then an idea in `docs/todo.md`); agreed with the
-maintainer on 2026-11-19. Not built yet.
+maintainer on 2026-11-19; built on `claude/permissions` the same day. How it
+works for whoever maintains it: `docs/maintenance.md`, "Roles and
+Permissions".
 
 ## Why
 
@@ -82,6 +84,12 @@ the treasurers have the bank account, and the chairperson signs contracts.
    is cheap to give, changing stays narrow: "there is not much that I would
    hide from anybody ... they can always ask how much money their
    association holds, and we are more or less obliged to tell them anyway".
+8. **An account holding more is out of reach** (built 2026-11-19, following
+   from 5 and 7): whoever grants changes only somebody who holds no more than
+   they do -- their access, their address, their switch, their erasure. The
+   same in a team: a member given *Change members' permissions* adjusts the
+   others, not a lead beyond their own. Otherwise an admin could change a
+   super admin's address, reset the password and hold the account.
 
 ## How other platforms do it (researched 2026-11-19)
 
@@ -127,14 +135,29 @@ nothing changed, no members' details beyond what a booking names) would be
 generic -- Austrian associations must have two auditors (VerG § 5 (5)) --
 and fit the university's financial auditors.
 
-## Where it would be built
+## Where it is built
 
-- `permissions.py`: the catalogue (with the split above), the roles as
-  templates, each permission's area and label for the page.
-- Tables: a person's exceptions (permission, added or taken away), and per
-  team the same for team permissions; migrations from today's role rows.
-- `current_user.can(...)`: roles' permissions, plus added, minus taken away.
-- Pages: a person's *Access* tab (Admin › Accounts); a team's *Members* page
-  for its leads; the audit log.
-- The privacy policy, § 38: it names roles -- "persons the association has
-  given the respective permission" covers both.
+- `permissions.py`: the catalogue with the split, `NEEDS` (a permission
+  brings what it needs), the roles as templates (*Auditor* new; *Grant
+  permissions* in the admin role; super admin = `ALL_PERMISSIONS`),
+  `effective_permissions`, each permission's area and label.
+- Tables `user_permissions` and `team_member_permissions` (migration
+  `d8a3f1c6b2e4`): exceptions, added or taken away. Nothing to migrate: a
+  role held before means the same now.
+- `services/access.py`: the change and its refusals (`describe_role_change`,
+  `covers`), who holds a permission (`holders`). `services/teams.py`: a
+  member's team permissions (`own_team_permissions`,
+  `set_team_member_permissions`, `TEAM_NEEDS`).
+- Pages: a person's *Access* tab (Admin › Accounts, was *Roles*); a team
+  member's page, *Permissions*, for whoever holds *Change members'
+  permissions* (the leads). Whoever may only see the money or the credit
+  gets the pages without the forms that change them.
+- The split as built: team money and Stripe's book (Admin › Money) seen with
+  `teams.money.view`, changed with `teams.money`; credit and sales seen with
+  `credit.view`, booked and priced with `credit.manage`; contact messages
+  answered with `messages.answer`, emailed with `messages.receive`. Member
+  accounts were already split (`accounts.view`, `.billing`, `.privacy`) and
+  stay so.
+- **Left for the maintainer:** the privacy policy, § 38, names roles --
+  "persons the association has given the respective permission" covers both.
+  A legal text, changed in the portal (Admin › Legal texts).
