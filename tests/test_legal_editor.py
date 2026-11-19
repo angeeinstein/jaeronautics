@@ -245,7 +245,7 @@ class TestTheEnglishView:
         # *Translate again*: nothing kept is used -- every block and the title asked anew.
         sent.clear()
         send(client, "POST", f"/api/v1/legal/drafts/{record.id}/english", {**text, "again": True})
-        assert sorted(sent) == sorted(["Statuten", "<h2 id=\"paragraph-1\">§ 1 Name</h2>\n", "<p>Eins.</p>\n",
+        assert sorted(sent) == sorted(["<h1>Statuten</h1>", "<h2 id=\"paragraph-1\">§ 1 Name</h2>\n", "<p>Eins.</p>\n",
                                        "<h2 id=\"paragraph-2\">§ 2 Zweck</h2>\n", "<p>Zwei, geändert.</p>\n"])
 
     def test_says_when_no_service_is_set_up(self, client, boss):  # noqa: F811

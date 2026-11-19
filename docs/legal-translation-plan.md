@@ -175,7 +175,11 @@ cents a text.
   (structured output). Each answer is checked: as many paragraphs as sent,
   the same HTML tags; otherwise that portion goes to the next service.
 - **In the editor** a request has about 45 seconds: what is not done by then
-  goes to the next service. **Publishing** (in the background) waits
+  goes to the next service. A language model's portions are sent **all at
+  once** and the title goes with the text, as a heading (tried on the TDT
+  rules, 2026-11-19: one portion after another, the model managed § 1 to
+  § 13 in the time, Azure the rest and the title -- "team rules Team Drone
+  Tech"). **Publishing** (in the background) waits
   longer, and gives a paragraph a fallback made earlier -- in the editor, or
   while the first service failed -- another try with the first service; if
   it fails again, the earlier translation stays.

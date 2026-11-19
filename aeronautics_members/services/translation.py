@@ -34,6 +34,7 @@ import json
 import re
 import time
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from html.parser import HTMLParser
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -103,6 +104,8 @@ REQUEST_SECONDS = 45
 LLM_BATCH_CHARACTERS = 8_000
 LLM_MAX_TOKENS = 32_000
 LLM_TIMEOUT_SECONDS = 300
+#: A language model's portions asked at once (a long text is four or five).
+LLM_AT_ONCE = 6
 GLOSSARY_MAX = 200
 #: The start of the name of every glossary this portal makes at DeepL.
 GLOSSARY_NAME = "jaeronautics legal texts"
@@ -319,17 +322,23 @@ def forget(texts, *, as_html=True):
 
 def _batches(texts, name):
     """``texts`` in portions a request of this service takes: at most BATCH texts, and so many
-    characters -- fewer for Azure's free tier."""
+    characters -- fewer for Azure's free tier and a language model."""
+    for portion in _portions(texts, range(len(texts)), name):
+        yield [texts[index] for index in portion]
+
+
+def _portions(texts, indexes, name):
+    """Of ``texts``, those at ``indexes`` in portions (lists of indexes) as ``_batches`` makes them."""
     most = {AZURE: AZURE_BATCH_CHARACTERS, LLM: LLM_BATCH_CHARACTERS}.get(name, BATCH_CHARACTERS)
-    batch, size = [], 0
-    for text in texts:
-        if batch and (len(batch) == BATCH or size + len(text) > most):
-            yield batch
-            batch, size = [], 0
-        batch.append(text)
-        size += len(text)
-    if batch:
-        yield batch
+    portion, size = [], 0
+    for index in indexes:
+        if portion and (len(portion) == BATCH or size + len(texts[index]) > most):
+            yield portion
+            portion, size = [], 0
+        portion.append(index)
+        size += len(texts[index])
+    if portion:
+        yield portion
 
 
 class _Patience:
@@ -382,23 +391,54 @@ def _by_a_service(texts, as_html, current, only=None, context="", patient=False)
     services = [only] if only else configured(current)
     if not services:
         raise TranslationUnavailable("No translation service is set up (Settings › Translation).")
-    made, left, reasons, patience = [], list(texts), [], _Patience(patient)
+    done, left, reasons, patience = {}, list(range(len(texts))), [], _Patience(patient)
     for name in services:
-        try:
-            for batch in _batches(left, name):
-                if name == DEEPL:
-                    english = _deepl(batch, as_html, current, context, patience)
-                elif name == LLM:
-                    english = _llm(batch, as_html, current, context, patience)
-                else:
-                    english = _azure(batch, as_html, current, patience)  # Azure takes no context
-                made += [(clean_html(text) if as_html else text, name) for text in english]
-                left = left[len(batch):]
-            return made, reasons
-        except _ServiceError as exc:
-            current_app.logger.warning("Translating with %s failed: %s", NAMES[name], exc)
-            reasons.append(f"{NAMES[name]}: {exc}")
+        left, failure = _with_service(name, texts, left, done, as_html, current, context, patience)
+        if failure is not None:
+            current_app.logger.warning("Translating with %s failed: %s", NAMES[name], failure)
+            reasons.append(f"{NAMES[name]}: {failure}")
+        if not left:
+            return [done[index] for index in range(len(texts))], reasons
     raise TranslationUnavailable("; ".join(reasons))
+
+
+def _with_service(name, texts, left, done, as_html, current, context, patience):
+    """The texts at the indexes ``left`` by one service, into ``done``: ``(still left, why)``.
+
+    DeepL and Azure portion by portion, stopping at the first that fails. A language model's
+    portions all at once -- one after another, a long text took longer than a page's request may
+    (the editor), and publishing waited minutes; one that fails goes to the next service alone."""
+
+    def one(portion):
+        batch = [texts[index] for index in portion]
+        if name == DEEPL:
+            return _deepl(batch, as_html, current, context, patience)
+        if name == LLM:
+            return _llm(batch, as_html, current, context, patience)
+        return _azure(batch, as_html, current, patience)  # Azure takes no context
+
+    def keep(portion, english):
+        for index, text in zip(portion, english):
+            done[index] = (clean_html(text) if as_html else text, name)
+
+    portions = list(_portions(texts, left, name))
+    if name == LLM and len(portions) > 1:
+        with ThreadPoolExecutor(max_workers=LLM_AT_ONCE) as pool:
+            asked = [(portion, pool.submit(one, portion)) for portion in portions]
+        failed, failure = [], None
+        for portion, answer in asked:
+            try:
+                keep(portion, answer.result())
+            except _ServiceError as exc:
+                failed += portion
+                failure = failure or exc
+        return failed, failure
+    for at, portion in enumerate(portions):
+        try:
+            keep(portion, one(portion))
+        except _ServiceError as exc:
+            return [index for rest in portions[at:] for index in rest], exc
+    return [], None
 
 
 def _patiently(patience, send):

@@ -295,7 +295,8 @@ def test_a_paragraphs_own_number_kept_as_written(services, monkeypatch):
 
     _title, english = legal_translation.translate_version(SimpleNamespace(title="Teamordnung"))
 
-    assert sent[0]["text"][:2] == ["<p>mit Räumen sorgsam umzugehen;</p>\n", "<p>Text.</p>\n"]
+    assert sent[0]["text"][:3] == ["<h1>Teamordnung</h1>", "<p>mit Räumen sorgsam umzugehen;</p>\n",
+                                   "<p>Text.</p>\n"]
     assert english == ("<p>iii) mit Räumen sorgsam umzugehen;</p>\n<p>(b) Text.</p>\n"
                        "<h2>§ 1 Geltung</h2>\n<p>Ein Satz.</p>\n")
 
@@ -330,9 +331,10 @@ class TestTheWholeTextAsContext:
         _set_up()
         sent, english, report = self._translate(services, monkeypatch)
 
-        [blocks, title] = sent
-        assert blocks["text"][2] == "<p>fair zu sein;</p>\n"  # on its own, its number off
-        assert blocks["context"] == title["context"] == (
+        [blocks] = sent  # the title with the text, as a heading: one request
+        assert blocks["text"][0] == "<h1>Teamordnung</h1>"
+        assert blocks["text"][3] == "<p>fair zu sein;</p>\n"  # on its own, its number off
+        assert blocks["context"] == (
             "Teamordnung\n§ 3 Beschwerderecht\nMit dem Beitritt verpflichtet sich jedes Mitglied,\n"
             "i) fair zu sein;\nii) zu helfen.")
         assert blocks["custom_instructions"] == translation.INSTRUCTIONS and blocks["model_type"] == translation.MODEL
@@ -561,21 +563,50 @@ class TestALanguageModel:
         assert english == ["[DeepL] <p>Eins.</p>", "[DeepL] <p>Zwei.</p>"]
         assert why in report["failures"][0] and report["services"] == {"deepl"}
 
-    def test_in_a_pages_request_the_rest_to_the_next_service_when_time_runs_out(self, services, monkeypatch):
-        _set_up_llm()
-        now = {"t": 0.0}
-        monkeypatch.setattr(translation, "_clock", lambda: now["t"])
-        texts = [f"<p>{n} {'x' * 7_000}</p>" for n in range(3)]  # a portion each
+    def test_a_long_text_asked_all_at_once(self, services, monkeypatch):
+        # One portion after another, a long text took longer than the editor's request may: its
+        # portions go out together (each waits here until all three have arrived).
+        import threading
 
-        def slow(current, instructions, whole, asked, timeout):
-            now["t"] += 30  # each answer takes half a minute
+        _set_up_llm()
+        texts = [f"<p>{n} {'x' * 7_000}</p>" for n in range(3)]  # a portion each
+        together = threading.Barrier(3, timeout=5)
+
+        def at_once(current, instructions, whole, asked, timeout):
+            together.wait()
             return json.dumps({"translations": [f"[LLM] {text}" for text in json.loads(asked.split("\n", 1)[1])]})
 
-        monkeypatch.setattr(translation, "_ask_openai", slow)
+        monkeypatch.setattr(translation, "_ask_openai", at_once)
 
         english = translation.translate(texts)
 
-        assert [text[:6] for text in english] == ["[LLM] ", "[LLM] ", "[DeepL"]
+        assert all(text.startswith("[LLM] ") for text in english)
+
+    def test_one_portion_failing_goes_to_the_next_service_alone(self, services, monkeypatch):
+        _set_up_llm()
+        texts = [f"<p>{n} {'x' * 7_000}</p>" for n in range(3)]
+
+        def second_fails(current, instructions, whole, asked, timeout):
+            sent = json.loads(asked.split("\n", 1)[1])
+            if sent[0].startswith("<p>1 "):
+                raise translation._ServiceError("not reached")
+            return json.dumps({"translations": [f"[LLM] {text}" for text in sent]})
+
+        monkeypatch.setattr(translation, "_ask_openai", second_fails)
+
+        english = translation.translate(texts)
+
+        assert [text[:6] for text in english] == ["[LLM] ", "[DeepL", "[LLM] "]
+
+    def test_in_a_pages_request_the_next_service_when_no_time_is_left(self, services, monkeypatch):
+        _set_up_llm()
+        ticks = iter([0.0])  # the request starts at 0; every later look at the clock: 42 s on
+        monkeypatch.setattr(translation, "_clock", lambda: next(ticks, 42.0))
+        monkeypatch.setattr(translation, "_ask_openai", lambda *_a: pytest.fail("asked without time"))
+        report = {}
+
+        assert translation.translate(["<p>Eins.</p>"], report=report) == ["[DeepL] <p>Eins.</p>"]
+        assert "no time left" in report["failures"][0]
 
     def test_publishing_gives_what_a_fallback_made_to_the_first_once_more(self, services):
         _set_up_llm()

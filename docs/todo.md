@@ -41,6 +41,22 @@ good).
 
 ## Open
 
+### Azure: spaces lost around the glossary's words
+
+- **Added:** 2026-11-19
+- **What:** in Azure's English the words the glossary puts in place lose or
+  gain a space: "memberspresent", "any ordinary memberwho", "the team lead
+  's consent", "these team rules ." -- seen in the TDT rules on the test
+  server, where Azure translated part of the text.
+- **Why:** Azure gets the glossary's English marked not to be translated
+  (`<span class="notranslate">`, `services/translation.py`,
+  `_with_glossary`) and moves the whitespace next to such a mark.
+- **Where:** `_with_glossary` and what comes back from `_azure`.
+- **Ideas:** put the surrounding spaces inside the mark; or after the
+  answer, a space between a glossary word and a letter that follows it,
+  none before punctuation. Azure is the last fallback now (a language model
+  first), so not pressing.
+
 ### DeepL: "Too many glossaries" on the test server
 
 - **Added:** 2026-11-19

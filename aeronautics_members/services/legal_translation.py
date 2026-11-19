@@ -67,20 +67,26 @@ def _plan(german):
     return blocks, numbers, "\n".join(line for line in whole if line)
 
 
+def _heading(title):
+    """The title, sent as a heading with the text: one request less -- in the editor a second one
+    for the title alone found the time used up, and the next service wrote "team rules …"."""
+    return f"<h1>{html.escape(title, quote=False)}</h1>"
+
+
 def translate_version(german, *, patient=False, report=None):
     """``(title, html)``: a German Version's title and page in English. ``patient`` and ``report``
     as for ``translation.translate``."""
     blocks, numbers, context = _plan(german)
-    english = translation.translate(blocks, context=context, patient=patient, report=report)
-    [title] = translation.translate([german.title], as_html=False, context=context, patient=patient,
-                                    report=report)
+    title, *english = translation.translate([_heading(german.title), *blocks], context=context,
+                                            patient=patient, report=report)
+    title = " ".join(html.unescape(re.sub(r"<[^>]+>", "", title)).split())
     return title, "".join(_numbered(text, number) for text, number in zip(english, numbers))
 
 
 def forget_kept(german):
     """The kept translations of a version's texts forgotten, so they are asked for again."""
     blocks, _numbers, _context = _plan(german)
-    return translation.forget(blocks) + translation.forget([german.title], as_html=False)
+    return translation.forget([_heading(german.title), *blocks])
 
 
 def made_by(report):
