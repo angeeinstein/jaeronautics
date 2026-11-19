@@ -1,6 +1,8 @@
 """Translation by machine, German to English (docs/legal-translation-plan.md):
-DeepL and Azure AI Translator, either or both, one first and the other as
-the fallback -- as the email accounts are set up (Settings › Translation).
+DeepL, Azure AI Translator and a language model (Anthropic, OpenAI, or a
+server of one's own with OpenAI's interface, such as Ollama) -- any of them,
+tried in the order set under Settings › Translation, each the next one's
+fallback.
 
 Texts go as HTML: the translator keeps the tags (headings with their anchors,
 links, lists, tables) and translates what is between them; what comes back is
@@ -37,7 +39,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from flask import current_app
+from flask import current_app, g, has_request_context
 
 from ..db_models import Translation, db
 from . import ValidationError
@@ -45,17 +47,28 @@ from .audit import log_audit_event
 from .clock import get_now_utc
 from .settings import get_settings_map, set_setting_value
 
-DEEPL, AZURE = "deepl", "azure"
-SERVICES = (DEEPL, AZURE)
-NAMES = {DEEPL: "DeepL", AZURE: "Azure AI Translator"}
+DEEPL, AZURE, LLM = "deepl", "azure", "llm"
+SERVICES = (DEEPL, AZURE, LLM)
+NAMES = {DEEPL: "DeepL", AZURE: "Azure AI Translator", LLM: "Language model"}
+#: Where the language model runs: Anthropic (its own package), OpenAI, or another server with
+#: OpenAI's interface -- Ollama, llama.cpp, LM Studio, on the portal's server or in the network.
+ANTHROPIC, OPENAI, OTHER = "anthropic", "openai", "other"
+PROVIDERS = (ANTHROPIC, OPENAI, OTHER)
+OPENAI_ADDRESS = "https://api.openai.com/v1"
 
 ORDER_KEY = "translation.order"
 DEEPL_KEY = "translation.deepl_key"
 AZURE_KEY = "translation.azure_key"
 AZURE_REGION_KEY = "translation.azure_region"
+LLM_PROVIDER_KEY = "translation.llm_provider"
+LLM_KEY = "translation.llm_key"
+LLM_MODEL_KEY = "translation.llm_model"
+LLM_ADDRESS_KEY = "translation.llm_address"
 GLOSSARY_KEY = "translation.glossary"
 DEEPL_GLOSSARY_KEY = "translation.deepl_glossary"
-KEYS = [ORDER_KEY, DEEPL_KEY, AZURE_KEY, AZURE_REGION_KEY, GLOSSARY_KEY, DEEPL_GLOSSARY_KEY]
+KEYS = [ORDER_KEY, DEEPL_KEY, AZURE_KEY, AZURE_REGION_KEY, GLOSSARY_KEY, DEEPL_GLOSSARY_KEY, LLM_PROVIDER_KEY,
+        LLM_KEY, LLM_MODEL_KEY, LLM_ADDRESS_KEY]
+SECRETS = {DEEPL_KEY, AZURE_KEY, LLM_KEY}
 
 AZURE_ENDPOINT = "https://api.cognitive.microsofttranslator.com"
 #: British English at DeepL: the association is in Austria, and its texts read as European ones.
@@ -82,6 +95,14 @@ AZURE_BATCH_CHARACTERS = 10_000
 AZURE_PER_MINUTE = 30_000
 #: How long, in all, a translation in the background waits for a service that asks to wait.
 WAIT_MAX_SECONDS = 240
+#: How long translating may take in a page's request (the editor's English); the rest goes to the
+#: next service.
+REQUEST_SECONDS = 45
+#: A language model: characters of German per request -- its answer, as long, must come back in
+#: one piece -- and how long one request may take when publishing (a local model is slow).
+LLM_BATCH_CHARACTERS = 8_000
+LLM_MAX_TOKENS = 32_000
+LLM_TIMEOUT_SECONDS = 300
 GLOSSARY_MAX = 200
 #: The start of the name of every glossary this portal makes at DeepL.
 GLOSSARY_NAME = "jaeronautics legal texts"
@@ -131,15 +152,33 @@ def settings():
         glossary = json.loads(saved[GLOSSARY_KEY]) if saved.get(GLOSSARY_KEY) else DEFAULT_GLOSSARY
     except ValueError:
         glossary = DEFAULT_GLOSSARY
+    provider = saved.get(LLM_PROVIDER_KEY) if saved.get(LLM_PROVIDER_KEY) in PROVIDERS else ANTHROPIC
     return {"order": order, "deepl_key": saved.get(DEEPL_KEY) or "", "azure_key": saved.get(AZURE_KEY) or "",
-            "azure_region": saved.get(AZURE_REGION_KEY) or "", "glossary": glossary}
+            "azure_region": saved.get(AZURE_REGION_KEY) or "", "glossary": glossary,
+            "llm_provider": provider, "llm_key": saved.get(LLM_KEY) or "", "llm_model": saved.get(LLM_MODEL_KEY) or "",
+            "llm_address": saved.get(LLM_ADDRESS_KEY) or ""}
 
 
 def configured(current=None):
     """The services set up, in the order they are tried."""
     current = current or settings()
-    have = {DEEPL: bool(current["deepl_key"]), AZURE: bool(current["azure_key"])}
+    # A language model needs its model, and a key -- or, on another server, its address (a local
+    # one may need no key).
+    llm = bool(current["llm_model"]) and bool(
+        current["llm_address"] if current["llm_provider"] == OTHER else current["llm_key"])
+    have = {DEEPL: bool(current["deepl_key"]), AZURE: bool(current["azure_key"]), LLM: llm}
     return [name for name in current["order"] if have[name]]
+
+
+def _clean_address(address):
+    address = (address or "").strip().rstrip("/")
+    if not address:
+        return ""
+    parsed = urlparse(address)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.query or parsed.fragment:
+        raise ValidationError("Not an address.", details={"fields": {
+            "llm_address": "Like http://localhost:11434/v1 -- where its OpenAI interface is."}})
+    return address
 
 
 def _clean_glossary(entries):
@@ -160,30 +199,42 @@ def _clean_glossary(entries):
 
 
 def save_settings(actor, *, order, deepl_key=None, azure_key=None, azure_region="", glossary=None,
-                  forget=()):
-    """Save the services and the glossary. A key left empty keeps the one set; ``forget`` removes one."""
+                  forget=(), llm_provider=None, llm_key=None, llm_model=None, llm_address=None):
+    """Save the services and the glossary. A key left empty keeps the one set; ``forget`` removes one.
+    ``llm_*`` left None keeps what is set."""
     order = [name for name in order if name in SERVICES]
     order += [name for name in SERVICES if name not in order]
     region = (azure_region or "").strip()
     if region and not re.fullmatch(r"[a-z0-9]{2,40}", region):
         raise ValidationError("Not a region.", details={"fields": {"azure_region": "Like westeurope."}})
     values = {ORDER_KEY: ",".join(order), AZURE_REGION_KEY: region}
+    if llm_provider is not None:
+        if llm_provider not in PROVIDERS:
+            raise ValidationError("No such provider.", details={"fields": {"llm_provider": "Choose one."}})
+        values[LLM_PROVIDER_KEY] = llm_provider
+    if llm_model is not None:
+        model = llm_model.strip()
+        if len(model) > 100 or any(character.isspace() for character in model):
+            raise ValidationError("Not a model.", details={"fields": {
+                "llm_model": "Its name as the provider lists it: no spaces, at most 100 characters."}})
+        values[LLM_MODEL_KEY] = model
+    if llm_address is not None:
+        values[LLM_ADDRESS_KEY] = _clean_address(llm_address)
     if glossary is not None:
         values[GLOSSARY_KEY] = json.dumps(_clean_glossary(glossary), ensure_ascii=False)
-    for key, new in ((DEEPL_KEY, deepl_key), (AZURE_KEY, azure_key)):
+    for key, new in ((DEEPL_KEY, deepl_key), (AZURE_KEY, azure_key), (LLM_KEY, llm_key)):
         if new and new.strip():
             values[key] = new.strip()
     for name in forget:
-        values[{DEEPL: DEEPL_KEY, AZURE: AZURE_KEY}[name]] = ""
+        values[{DEEPL: DEEPL_KEY, AZURE: AZURE_KEY, LLM: LLM_KEY}[name]] = ""
     before = get_settings_map(KEYS)
     changed = [key.split(".", 1)[1] for key, value in values.items() if (before.get(key) or "") != value]
     for key, value in values.items():
         set_setting_value(key, value)
     if changed:
-        secret = {DEEPL_KEY, AZURE_KEY}
         log_audit_event("system", "translation_settings_changed", actor_user=actor, target_user=actor,
                         metadata={"changed": changed},
-                        after={key: ("set" if value else "") if key in secret else value
+                        after={key: ("set" if value else "") if key in SECRETS else value
                                for key, value in values.items()})
     return changed
 
@@ -216,24 +267,45 @@ def translate(texts, *, as_html=True, context="", patient=False, report=None):
     rows = {row.source_hash: row for row in db.session.execute(
         db.select(Translation).where(Translation.source_hash.in_(set(keys)))).scalars()} if keys else {}
     known = {key: row.target for key, row in rows.items()}
-    services = {row.service for row in rows.values() if row.service}
     missing = list(dict.fromkeys(text for text, key in zip(texts, keys) if key not in known and text.strip()))
     failures = []
     if missing:
         made, failures = _by_a_service(missing, as_html, current, context=context, patient=patient)
-        now = get_now_utc()
-        for text, (english, service) in zip(missing, made):
-            key = _key(text, as_html, current["glossary"])
-            known[key] = english
-            services.add(service)
-            if db.session.get(Translation, key) is None:
-                db.session.add(Translation(source_hash=key, source=text, target=english, service=service,
-                                           created_at=now))
-        db.session.flush()
+        _keep(missing, made, as_html, current, rows)
+    first = (configured(current) or [None])[0]
+    if patient and first:
+        # Publishing: a paragraph a later service made -- in the editor, against the clock, or
+        # while the first one failed -- is given to the first once more. Failing again, it stays.
+        again = list(dict.fromkeys(text for text, key in zip(texts, keys)
+                                   if key in rows and rows[key].service != first and text.strip()))
+        if again:
+            try:
+                made, _none = _by_a_service(again, as_html, current, only=first, context=context, patient=True)
+                _keep(again, made, as_html, current, rows)
+            except TranslationUnavailable as exc:
+                failures.append(str(exc))
+    for key, row in rows.items():
+        known[key] = row.target
     if report is not None:
-        report.setdefault("services", set()).update(services)
+        report.setdefault("services", set()).update(
+            rows[key].service for key in keys if key in rows and rows[key].service)
         report.setdefault("failures", []).extend(failures)
     return [known.get(key, text) for text, key in zip(texts, keys)]
+
+
+def _keep(texts, made, as_html, current, rows):
+    """``made`` (``[(english, service)]``, one per text) kept, and put into ``rows`` by key."""
+    now = get_now_utc()
+    for text, (english, service) in zip(texts, made):
+        key = _key(text, as_html, current["glossary"])
+        row = rows.get(key) or db.session.get(Translation, key)
+        if row is None:
+            row = Translation(source_hash=key, source=text, target=english, service=service, created_at=now)
+            db.session.add(row)
+        else:
+            row.target, row.service, row.created_at = english, service, now
+        rows[key] = row
+    db.session.flush()
 
 
 def forget(texts, *, as_html=True):
@@ -248,7 +320,7 @@ def forget(texts, *, as_html=True):
 def _batches(texts, name):
     """``texts`` in portions a request of this service takes: at most BATCH texts, and so many
     characters -- fewer for Azure's free tier."""
-    most = AZURE_BATCH_CHARACTERS if name == AZURE else BATCH_CHARACTERS
+    most = {AZURE: AZURE_BATCH_CHARACTERS, LLM: LLM_BATCH_CHARACTERS}.get(name, BATCH_CHARACTERS)
     batch, size = [], 0
     for text in texts:
         if batch and (len(batch) == BATCH or size + len(text) > most):
@@ -266,6 +338,23 @@ class _Patience:
     def __init__(self, patient):
         self.left = WAIT_MAX_SECONDS if patient else 0
         self.sent = deque()  # (when, characters)
+        #: In a page's request: by when the answers must be there -- for all of its translating
+        #: together, the text and its title (gunicorn gives a request 60 seconds).
+        self.until = None
+        if not patient:
+            self.until = _clock() + REQUEST_SECONDS
+            if has_request_context():
+                self.until = g.setdefault("translation_until", self.until)
+
+    def time_for(self, most):
+        """How long the next request may take: ``most``, or what is left of a page's request --
+        too little left, and the next service gets the rest."""
+        if self.until is None:
+            return most
+        left = self.until - _clock()
+        if left < 5:
+            raise _ServiceError("no time left in this request; the rest by the next service")
+        return min(most, left)
 
     def wait(self, seconds):
         seconds = max(1, min(seconds, 120))
@@ -297,8 +386,12 @@ def _by_a_service(texts, as_html, current, only=None, context="", patient=False)
     for name in services:
         try:
             for batch in _batches(left, name):
-                english = (_deepl(batch, as_html, current, context, patience) if name == DEEPL
-                           else _azure(batch, as_html, current, patience))  # Azure takes no context
+                if name == DEEPL:
+                    english = _deepl(batch, as_html, current, context, patience)
+                elif name == LLM:
+                    english = _llm(batch, as_html, current, context, patience)
+                else:
+                    english = _azure(batch, as_html, current, patience)  # Azure takes no context
                 made += [(clean_html(text) if as_html else text, name) for text in english]
                 left = left[len(batch):]
             return made, reasons
@@ -331,7 +424,7 @@ def try_service(name):
     return english
 
 
-def _call(url, *, data=None, headers=None, method="POST"):
+def _call(url, *, data=None, headers=None, method="POST", timeout=TIMEOUT_SECONDS):
     # ensure_ascii off: an umlaut is two bytes, not six -- a DeepL request, context included, is
     # at most 128 KiB.
     body = json.dumps(data, ensure_ascii=False).encode() if data is not None else None
@@ -339,7 +432,7 @@ def _call(url, *, data=None, headers=None, method="POST"):
                       headers={"Content-Type": "application/json; charset=utf-8", "User-Agent": "jaeronautics",
                                **(headers or {})})
     try:
-        with urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # noqa: S310 -- fixed https hosts
+        with urlopen(request, timeout=timeout) as response:  # noqa: S310 -- the services' addresses, set by admins
             body = response.read()
             return json.loads(body) if body else None
     except HTTPError as exc:
@@ -562,6 +655,119 @@ def _azure(texts, as_html, current, patience=None):
     if len(made) != len(texts):
         raise _ServiceError("an answer of the wrong length")
     return made
+
+
+# --- A language model ------------------------------------------------------------------------
+
+LLM_INSTRUCTIONS = """You translate the legal texts of a student association in Austria from German into English: \
+its statutes, rules of procedure, membership terms, privacy policy and its teams' rules.
+
+- Formal British English, as legal texts are written. Translate faithfully: leave nothing out, add nothing, \
+explain nothing.
+- Gender-neutral: a member or any other person is "they" and "their", never "he", "his", "she" or "her".
+- Keep every HTML tag and its attributes exactly as they are, in the same places; translate only the text \
+between them. Leave email addresses, web addresses and names as they are.
+- Each text you are given is a part of the whole German text, which follows for context: a heading, a \
+paragraph, or a list item that finishes a sentence begun before it. Translate each so that it reads right \
+in its place.
+- Answer with JSON: {"translations": [...]}, one English string for each text given, in the same order -- \
+exactly as many as were given."""
+
+_ANSWER = {"type": "object", "properties": {"translations": {"type": "array", "items": {"type": "string"}}},
+           "required": ["translations"], "additionalProperties": False}
+
+
+def _llm_prompt(texts, current, context):
+    """``(instructions, the whole German text, the request)`` for a language model."""
+    instructions = LLM_INSTRUCTIONS
+    if current["glossary"]:
+        instructions += ("\n- Always translate these terms so, in whatever form the German word takes:\n"
+                         + "\n".join(f"  {german} -> {english}" for german, english in current["glossary"]))
+    whole = f"The whole German text, for context:\n\n{_around(context, texts)}" if context.strip() else ""
+    asked = f"Translate these {len(texts)} texts:\n{json.dumps(texts, ensure_ascii=False)}"
+    return instructions, whole, asked
+
+
+def _tags(text):
+    return [" ".join(tag.split()) for tag in re.findall(r"<[^>]*>", text)]
+
+
+def _llm(texts, as_html, current, context="", patience=None):
+    """The texts in English by a language model: one request per portion, the answer a list in a
+    fixed format, checked -- as many texts as sent, and with HTML the same tags -- or the portion
+    goes to the next service."""
+    patience = patience or _Patience(False)
+    instructions, whole, asked = _llm_prompt(texts, current, context)
+    ask = _ask_anthropic if current["llm_provider"] == ANTHROPIC else _ask_openai
+    answer = _patiently(patience, lambda: ask(current, instructions, whole, asked,
+                                              patience.time_for(LLM_TIMEOUT_SECONDS)))
+    try:
+        made = json.loads(answer)["translations"]
+    except (ValueError, TypeError, KeyError) as exc:
+        raise _ServiceError("an answer that is not the list asked for") from exc
+    if not isinstance(made, list) or len(made) != len(texts) or not all(isinstance(text, str) for text in made):
+        raise _ServiceError("an answer of the wrong length")
+    for german, english in zip(texts, made):
+        if german.strip() and not english.strip():
+            raise _ServiceError("a text left empty")
+        if as_html and _tags(german) != _tags(english):
+            raise _ServiceError("an answer whose HTML differs from the text's")
+    return made
+
+
+def _ask_anthropic(current, instructions, whole, asked, timeout):
+    """The answer's text, from Anthropic's Messages API. The whole German text is cached there:
+    sent with every portion, it is paid in full once."""
+    import anthropic
+
+    system = [{"type": "text", "text": instructions}]
+    if whole:
+        system.append({"type": "text", "text": whole, "cache_control": {"type": "ephemeral"}})
+    client = anthropic.Anthropic(api_key=current["llm_key"], timeout=timeout, max_retries=1)
+    try:
+        with client.messages.stream(
+                model=current["llm_model"], max_tokens=LLM_MAX_TOKENS, system=system,
+                messages=[{"role": "user", "content": asked}],
+                output_config={"format": {"type": "json_schema", "schema": _ANSWER}}) as stream:
+            message = stream.get_final_message()
+    except anthropic.RateLimitError as exc:
+        retry = exc.response.headers.get("retry-after") if exc.response is not None else None
+        raise _ServiceError(f"too many requests just now ({exc.message})", code=429,
+                            retry_after=int(float(retry)) if retry and retry.replace(".", "", 1).isdigit() else 60
+                            ) from exc
+    except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as exc:
+        raise _ServiceError(f"the key is not accepted ({exc.message})", code=exc.status_code) from exc
+    except anthropic.NotFoundError as exc:
+        raise _ServiceError(f"no such model ({exc.message})", code=404) from exc
+    except anthropic.APIStatusError as exc:
+        raise _ServiceError(f"error {exc.status_code} ({exc.message})", code=exc.status_code) from exc
+    except anthropic.APIConnectionError as exc:
+        raise _ServiceError(f"not reached ({exc})") from exc
+    if message.stop_reason == "refusal":
+        raise _ServiceError("it declined to translate this")
+    if message.stop_reason == "max_tokens":
+        raise _ServiceError("the answer was too long")
+    return "".join(block.text for block in message.content if block.type == "text")
+
+
+def _ask_openai(current, instructions, whole, asked, timeout):
+    """The answer's text, from an OpenAI chat interface: OpenAI's own, or another server's
+    (Ollama, llama.cpp, LM Studio), which may need no key."""
+    address = OPENAI_ADDRESS if current["llm_provider"] == OPENAI else current["llm_address"]
+    headers = {"Authorization": f"Bearer {current['llm_key']}"} if current["llm_key"] else {}
+    system = f"{instructions}\n\n{whole}" if whole else instructions
+    answer = _call(f"{address}/chat/completions", headers=headers, timeout=timeout, data={
+        "model": current["llm_model"],
+        "messages": [{"role": "system", "content": system}, {"role": "user", "content": asked}],
+        "response_format": {"type": "json_schema",
+                            "json_schema": {"name": "translations", "strict": True, "schema": _ANSWER}}})
+    choice = ((answer or {}).get("choices") or [{}])[0]
+    said = choice.get("message") or {}
+    if said.get("refusal"):
+        raise _ServiceError("it declined to translate this")
+    if choice.get("finish_reason") == "length":
+        raise _ServiceError("the answer was too long")
+    return said.get("content") or ""
 
 
 # --- What comes back ------------------------------------------------------------------------

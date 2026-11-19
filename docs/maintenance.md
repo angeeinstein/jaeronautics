@@ -469,16 +469,18 @@ version that differs in one paragraph costs that paragraph. Until it is made
 -- no service set up, or none answering; the work is retried with the
 outbox's backoff -- the English page says there is no English of this version
 yet. The page and the PDF say it was made by machine. **Settings ›
-Translation** (`settings.credentials`): DeepL (a Free key ends `:fx`) and Azure
-AI Translator (key, region), either or both, which is tried first -- the other
-is the fallback --, *Try it*, DeepL's characters this month, and the
-**glossary** (Verein → association …): DeepL gets it as a glossary of its own,
-made anew when it changes; Azure the English word in place for the German as
-written. The English is never corrected by hand -- the glossary keeps terms
-right. Published English from before (the files of 04.10.2026) stays as it is.
-A paragraph's own number (`i)`) is taken off before and put back after; a
-paragraph ending in "," or ":" and the paragraphs that finish its sentence are
-each translated on their own, with the other given to DeepL as context.
+Translation** (`settings.credentials`): DeepL (a Free key ends `:fx`), Azure
+AI Translator (key, region) and a language model (Anthropic, OpenAI, or a
+server of one's own with OpenAI's interface: model, key, address), any of them,
+in a list dragged into the order they are tried in -- each the next one's
+fallback --, *Try it*, DeepL's characters used, and the **glossary** (Verein →
+association …): DeepL gets it as a glossary of its own, made anew when it
+changes; a language model in its instructions; Azure the English word in place
+for the German as written. The English is never corrected by hand -- the
+glossary keeps terms right. Published English from before (the files of
+04.10.2026) stays as it is. A paragraph's own number (`i)`) is taken off before
+and put back after; each paragraph is translated on its own, told the whole
+German text (DeepL and a language model; Azure takes no context).
 
 **A version's English, again or away:** on Admin → Legal Texts, each version
 published in the portal says what its English is -- made by machine, by hand
@@ -493,9 +495,35 @@ Translation makes the English that waits for one at once.
 
 ### Setting up a translation service
 
-Either one is enough; both make the other a fallback. Keys go only into
-Settings › Translation -- never into a chat, an email or the repository.
-*Try it* translates one sentence with the key as saved.
+One is enough; the others are fallbacks, tried from the top of the list
+(drag a row by its handle, or use its arrows). Keys go only into Settings ›
+Translation -- never into a chat, an email or the repository. *Try it*
+translates one sentence with the key as saved.
+
+**A language model** (the best legal English: it reads the whole text and keeps
+to instructions -- gender-neutral, British English, the glossary in every form
+of a word; a few cents a text):
+
+- **Anthropic:** console.anthropic.com → sign up (the association's account) →
+  *Billing*: add a payment method and buy a few dollars of credits →
+  *API keys* → create one, copy it. Settings › Translation → Language model →
+  *Anthropic*, the key, and the **model**: its name from Anthropic's list of
+  models (docs.anthropic.com → *Models*; one of the current ones -- a larger
+  model translates better and still costs cents) → *Save* → *Try it*.
+- **OpenAI:** platform.openai.com → *Billing* (credits) → *API keys* → a key;
+  then *OpenAI*, the key, and a model from OpenAI's list. The model must
+  support structured outputs (a JSON schema).
+- **A server of your own, free:** Ollama (ollama.com) on the portal's server
+  or another machine the portal reaches; `ollama pull <model>` for a model
+  good at German and English with structured outputs. Then *Another server*,
+  the model as Ollama names it, the address of its OpenAI interface --
+  `http://localhost:11434/v1` on the same machine, else the machine's
+  address (Ollama listens on all addresses only with
+  `OLLAMA_HOST=0.0.0.0`; keep that port off the internet) -- and no key.
+  llama.cpp's server and LM Studio work the same way, with their address.
+  A local model is slower: publishing waits up to five minutes a portion; in
+  the editor whatever takes longer than about 45 seconds is translated by
+  the next service, and given to the model again when publishing.
 
 **DeepL API** (better legal English; British English):
 

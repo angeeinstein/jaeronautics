@@ -1,0 +1,44 @@
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--ja-border);
+}
+
+.row {
+  position: relative;
+  padding: 0.5rem 0.75rem 0.5rem 0.5rem;
+  background: var(--ja-surface);
+}
+
+.row + .row {
+  border-top: 1px solid var(--ja-border);
+}
+
+/* Lifted while dragged: above the others, on the alternate surface, outlined in the accent. */
+.row[data-dragging] {
+  z-index: 1;
+  background: var(--ja-surface-alt);
+  outline: 1px solid var(--ja-accent);
+}
+
+.handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.row[data-dragging] .handle {
+  cursor: grabbing;
+}
+
+.position {
+  width: 1.25rem;
+  flex: none;
+  font-family: var(--mantine-font-family-monospace);
+  color: var(--ja-muted);
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+}

@@ -10683,11 +10683,32 @@ export interface components {
              */
             deepl_key?: string | null;
             /** Forget */
-            forget?: ("deepl" | "azure")[];
+            forget?: ("deepl" | "azure" | "llm")[];
             /** Glossary */
             glossary?: string[][];
+            /**
+             * Llm Address
+             * @default
+             */
+            llm_address?: string;
+            /**
+             * Llm Key
+             * @default null
+             */
+            llm_key?: string | null;
+            /**
+             * Llm Model
+             * @default
+             */
+            llm_model?: string;
+            /**
+             * Llm Provider
+             * @default anthropic
+             * @enum {string}
+             */
+            llm_provider?: "anthropic" | "openai" | "other";
             /** Order */
-            order: ("deepl" | "azure")[];
+            order: ("deepl" | "azure" | "llm")[];
         };
         /**
          * TranslationOut
@@ -10708,6 +10729,15 @@ export interface components {
             deepl_used?: number | null;
             /** Glossary */
             glossary: string[][];
+            /** Llm Address */
+            llm_address: string;
+            /** Llm Model */
+            llm_model: string;
+            /**
+             * Llm Provider
+             * @enum {string}
+             */
+            llm_provider: "anthropic" | "openai" | "other";
             /** Services */
             services: components["schemas"]["TranslationServiceOut"][];
         };
@@ -10721,7 +10751,7 @@ export interface components {
              * Name
              * @enum {string}
              */
-            name: "deepl" | "azure";
+            name: "deepl" | "azure" | "llm";
         };
         /** TranslationTryOut */
         TranslationTryOut: {

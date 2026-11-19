@@ -17,8 +17,12 @@ const SETTINGS: Schemas['TranslationOut'] = {
   services: [
     { name: 'deepl', label: 'DeepL', key_set: true },
     { name: 'azure', label: 'Azure AI Translator', key_set: false },
+    { name: 'llm', label: 'Language model', key_set: false },
   ],
   azure_region: '',
+  llm_provider: 'anthropic',
+  llm_model: '',
+  llm_address: '',
   glossary: [['Vorstand', 'board']],
   deepl_used: 1234,
   deepl_limit: 500000,
@@ -45,11 +49,22 @@ describe('Settings › Translation', () => {
     expect(screen.getByRole('textbox', { name: 'English term 1' })).toHaveValue('board');
   });
 
-  it('Azure first, a term added, saved', async () => {
+  it('the order a list, Azure moved up to the top, a term added, saved', async () => {
     const { calls } = show();
-    await screen.findByRole('textbox', { name: 'German term 1' });
+    const order = await screen.findByRole('list', { name: 'Order the services are tried in' });
+    expect(
+      within(order)
+        .getAllByRole('listitem')
+        .map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining('DeepL'),
+      expect.stringContaining('Azure AI Translator'),
+      expect.stringContaining('Language model'),
+    ]);
+    expect(within(order).getAllByRole('listitem')[1]).toHaveTextContent('Not set up: skipped');
+    expect(within(order).getByRole('button', { name: 'Move DeepL up' })).toBeDisabled();
 
-    await userEvent.click(screen.getByRole('radio', { name: 'Azure AI Translator' }));
+    await userEvent.click(within(order).getByRole('button', { name: 'Move Azure AI Translator up' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add a term' }));
     await userEvent.type(screen.getByRole('textbox', { name: 'German term 2' }), 'Verein');
     await userEvent.type(screen.getByRole('textbox', { name: 'English term 2' }), 'association');
@@ -60,7 +75,7 @@ describe('Settings › Translation', () => {
     });
     const sent = calls.find((call) => call.method === 'PUT');
     expect(await sent?.clone().json()).toMatchObject({
-      order: ['azure', 'deepl'],
+      order: ['azure', 'deepl', 'llm'],
       glossary: [
         ['Vorstand', 'board'],
         ['Verein', 'association'],
@@ -76,5 +91,29 @@ describe('Settings › Translation', () => {
     await userEvent.click(within(services).getByRole('button', { name: 'Try it' }));
 
     expect(await screen.findByText('The board decides.')).toBeInTheDocument();
+  });
+
+  it('a language model on a server of ones own: model and address, no key needed', async () => {
+    const { calls } = show();
+    const services = await screen.findByRole('region', { name: 'Services' });
+
+    await userEvent.click(within(services).getByRole('radio', { name: 'Another server' }));
+    await userEvent.type(within(services).getByRole('textbox', { name: /Model/ }), 'a-model');
+    await userEvent.type(
+      within(services).getByRole('textbox', { name: /Address/ }),
+      'http://localhost:11434/v1',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(calls.some((call) => call.method === 'PUT')).toBe(true);
+    });
+    const sent = calls.find((call) => call.method === 'PUT');
+    expect(await sent?.clone().json()).toMatchObject({
+      llm_provider: 'other',
+      llm_model: 'a-model',
+      llm_address: 'http://localhost:11434/v1',
+      llm_key: null,
+    });
   });
 });

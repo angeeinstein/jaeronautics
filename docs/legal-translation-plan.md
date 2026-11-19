@@ -151,3 +151,35 @@ this text again myself or by others, this shouldn't fail the same way".
   (taken over, laptop closed): at most the two seconds before the autosave;
   and the correction window, which has no autosave, "will likely never even
   be used at all" (the maintainer, 2026-11-05).
+
+## A language model as a third service (decided 2026-11-19)
+
+DeepL's Free account has 1,000,000 characters for good, not per month, so
+waiting to see how DeepL with context does is "not really a long-term option
+anyways" (the maintainer). A language model translates legal text better: it
+reads the whole text, keeps to instructions (gender-neutral, British English,
+the glossary in every inflected form, the HTML as it is), and costs a few
+cents a text.
+
+- **A third service, "Language model"**, beside DeepL and Azure, in the same
+  order and fallback. Its **provider** is chosen: **Anthropic** (its own
+  Python package), **OpenAI**, or **another server** with OpenAI's interface
+  -- Ollama, llama.cpp, LM Studio, run locally for free ("If I really want
+  to have this free, I could always just start a local [Ollama] server and
+  connect this"). Settings: provider, key (none needed for a local server),
+  address (another server only), and the **model** -- a field, never in the
+  code (`CLAUDE.md`: no model names in code or documents).
+- **What it is sent:** instructions, the glossary, the whole German text
+  (cached at Anthropic between portions, so it is paid for once), and the
+  paragraphs of a portion as a list; it answers a list in a fixed format
+  (structured output). Each answer is checked: as many paragraphs as sent,
+  the same HTML tags; otherwise that portion goes to the next service.
+- **In the editor** a request has about 45 seconds: what is not done by then
+  goes to the next service. **Publishing** (in the background) waits
+  longer, and gives a paragraph a fallback made earlier -- in the editor, or
+  while the first service failed -- another try with the first service; if
+  it fails again, the earlier translation stays.
+- **The order** becomes a list reordered by dragging, top first, instead of
+  "Tried first" (`docs/design.md`, "An order").
+- Not built: a model's own fallback at Anthropic (refusals): the next service
+  in the order steps in instead.

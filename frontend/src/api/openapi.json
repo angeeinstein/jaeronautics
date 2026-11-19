@@ -19732,7 +19732,8 @@
             "items": {
               "enum": [
                 "deepl",
-                "azure"
+                "azure",
+                "llm"
               ],
               "type": "string"
             },
@@ -19750,11 +19751,47 @@
             "title": "Glossary",
             "type": "array"
           },
+          "llm_address": {
+            "default": "",
+            "maxLength": 255,
+            "title": "Llm Address",
+            "type": "string"
+          },
+          "llm_key": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Llm Key"
+          },
+          "llm_model": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Llm Model",
+            "type": "string"
+          },
+          "llm_provider": {
+            "default": "anthropic",
+            "enum": [
+              "anthropic",
+              "openai",
+              "other"
+            ],
+            "title": "Llm Provider",
+            "type": "string"
+          },
           "order": {
             "items": {
               "enum": [
                 "deepl",
-                "azure"
+                "azure",
+                "llm"
               ],
               "type": "string"
             },
@@ -19810,6 +19847,23 @@
             "title": "Glossary",
             "type": "array"
           },
+          "llm_address": {
+            "title": "Llm Address",
+            "type": "string"
+          },
+          "llm_model": {
+            "title": "Llm Model",
+            "type": "string"
+          },
+          "llm_provider": {
+            "enum": [
+              "anthropic",
+              "openai",
+              "other"
+            ],
+            "title": "Llm Provider",
+            "type": "string"
+          },
           "services": {
             "items": {
               "$ref": "#/components/schemas/TranslationServiceOut"
@@ -19821,6 +19875,9 @@
         "required": [
           "services",
           "azure_region",
+          "llm_provider",
+          "llm_model",
+          "llm_address",
           "glossary"
         ],
         "title": "TranslationOut",
@@ -19840,7 +19897,8 @@
           "name": {
             "enum": [
               "deepl",
-              "azure"
+              "azure",
+              "llm"
             ],
             "title": "Name",
             "type": "string"

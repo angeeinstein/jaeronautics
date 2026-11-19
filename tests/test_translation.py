@@ -22,9 +22,9 @@ class FakeServices:
         self.failing = set()
         self.glossaries = {}  # what DeepL holds: id -> name
 
-    def __call__(self, url, *, data=None, headers=None, method="POST"):
+    def __call__(self, url, *, data=None, headers=None, method="POST", timeout=None):
         self.calls.append((url, data, headers, method))
-        service = "deepl" if "deepl" in url else "azure"
+        service = "deepl" if "deepl" in url else "llm" if "chat/completions" in url else "azure"
         if service in self.failing:
             raise translation._ServiceError("the key is not accepted")
         if method == "DELETE":
@@ -38,7 +38,13 @@ class FakeServices:
             return {"glossary_id": made}
         if url.endswith("/v2/usage"):
             return {"character_count": 1234, "character_limit": 500000}
-        if service == "deepl" and data.get("glossary_id") and data["glossary_id"] not in self.glossaries:
+        if url.endswith("/chat/completions"):  # a language model with OpenAI's interface
+            if "llm" in self.failing:
+                raise translation._ServiceError("not reached")
+            asked = json.loads(data["messages"][1]["content"].split("\n", 1)[1])
+            return {"choices": [{"finish_reason": "stop", "message": {
+                "content": json.dumps({"translations": [f"[LLM] {text}" for text in asked]})}}]}
+        if service == "deepl" and isinstance(data, dict) and data.get("glossary_id") and data["glossary_id"] not in self.glossaries:
             raise translation._ServiceError("error 404 (Glossary not found)")
         if service == "deepl":
             return {"translations": [{"text": f"[DeepL] {text}"} for text in data["text"]]}
@@ -235,8 +241,8 @@ class TestTheSettingsPage:
         shown = client.get("/api/v1/admin/settings/translation").get_json()
 
         assert saved.status_code == 200 and "deepl_key" in saved.get_json()["changed"]
-        assert [s["name"] for s in shown["services"]] == ["azure", "deepl"]
-        assert [s["key_set"] for s in shown["services"]] == [False, True]
+        assert [s["name"] for s in shown["services"]] == ["azure", "deepl", "llm"]
+        assert [s["key_set"] for s in shown["services"]] == [False, True, False]
         assert "secret" not in str(shown) and shown["glossary"] == [["Verein", "association"]]
 
     def test_the_default_glossary_saved_whole(self, client, services):
@@ -491,3 +497,162 @@ class TestAzuresFreeTier:
         assert refused(429, {"Retry-After": "12"}) == 12
         assert refused(429, {}) == 60
         assert refused(500, {"Retry-After": "12"}) is None
+
+
+def _set_up_llm(provider="other", key="", model="a-model", address="http://localhost:11434/v1", order="llm,deepl,azure",
+                deepl="key:fx"):
+    _set_up(deepl=deepl, order=order)
+    for setting, value in ((translation.LLM_PROVIDER_KEY, provider), (translation.LLM_KEY, key),
+                           (translation.LLM_MODEL_KEY, model), (translation.LLM_ADDRESS_KEY, address)):
+        set_setting_value(setting, value)
+    db.session.commit()
+
+
+class TestALanguageModel:
+    """A language model as a third service (docs/legal-translation-plan.md): Anthropic, OpenAI,
+    or another server with OpenAI's interface -- a local Ollama, say."""
+
+    def test_another_server_asked_with_the_whole_text_and_the_glossary(self, services):
+        _set_up_llm()
+
+        english = translation.translate(["<p>Der Vorstand.</p>", "<h2>§ 3 Beschwerderecht</h2>"],
+                                        context="Statuten\n§ 3 Beschwerderecht")
+
+        assert english == ["[LLM] <p>Der Vorstand.</p>", "[LLM] <h2>§ 3 Beschwerderecht</h2>"]
+        [call] = [c for c in services.calls if c[0].endswith("/chat/completions")]
+        url, data, headers, _method = call
+        assert url == "http://localhost:11434/v1/chat/completions" and "Authorization" not in headers
+        assert data["model"] == "a-model" and data["response_format"]["type"] == "json_schema"
+        system = data["messages"][0]["content"]
+        assert "Vorstand -> board" in system and "§ 3 Beschwerderecht" in system and "gender-neutral" in system.lower()
+        assert db.session.query(Translation).filter_by(service="llm").count() == 2
+
+    def test_openai_at_its_own_address_with_the_key(self, services):
+        _set_up_llm(provider="openai", key="sk-test", address="")
+
+        translation.translate(["<p>Eins.</p>"])
+
+        [call] = [c for c in services.calls if c[0].endswith("/chat/completions")]
+        assert call[0] == "https://api.openai.com/v1/chat/completions"
+        assert call[2]["Authorization"] == "Bearer sk-test"
+
+    def test_set_up_only_with_a_model_and_a_key_or_an_address(self, app):
+        _set_up_llm(model="")
+        assert "llm" not in translation.configured()
+        _set_up_llm(provider="anthropic", key="")
+        assert "llm" not in translation.configured()
+        _set_up_llm(provider="anthropic", key="k")
+        assert translation.configured()[0] == "llm"
+        _set_up_llm(provider="other", key="", address="http://ollama.local:11434/v1")
+        assert translation.configured()[0] == "llm"  # a local server may need no key
+
+    @pytest.mark.parametrize("answer, why", [
+        (["one"], "wrong length"),
+        (["<p>Eins.</p>", "Two, its tags lost."], "HTML differs"),
+        (["<p>Eins.</p>", ""], "left empty"),
+    ])
+    def test_an_answer_that_does_not_fit_goes_to_the_next_service(self, services, monkeypatch, answer, why):
+        _set_up_llm()
+        monkeypatch.setattr(translation, "_ask_openai", lambda *_a: json.dumps({"translations": answer}))
+        report = {}
+
+        english = translation.translate(["<p>Eins.</p>", "<p>Zwei.</p>"], report=report)
+
+        assert english == ["[DeepL] <p>Eins.</p>", "[DeepL] <p>Zwei.</p>"]
+        assert why in report["failures"][0] and report["services"] == {"deepl"}
+
+    def test_in_a_pages_request_the_rest_to_the_next_service_when_time_runs_out(self, services, monkeypatch):
+        _set_up_llm()
+        now = {"t": 0.0}
+        monkeypatch.setattr(translation, "_clock", lambda: now["t"])
+        texts = [f"<p>{n} {'x' * 7_000}</p>" for n in range(3)]  # a portion each
+
+        def slow(current, instructions, whole, asked, timeout):
+            now["t"] += 30  # each answer takes half a minute
+            return json.dumps({"translations": [f"[LLM] {text}" for text in json.loads(asked.split("\n", 1)[1])]})
+
+        monkeypatch.setattr(translation, "_ask_openai", slow)
+
+        english = translation.translate(texts)
+
+        assert [text[:6] for text in english] == ["[LLM] ", "[LLM] ", "[DeepL"]
+
+    def test_publishing_gives_what_a_fallback_made_to_the_first_once_more(self, services):
+        _set_up_llm()
+        services.failing.add("llm")
+        translation.translate(["<p>Eins.</p>"])  # in the editor: the model away, DeepL stepped in
+        services.failing.clear()
+        report = {}
+
+        english = translation.translate(["<p>Eins.</p>"], patient=True, report=report)
+
+        assert english == ["[LLM] <p>Eins.</p>"] and report["services"] == {"llm"}
+        assert db.session.query(Translation).one().service == "llm"
+
+    def test_publishing_keeps_the_fallbacks_when_the_first_fails_again(self, services):
+        _set_up_llm()
+        services.failing.add("llm")
+        translation.translate(["<p>Eins.</p>"])
+        report = {}
+
+        english = translation.translate(["<p>Eins.</p>"], patient=True, report=report)
+
+        assert english == ["[DeepL] <p>Eins.</p>"] and report["services"] == {"deepl"}
+        assert report["failures"] and "Language model" in report["failures"][0]
+
+    def test_anthropic_asked_with_the_text_cached_and_a_fixed_answer(self, app, monkeypatch):
+        import anthropic
+
+        seen = {}
+
+        class Stream:
+            def __init__(self, **kwargs):
+                seen.update(kwargs)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def get_final_message(self):
+                from types import SimpleNamespace
+                texts = json.loads(seen["messages"][0]["content"].split("\n", 1)[1])
+                return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(
+                    type="text", text=json.dumps({"translations": [f"[A] {t}" for t in texts]}))])
+
+        class Client:
+            def __init__(self, **kwargs):
+                seen["client"] = kwargs
+                from types import SimpleNamespace
+                self.messages = SimpleNamespace(stream=lambda **kw: Stream(**kw))
+
+        monkeypatch.setattr(anthropic, "Anthropic", Client)
+        _set_up_llm(provider="anthropic", key="sk-ant-test", model="the-model")
+
+        english = translation.translate(["<p>Eins.</p>"], context="Statuten\nEins.")
+
+        assert english == ["[A] <p>Eins.</p>"]
+        assert seen["client"]["api_key"] == "sk-ant-test" and seen["model"] == "the-model"
+        assert seen["system"][1]["cache_control"] == {"type": "ephemeral"} and "Statuten" in seen["system"][1]["text"]
+        assert seen["output_config"]["format"]["type"] == "json_schema"
+
+    def test_saved_and_checked(self, client, services):
+        from api_helpers import send
+        from test_admin_reviews import _login, _staff
+
+        _login(client, _staff("boss@example.org", "superadmin").id)
+        body = {"order": ["llm", "deepl", "azure"], "deepl_key": "", "azure_key": "", "azure_region": "",
+                "glossary": [], "llm_provider": "other", "llm_key": "", "llm_model": "a model",
+                "llm_address": "http://localhost:11434/v1/"}
+
+        refused = send(client, "PUT", "/api/v1/admin/settings/translation", body)
+        body["llm_model"] = "a-model"
+        saved = send(client, "PUT", "/api/v1/admin/settings/translation", body)
+        shown = client.get("/api/v1/admin/settings/translation").get_json()
+
+        assert refused.status_code == 400 and saved.status_code == 200
+        assert [s["name"] for s in shown["services"]] == ["llm", "deepl", "azure"]
+        assert shown["llm_model"] == "a-model" and shown["llm_address"] == "http://localhost:11434/v1"
+        body["llm_address"] = "file:///etc/passwd"
+        assert send(client, "PUT", "/api/v1/admin/settings/translation", body).status_code == 400
