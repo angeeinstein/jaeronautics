@@ -72,6 +72,29 @@ the treasurers have the bank account, and the chairperson signs contracts.
    hide from anybody ... they can always ask how much money their
    association holds, and we are more or less obliged to tell them anyway".
 
+## How other platforms do it (researched 2026-11-19)
+
+- **The top role is unrestricted, not a template.** Microsoft Entra: Global
+  Administrators "essentially have unrestricted access". Google Workspace:
+  super admin sits above every custom role. AWS: the root user cannot be
+  restricted by policies. So super admin as full trust, above.
+- **Only the top role grants the top role.** Stripe: only a Super
+  Administrator assigns that role; its separate access-management role
+  cannot make anyone Administrator or Super Administrator. Google: a custom
+  admin role can never change an administrator's account.
+- **Few of them, but more than one.** Entra: fewer than five Global
+  Administrators, and two emergency accounts. Google: more than three super
+  admins can affect recovery. Proposed here: the *Access* page says so when
+  there is only one super admin (a lost password then locks the portal's
+  top role away -- today only the server's command line helps), and when
+  there are more than four.
+- **Not for everyday work, and with a second factor.** AWS: the root user
+  not for everyday tasks, MFA required. Google: the super admin apart from
+  daily admin work. The portal has no second factor yet -- an item of its
+  own (`docs/todo.md`), not part of this one.
+- Not taken over: just-in-time elevation (Entra PIM) -- for organisations of
+  thousands, not an association.
+
 ## The split
 
 Where today one permission covers seeing and changing, and the cases above
