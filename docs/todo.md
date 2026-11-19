@@ -41,6 +41,19 @@ good).
 
 ## Open
 
+### Permissions per person, roles as templates
+
+- **Added:** 2026-11-04 (an idea); agreed 2026-11-19.
+- **What:** a feature, its own branch (`claude/permissions`): roles stay as
+  generic templates, a person holds roles plus exceptions (permissions
+  added or taken away); every permission shown on a person's *Access* tab;
+  team permissions in the same catalogue, adjusted by a team's leads within
+  their team. Some permissions split into seeing and changing (team money,
+  credit, Stripe's book), perhaps a read-only *Auditor* role.
+- **Where:** `docs/permissions-plan.md` -- what was decided, the cases, the
+  proposed split.
+- **Open:** the split and the *Auditor* role, confirmed when building starts.
+
 ### Azure: spaces lost around the glossary's words
 
 - **Added:** 2026-11-19
@@ -301,36 +314,6 @@ good).
 ## Ideas for later (not scheduled)
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
-
-- **Permissions per person, roles as templates** -- 2026-11-04. The
-  maintainer's idea: many small permissions, a role only a group of them
-  (as Stripe does); on a person's access tab every permission listed,
-  grouped under the roles; ticking a role ticks its permissions, and any can
-  be unticked or added -- a normal user given one super admin permission,
-  say. The same for teams: team permissions part of the one catalogue, so a
-  lead may also hold some of the portal's admin permissions. To be
-  discussed after the legal texts editor ("we can discuss this a bit
-  later"). What was said so far:
-  - **Today:** every check already asks for a permission, never a role
-    (`permissions.py`: ~27 site-wide; `services/teams.py`, `TeamPermission`:
-    16 per team); roles are fixed bundles in code; a person holds whole roles
-    only, and the permissions are shown nowhere.
-  - **Suggested:** roles stay live -- a person holds roles plus exceptions
-    (permissions added, permissions taken away) -- rather than a role copied
-    into the person, so a permission added to a role later (as
-    `legal.publish` was) reaches everyone holding it.
-  - **Safeguards:** nobody grants what they do not hold; the lockout guard
-    stays; a permission ticks what it needs (`admin.access`); every change
-    logged; the forum follows the permissions.
-  - **Granularity:** split where somebody would decide separately, not per
-    button -- perhaps 50-60, not 200.
-  - **Teams:** one catalogue, two scopes -- a team permission granted in one
-    team or in every team (what `teams.money`/`teams.manage` do today); lead
-    and treasurer as presets with exceptions per person per team.
-  - **Open:** live roles with exceptions, agreed? Built-in roles fixed in
-    code, and own named roles ("Secretary") made in the portal later? May a
-    team's leads adjust permissions within their team (only what they
-    hold), or only site admins?
 
 - **The server log in the portal** -- 2026-10-16. The journal of the portal's
   services readable on a phone, for when SSH is not at hand ("if some issue
