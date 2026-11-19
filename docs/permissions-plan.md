@@ -91,6 +91,32 @@ the treasurers have the bank account, and the chairperson signs contracts.
    others, not a lead beyond their own. Otherwise an admin could change a
    super admin's address, reset the password and hold the account.
 
+## The page with levels (discussed 2026-11-19, not built yet)
+
+After trying the *Access* tab on the test server, the maintainer asked for a
+clearer naming scheme and for seeing and changing to look different. Agreed
+direction, a mock-up made to decide the rest:
+
+- **One row per thing, with levels** (as Stripe's restricted keys and
+  GitHub's tokens): "None · View · Manage" where seeing and changing are
+  apart, "None · Draft · Publish" for the legal texts, "None · <the one
+  verb>" where there is one ("None · Install" for updates). Every row the
+  same control, any number of steps ("couldn't we just build this with an
+  arbitrary amount of steps?"). A higher level includes the lower.
+- **Three names**, as Microsoft Graph and Stripe do: the technical one in
+  the code (`teams.money.view`), a short friendly one on the row ("Team
+  money"), and a line under it saying more where needed.
+- **Seeing and changing told apart quietly**: a level that only shows is
+  tinted, one that changes is filled; small icons only if they fit the
+  portal's style.
+- **A few marked *Sensitive*** (granting permissions, credentials,
+  updates, backups, export and erasure), as Entra marks privileged roles --
+  "just don't overdo this".
+- **Emails**: open -- the maintainer: "normally I would say emails don't tell
+  more than what the portal does". Then an email would follow the permission
+  that shows the same in the portal, and each person could switch it off,
+  instead of separate "receive" permissions.
+
 ## How other platforms do it (researched 2026-11-19)
 
 - **The top role is unrestricted, not a template.** Microsoft Entra: Global
