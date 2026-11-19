@@ -245,3 +245,28 @@ class TestTheSplit:
 
         assert client.get("/api/v1/admin/messages").status_code == 200
         assert "helper@example.org" not in messages.admin_recipients()
+
+
+class TestEmailsAndCountsFollowThePerson:
+    def test_admin_notifications_follow_exceptions(self, client):
+        from aeronautics_members.notification_service import NotificationService
+
+        boss = _user("boss@example.org", "superadmin")
+        helper = _user("helper@example.org")
+        admin = _user("admin@example.org", "admin")
+        _login(client, boss)
+        _set(client, helper, [], {Permission.NOTIFICATIONS_RECEIVE})
+        _set(client, admin, ["admin"], ROLE_PERMISSIONS["admin"] - {Permission.NOTIFICATIONS_RECEIVE})
+        for user in (boss, helper, admin):
+            user.email_verified_at = get_now_utc()
+        db.session.commit()
+
+        assert NotificationService().get_admin_recipient_emails() == ["boss@example.org", "helper@example.org"]
+
+    def test_who_can_install_an_update_counts_an_added_permission(self, client):
+        boss = _user("boss@example.org", "superadmin")
+        admin = _user("admin@example.org", "admin")
+        _login(client, boss)
+        _set(client, admin, ["admin"], ROLE_PERMISSIONS["admin"] | {Permission.SYSTEM_UPDATE})
+
+        assert app_module.count_users_with_permission(Permission.SYSTEM_UPDATE) == 2
