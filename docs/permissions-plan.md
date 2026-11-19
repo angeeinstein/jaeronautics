@@ -67,6 +67,17 @@ the treasurers have the bank account, and the chairperson signs contracts.
    an admin, or holds single permissions, with exceptions. Only a super admin
    makes somebody one; the last cannot go (`PROTECTED_PERMISSIONS`). "Nobody
    grants what they do not hold" needs no exception then.
+7. **Granting is a permission of its own, *Grant permissions*, in the admin
+   role** (2026-11-19, option B; Stripe's access-management role works so).
+   Whoever holds it grants site-wide permissions and roles within what they
+   hold themselves -- never super admin, which only a super admin grants;
+   so not the credentials, updates or backups either. Every change logged.
+   The maintainer's picture: "I, as the IT administrator of the association,
+   am basically the only super admin. Maybe there is a backup account
+   somewhere, but the main point of the super admin is just having one
+   person who manages the server and the technical stuff, and then all of
+   the other administrative things like adding users, granting permissions,
+   the day-to-day work basically is handled by the actual board members."
 6. **The split below and the *Auditor* role: agreed** (2026-11-19). Seeing
    is cheap to give, changing stays narrow: "there is not much that I would
    hide from anybody ... they can always ask how much money their

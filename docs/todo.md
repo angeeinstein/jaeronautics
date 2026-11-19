@@ -54,7 +54,8 @@ good).
   proposed split.
 - **Agreed (2026-11-19):** the split and the *Auditor* role; super admin as
   full trust (holds everything, takes no exceptions); no warning about how
-  many super admins there are.
+  many super admins there are; *Grant permissions* a permission of its own,
+  in the admin role, granting within what one holds, never super admin.
 
 ### Azure: spaces lost around the glossary's words
 
