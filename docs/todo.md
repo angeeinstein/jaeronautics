@@ -36,6 +36,27 @@ update's warning of local changes only for the portal's own files).
 
 ## Open
 
+### Which translation service made the English -- and why the first did not
+
+- **Added:** 2026-11-19
+- **What:** the editor's *English* tab, and a published version's English on
+  Admin › Legal texts, say which service translated it (DeepL, Azure, or
+  both, by paragraph), and when the first service in the order failed, why
+  (its message, as the server's log has it: `Translating with … failed: …`).
+- **Why:** twice it was guessed wrong which service had translated: the
+  maintainer took DeepL's English for Azure's. On the live server Azure,
+  tried first, was refused with "too many requests" (its free tier throttles
+  a whole text at once) and DeepL stepped in silently; the log and the
+  `translations` table (`service`, all 488 rows `deepl`) showed it.
+- **Where:** `services/translation.py` (the service is kept per translation
+  in `translations.service`; the failure only goes to the log),
+  `services/legal_translation.py`, `api/legal_editor.py` (`EnglishOut`),
+  `api/admin_legal.py`, `frontend/src/pages/legal/Editor.tsx`
+  (`EnglishView`), `frontend/src/pages/admin/LegalTexts.tsx`.
+- **Open question:** whether a failure is kept somewhere (the last one per
+  service, say, on Settings › Translation) or only shown with the
+  translation it concerns.
+
 ### Installer: a remembered branch that is gone
 
 - **Added:** 2026-11-18
