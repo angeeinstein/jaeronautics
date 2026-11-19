@@ -73,12 +73,12 @@ def _heading(title):
     return f"<h1>{html.escape(title, quote=False)}</h1>"
 
 
-def translate_version(german, *, patient=False, report=None):
-    """``(title, html)``: a German Version's title and page in English. ``patient`` and ``report``
-    as for ``translation.translate``."""
+def translate_version(german, *, patient=False, report=None, only_kept=False):
+    """``(title, html)``: a German Version's title and page in English. ``patient``, ``report`` and
+    ``only_kept`` as for ``translation.translate``."""
     blocks, numbers, context = _plan(german)
     title, *english = translation.translate([_heading(german.title), *blocks], context=context,
-                                            patient=patient, report=report)
+                                            patient=patient, report=report, only_kept=only_kept)
     title = " ".join(html.unescape(re.sub(r"<[^>]+>", "", title)).split())
     return title, "".join(_numbered(text, number) for text, number in zip(english, numbers))
 

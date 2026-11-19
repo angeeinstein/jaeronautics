@@ -25,6 +25,7 @@ import {
   Alert,
   Button,
   Group,
+  Loader,
   List,
   Menu,
   Modal,
@@ -86,6 +87,7 @@ import { Publish } from '../admin/LegalTexts';
 import classes from './Editor.module.css';
 
 type EditorOut = Schemas['EditorOut'];
+type EnglishOut = Schemas['EnglishOut'];
 interface Part {
   title: string;
   revision: string | null;
@@ -100,6 +102,8 @@ const SAVE_AFTER_MS = 2000;
 const CHECK_AFTER_MS = 500;
 /** The English view asks the translator once typing has stopped this long. */
 const TRANSLATE_AFTER_MS = 3000;
+/** While the English is made in the background, the page asks again this often. */
+const ASK_AGAIN_MS = 2000;
 /** The holder's sign of life, and the others asking whether it is free. */
 const LOCK_EVERY_MS = 30_000;
 
@@ -854,8 +858,10 @@ function Preview({ recordId, part }: { recordId: number; part: Part }) {
 }
 
 /**
- * The English members will read: the German as written, translated by machine a few seconds after
- * typing stops -- paragraph by paragraph, each kept, so only what changed goes to the translator.
+ * The English members will read: the German as written, translated by machine in the background a
+ * few seconds after typing stops -- paragraph by paragraph, each kept, so only what changed goes to
+ * the translator. While it is made, the page asks again every two seconds and shows the English it
+ * had before.
  */
 function EnglishView({ recordId, part }: { recordId: number; part: Part }) {
   const [written] = useDebouncedValue(part, TRANSLATE_AFTER_MS);
@@ -873,7 +879,16 @@ function EnglishView({ recordId, part }: { recordId: number; part: Part }) {
     queryFn: () => ask(false),
     placeholderData: keepPreviousData,
     staleTime: Infinity,
+    refetchInterval: (query) => (query.state.data?.state === 'making' ? ASK_AGAIN_MS : false),
   });
+  // The last English that was there, of an earlier text as written: shown while the next is made.
+  const before =
+    queryClient
+      .getQueryCache()
+      .findAll({ queryKey: ['legal', 'editor', recordId, 'english'] })
+      .filter((query) => (query.state.data as EnglishOut | undefined)?.state === 'ready')
+      .sort((one, other) => other.state.dataUpdatedAt - one.state.dataUpdatedAt)
+      .map((query) => query.state.data as EnglishOut)[0] ?? null;
   // Made anew, nothing kept used: after the order of the services or the glossary changed.
   const again = useMutation({
     mutationFn: () => ask(true),
@@ -899,37 +914,47 @@ function EnglishView({ recordId, part }: { recordId: number; part: Part }) {
   if (translated.isError) {
     return <ErrorState error={translated.error} onRetry={() => void translated.refetch()} />;
   }
-  if (translated.data.unavailable) {
-    return (
-      <Stack gap="sm">
-        <Alert color="yellow" variant="light" title="No English just now">
-          {translated.data.unavailable.replace(/\.?$/, '.')} Publishing does not wait for it: the English is
-          made once a service answers.
-        </Alert>
-        {againButton}
-      </Stack>
-    );
-  }
+  const shown = translated.data.state === 'ready' ? translated.data : before;
   return (
     <Stack gap="md">
-      <Text size="sm" c="dimmed">
-        Made by machine{translated.data.translated_by ? ` (${translated.data.translated_by})` : ''} from the
-        German, as members will read it once it is published. It is not edited by hand: terms are kept right
-        by the glossary (Settings › Translation).
-        {translated.data.translation_note
-          ? ` Not all by the first service: ${translated.data.translation_note}`
-          : ''}
-      </Text>
+      {translated.data.state === 'unavailable' ? (
+        <Alert color="yellow" variant="light" title="No English just now">
+          {(translated.data.problem ?? 'No service translated it').replace(/\.?$/, '.')} Publishing does not
+          wait for it: the English is made once a service answers.
+        </Alert>
+      ) : null}
+      {translated.data.state === 'making' ? (
+        <Group gap="xs" wrap="nowrap" role="status">
+          <Loader size="xs" />
+          <Text size="sm" c="dimmed">
+            {translated.data.problem
+              ? `Being translated; the last try failed (${translated.data.problem}) and it is tried again.`
+              : 'Being translated in the background…'}
+          </Text>
+        </Group>
+      ) : null}
+      {shown ? (
+        <Text size="sm" c="dimmed">
+          Made by machine{shown.translated_by ? ` (${shown.translated_by})` : ''} from the German, as members
+          will read it once it is published. It is not edited by hand: terms are kept right by the glossary
+          (Settings › Translation).
+          {shown.translation_note ? ` Not all by the first service: ${shown.translation_note}` : ''}
+        </Text>
+      ) : null}
       {againButton}
-      <h2 className={classes.previewTitle} lang="en">
-        {translated.data.title}
-      </h2>
-      <div
-        className={textClasses.text}
-        lang="en"
-        // The translator's HTML, cleaned on the server to the tags the German page has.
-        dangerouslySetInnerHTML={{ __html: translated.data.html }}
-      />
+      {shown ? (
+        <div className={translated.data.state === 'ready' ? undefined : classes.outdated}>
+          <h2 className={classes.previewTitle} lang="en">
+            {shown.title}
+          </h2>
+          <div
+            className={textClasses.text}
+            lang="en"
+            // The translator's HTML, cleaned on the server to the tags the German page has.
+            dangerouslySetInnerHTML={{ __html: shown.html ?? '' }}
+          />
+        </div>
+      ) : null}
     </Stack>
   );
 }

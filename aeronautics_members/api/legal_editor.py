@@ -265,12 +265,16 @@ class ContentOut(Model):
 
 
 class EnglishOut(Model):
-    """The German as written, in English by machine -- as members will read it once published."""
+    """The German as written, in English by machine -- as members will read it once published.
+    Made in the background: the page asks again while ``state`` is "making"."""
 
-    title: str
-    html: str
-    #: Why there is none, when no translation service translated it.
-    unavailable: str | None = None
+    #: "ready": ``title`` and ``html`` are it; "making": being translated in the background;
+    #: "unavailable": no service is set up, or the translation gave up on this text (``problem``).
+    state: Literal["ready", "making", "unavailable"]
+    title: str = ""
+    html: str = ""
+    #: Why it is not there: while making, the last try's failure (it is tried again).
+    problem: str | None = None
     #: Which services translated it: "DeepL", "DeepL and Azure AI Translator".
     translated_by: str | None = None
     #: Why the first service in the order did not translate it all (its own message).
@@ -284,23 +288,13 @@ class EnglishIn(CheckIn):
 
 @endpoint("POST", "/legal/drafts/<int:record_id>/english", response=EnglishOut, body=EnglishIn, tag=TAG)
 def legal_draft_english(record_id, body):
-    """The editor's *English* view: the German as written, translated paragraph by paragraph --
-    each kept, so only what changed is sent to the translator."""
-    from ..services.translation import TranslationUnavailable
-
-    from ..services import legal_translation
-
+    """The editor's *English* view: the German as written, translated paragraph by paragraph in the
+    background -- each kept, so only what changed is sent to the translator."""
     record = editor.editable(current_user, record_id)
-    report = {}
-    try:
-        title, html = editor.english(record, body.model_dump(exclude={"again"}), report, again=body.again)
-    except TranslationUnavailable as exc:
-        db.session.rollback()
-        return EnglishOut(title="", html="", unavailable=str(exc))
+    made = editor.english(record, body.model_dump(exclude={"again"}), again=body.again)
     db.session.commit()
-    by, note = legal_translation.made_by(report)
-    return EnglishOut(title=title, html=html, translated_by=legal_translation.names((by or "").split(",")),
-                      translation_note=note)
+    return EnglishOut(state=made["state"], title=made.get("title", ""), html=made.get("html", ""),
+                      problem=made.get("problem"), translated_by=made.get("by"), translation_note=made.get("note"))
 
 
 @endpoint("GET", "/legal/drafts/<int:record_id>/snapshots/<int:snapshot_id>", response=ContentOut, tag=TAG)

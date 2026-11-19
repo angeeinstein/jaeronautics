@@ -29,16 +29,18 @@ also one an admin started. Publishing and correcting need
 import json
 import re
 import tempfile
+from contextlib import contextmanager
 from datetime import timedelta
 
 from .. import legal_pdf
-from ..db_models import LegalTextSnapshot, LegalTextVersion, db
+from ..db_models import ExternalWorkItem, LegalTextSnapshot, LegalTextVersion, db
 from ..permissions import Permission
 from . import ConflictError, NotFoundError, PermissionError_, ValidationError
 from . import legal_texts as legal
-from . import legal_translation, legal_uploads
+from . import legal_translation, legal_uploads, translation
 from .audit import log_audit_event
 from .clock import get_membership_today, get_now_utc
+from .outbox import enqueue, register_handler
 
 #: The editor gives a sign of life every 30 seconds: two missed, and the draft is free.
 LOCK_GONE_AFTER = timedelta(seconds=75)
@@ -388,27 +390,81 @@ def markdown_file(german):
     return as_file(record, legal.AUTHORITATIVE, content(record)["german"]), name
 
 
-def english(record, part, report=None, again=False):
-    """The editor's *English* view: the German as written, translated by machine, ``(title, html)`` --
-    each block of it kept, so typing sends only what changed. ``("", "")`` while the text cannot be
-    laid out; TranslationUnavailable when no service translates it. ``report``: as for
-    ``translation.translate``. ``again``: nothing kept is used -- *Translate again*, after the
-    order of the services or the glossary changed."""
+@contextmanager
+def _as_version(record, part):
+    """The German as written, laid out as a version is (``None`` while it cannot be)."""
     part = _clean(part, "german")
     with tempfile.TemporaryDirectory() as folder:
         path, slug, _language, team, _found = legal_pdf._uploaded(
             folder, as_file(record, legal.AUTHORITATIVE, part), "draft.md", "German")
         if path is None:
-            return "", ""
+            yield None
+            return
         try:
             version, _problems = legal._check(path, slug, legal.AUTHORITATIVE, team)
-            if version is None:
-                return "", ""
-            if again:
-                legal_translation.forget_kept(version)
-            return legal_translation.translate_version(version, report=report)
+            yield version
         finally:
             legal.forget([path])
+
+
+def _draft_english_key(record):
+    return f"legal-draft-english-{record.id}"
+
+
+def english(record, part, again=False):
+    """The editor's *English* view: the German as written, translated by machine, each block kept,
+    so typing sends only what changed (docs/legal-translation-plan.md, "In the background").
+
+    A dict: ``state`` "ready" with ``title``, ``html``, ``by`` (the services) and ``note`` (why the
+    first did not translate all); "making" while the background job translates what is not kept
+    yet -- ``problem`` when its last try failed --; "unavailable" with ``problem`` when no service is
+    set up, or the job gave up on this text. ``again``: nothing kept is used (*Translate again*)."""
+    part = _clean(part, "german")
+    if not translation.configured():
+        return {"state": "unavailable", "problem": "No translation service is set up (Settings › Translation)."}
+    report = {}
+    with _as_version(record, part) as version:
+        if version is None:
+            return {"state": "ready", "title": "", "html": ""}
+        if again:
+            legal_translation.forget_kept(version)
+        title, page = legal_translation.translate_version(version, report=report, only_kept=True)
+    if not report.get("missing"):
+        by, _note = legal_translation.made_by(report)
+        return {"state": "ready", "title": title, "html": page,
+                "by": legal_translation.names((by or "").split(",")), "note": record.translation_note}
+    payload = {"record": record.id, "part": part}
+    waiting = db.session.execute(db.select(ExternalWorkItem).filter_by(
+        dedupe_key=_draft_english_key(record))).scalar_one_or_none()
+    if waiting is not None and waiting.payload == payload and not again:
+        # Already being made, of this very text: the page only asks how it goes.
+        if waiting.status == ExternalWorkItem.STATUS_FAILED:
+            return {"state": "unavailable", "problem": waiting.last_error}
+        return {"state": "making", "problem": waiting.last_error if waiting.attempts else None}
+    item = enqueue(ExternalWorkItem.KIND_LEGAL_DRAFT_ENGLISH, payload=payload,
+                   dedupe_key=_draft_english_key(record), reason="the editor's English")
+    item.payload = payload  # the text as written now, when a job for an earlier one was waiting
+    return {"state": "making", "problem": None}
+
+
+def _translate_draft(item):
+    """The background job: a draft's text as written, translated and kept -- the editor's next look
+    finds it all. Patient (services/translation.py): a service asking to wait is waited for, a
+    language model may take its time. What the first service did not manage, and why, is kept on
+    the draft for the editor's note."""
+    payload = item.payload or {}
+    record = db.session.get(LegalTextVersion, payload.get("record"))
+    if record is None or record.translation_of_id is not None:
+        return  # deleted meanwhile
+    report = {}
+    with _as_version(record, payload.get("part") or {}) as version:
+        if version is None:
+            return
+        legal_translation.translate_version(version, patient=True, report=report)
+    record.translation_note = legal_translation.made_by(report)[1]
+
+
+register_handler(ExternalWorkItem.KIND_LEGAL_DRAFT_ENGLISH, _translate_draft)
 
 
 _ROLE = re.compile(r"^(German|English): ")

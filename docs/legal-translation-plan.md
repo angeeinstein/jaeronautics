@@ -174,15 +174,26 @@ cents a text.
   paragraphs of a portion as a list; it answers a list in a fixed format
   (structured output). Each answer is checked: as many paragraphs as sent,
   the same HTML tags; otherwise that portion goes to the next service.
-- **In the editor** a request has about 45 seconds: what is not done by then
-  goes to the next service. A language model's portions are sent **all at
-  once** and the title goes with the text, as a heading (tried on the TDT
-  rules, 2026-11-19: one portion after another, the model managed § 1 to
-  § 13 in the time, Azure the rest and the title -- "team rules Team Drone
-  Tech"). **Publishing** (in the background) waits
-  longer, and gives a paragraph a fallback made earlier -- in the editor, or
-  while the first service failed -- another try with the first service; if
-  it fails again, the earlier translation stays.
+- **In the background, also in the editor** (decided 2026-11-19: "having
+  this as a background job seems like the way it should be"). The editor's
+  *English* asks; what is kept already comes back at once, the rest is
+  translated by an outbox job (`legal_draft_english`, one per draft, its
+  text replaced when the writing goes on) while the page asks again every
+  two seconds and shows the English it had before, faded. A try that failed
+  is said and retried with the outbox's backoff. So no request waits on a
+  translator, and a slow local model has all the time it needs. First built
+  with a limit of 45 seconds in the page's request -- not a limit of the
+  server's: gunicorn's `--timeout` does not end a request on one of its
+  threads; Cloudflare gives up after 100 seconds, nginx after 120. *Try it*
+  keeps that limit.
+- A language model's portions are sent **all at once** and the title goes
+  with the text, as a heading (tried on the TDT rules, 2026-11-19: one
+  portion after another, the model managed § 1 to § 13 within the editor's
+  45 seconds, Azure the rest and the title -- "team rules Team Drone Tech").
+- **In the background** a service that asks to wait is waited for, and a
+  paragraph a fallback made earlier -- while the first service failed --
+  gets another try with the first service; if it fails again, the earlier
+  translation stays.
 - **The order** becomes a list reordered by dragging, top first, instead of
   "Tried first" (`docs/design.md`, "An order").
 - **Translate again in the editor** (asked for while testing, 2026-11-19: "a

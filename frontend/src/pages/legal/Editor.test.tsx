@@ -165,7 +165,7 @@ describe('the editor', () => {
   it('the English, made by machine from the German as written', async () => {
     const { calls } = show({
       [`POST ${API}/english`]: {
-        body: { title: 'Statutes', html: '<p>The association is called.</p>', unavailable: null },
+        body: { state: 'ready', title: 'Statutes', html: '<p>The association is called.</p>' },
       },
     });
 
@@ -185,13 +185,35 @@ describe('the editor', () => {
     });
   });
 
+  it('made in the background: asked again until it is there', async () => {
+    let asked = 0;
+    show({
+      [`POST ${API}/english`]: {
+        get body() {
+          asked += 1; // read twice per request (mockFetch): the first request is making
+          return asked <= 2
+            ? { state: 'making', problem: null }
+            : { state: 'ready', title: 'Statutes', html: '<p>Made in the background.</p>' };
+        },
+      },
+    });
+
+    await screen.findByRole('textbox', { name: 'Title' });
+    await userEvent.click(screen.getByRole('radio', { name: 'English' }));
+
+    expect(
+      await screen.findByText('Being translated in the background…', {}, { timeout: 5000 }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText('Made in the background.', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.queryByText('Being translated in the background…')).not.toBeInTheDocument();
+  }, 15_000); // the editor waits three seconds after typing, then asks every two
+
   it('says so when no translation service answers', async () => {
     show({
       [`POST ${API}/english`]: {
         body: {
-          title: '',
-          html: '',
-          unavailable: 'No translation service is set up (Settings › Translation).',
+          state: 'unavailable',
+          problem: 'No translation service is set up (Settings › Translation).',
         },
       },
     });

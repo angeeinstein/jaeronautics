@@ -7339,13 +7339,36 @@
       },
       "EnglishOut": {
         "additionalProperties": false,
-        "description": "The German as written, in English by machine -- as members will read it once published.",
+        "description": "The German as written, in English by machine -- as members will read it once published.\nMade in the background: the page asks again while ``state`` is \"making\".",
         "properties": {
           "html": {
+            "default": "",
             "title": "Html",
             "type": "string"
           },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Problem"
+          },
+          "state": {
+            "enum": [
+              "ready",
+              "making",
+              "unavailable"
+            ],
+            "title": "State",
+            "type": "string"
+          },
           "title": {
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -7372,23 +7395,10 @@
             ],
             "default": null,
             "title": "Translation Note"
-          },
-          "unavailable": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Unavailable"
           }
         },
         "required": [
-          "title",
-          "html"
+          "state"
         ],
         "title": "EnglishOut",
         "type": "object"
@@ -34355,7 +34365,7 @@
             "description": "Not possible in the current state."
           }
         },
-        "summary": "The editor's *English* view: the German as written, translated paragraph by paragraph --",
+        "summary": "The editor's *English* view: the German as written, translated paragraph by paragraph in the",
         "tags": [
           "Legal"
         ]

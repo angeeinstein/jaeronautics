@@ -521,9 +521,9 @@ of a word; a few cents a text):
   address (Ollama listens on all addresses only with
   `OLLAMA_HOST=0.0.0.0`; keep that port off the internet) -- and no key.
   llama.cpp's server and LM Studio work the same way, with their address.
-  A local model is slower: publishing waits up to five minutes a portion; in
-  the editor whatever takes longer than about 45 seconds is translated by
-  the next service, and given to the model again when publishing.
+  A local model is slower: a portion may take up to five minutes. Both the
+  editor's English and a published version's are made in the background,
+  so nothing waits on it but the English itself.
 
 **DeepL API** (better legal English; British English):
 

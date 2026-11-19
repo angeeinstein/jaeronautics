@@ -743,6 +743,8 @@ class ExternalWorkItem(db.Model):
     KIND_STRIPE_BOOKS = "stripe_books"
     # A published legal text's English, made by machine (services/legal_translation.py).
     KIND_LEGAL_TRANSLATE = "legal_translate"
+    # A draft's English in the editor, made in the background (services/legal_editor.py).
+    KIND_LEGAL_DRAFT_ENGLISH = "legal_draft_english"
 
     STATUS_PENDING = "pending"
     STATUS_PROCESSING = "processing"

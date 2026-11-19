@@ -2886,7 +2886,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** The editor's *English* view: the German as written, translated paragraph by paragraph -- */
+        /** The editor's *English* view: the German as written, translated paragraph by paragraph in the */
         post: operations["legal_draft_english"];
         delete?: never;
         options?: never;
@@ -6569,12 +6569,29 @@ export interface components {
         /**
          * EnglishOut
          * @description The German as written, in English by machine -- as members will read it once published.
+         *     Made in the background: the page asks again while ``state`` is "making".
          */
         EnglishOut: {
-            /** Html */
-            html: string;
-            /** Title */
-            title: string;
+            /**
+             * Html
+             * @default
+             */
+            html?: string;
+            /**
+             * Problem
+             * @default null
+             */
+            problem?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "ready" | "making" | "unavailable";
+            /**
+             * Title
+             * @default
+             */
+            title?: string;
             /**
              * Translated By
              * @default null
@@ -6585,11 +6602,6 @@ export interface components {
              * @default null
              */
             translation_note?: string | null;
-            /**
-             * Unavailable
-             * @default null
-             */
-            unavailable?: string | null;
         };
         /** EraseIn */
         EraseIn: {

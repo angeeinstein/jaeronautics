@@ -339,7 +339,7 @@ class TestTheWholeTextAsContext:
             "i) fair zu sein;\nii) zu helfen.")
         assert blocks["custom_instructions"] == translation.INSTRUCTIONS and blocks["model_type"] == translation.MODEL
         assert english == "".join(self.BLOCKS)
-        assert report == {"services": {"deepl"}, "failures": []}
+        assert report == {"services": {"deepl"}, "failures": [], "missing": 0}
 
     def test_another_paragraph_changed_only_that_one_sent(self, services, monkeypatch):
         # Kept by its own text, not its context: a change elsewhere costs only what changed.
@@ -452,7 +452,7 @@ class TestAzuresFreeTier:
         report = {}
 
         assert translation.translate(["<p>Hallo.</p>"], patient=True, report=report) == ["[Azure] <p>Hallo.</p>"]
-        assert clock["slept"] == [30, 30] and report == {"services": {"azure"}, "failures": []}
+        assert clock["slept"] == [30, 30] and report == {"services": {"azure"}, "failures": [], "missing": 0}
 
     def test_in_a_pages_request_the_next_service_at_once_and_why_kept(self, services, clock, monkeypatch):
         _set_up(azure="azure-key", order="azure,deepl")
@@ -467,7 +467,8 @@ class TestAzuresFreeTier:
 
         assert translation.translate(["<p>Hallo.</p>"], report=report) == ["[DeepL] <p>Hallo.</p>"]
         assert clock["slept"] == []
-        assert report == {"services": {"deepl"}, "failures": ["Azure AI Translator: too many requests just now"]}
+        assert report == {"services": {"deepl"}, "failures": ["Azure AI Translator: too many requests just now"],
+                          "missing": 0}
 
     def test_what_azure_managed_kept_the_rest_by_the_next(self, services, clock, monkeypatch):
         _set_up(azure="azure-key", order="azure,deepl")

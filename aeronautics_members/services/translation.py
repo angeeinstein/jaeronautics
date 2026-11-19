@@ -96,8 +96,10 @@ AZURE_BATCH_CHARACTERS = 10_000
 AZURE_PER_MINUTE = 30_000
 #: How long, in all, a translation in the background waits for a service that asks to wait.
 WAIT_MAX_SECONDS = 240
-#: How long translating may take in a page's request (the editor's English); the rest goes to the
-#: next service.
+#: How long translating may take in a page's request (*Try it*; the editor's English is made in the
+#: background); the rest goes to the next service. Not a limit of the server's: gunicorn's
+#: --timeout does not end a request on one of its threads; Cloudflare gives up after 100 seconds,
+#: nginx after 120 -- but a person waits, and a server thread is held, all that time.
 REQUEST_SECONDS = 45
 #: A language model: characters of German per request -- its answer, as long, must come back in
 #: one piece -- and how long one request may take when publishing (a local model is slow).
@@ -256,7 +258,7 @@ def _key(text, as_html, glossary):
     return hashlib.sha256(f"2|{TARGET}|{int(as_html)}|{_fingerprint(glossary)}|{text}".encode()).hexdigest()
 
 
-def translate(texts, *, as_html=True, context="", patient=False, report=None):
+def translate(texts, *, as_html=True, context="", patient=False, report=None, only_kept=False):
     """``texts`` in English, in their order: what was translated before from the store, the rest by
     the first service that manages it, portion by portion. TranslationUnavailable when none does.
 
@@ -264,7 +266,9 @@ def translate(texts, *, as_html=True, context="", patient=False, report=None):
     counted. ``patient``: in the background (publishing), so a service that asks to wait is
     waited for, a few minutes in all; in a page's request it goes to the next service at once.
     ``report``, a dict, gets ``services`` (a set: who translated these texts, now or before) and
-    ``failures`` ("DeepL: …" of a service that failed while another stepped in)."""
+    ``failures`` ("DeepL: …" of a service that failed while another stepped in) and ``missing`` (how
+    many texts are not translated yet). ``only_kept``: no service is asked -- what is not kept yet
+    stays German, and ``missing`` counts it."""
     current = settings()
     keys = [_key(text, as_html, current["glossary"]) for text in texts]
     rows = {row.source_hash: row for row in db.session.execute(
@@ -272,11 +276,11 @@ def translate(texts, *, as_html=True, context="", patient=False, report=None):
     known = {key: row.target for key, row in rows.items()}
     missing = list(dict.fromkeys(text for text, key in zip(texts, keys) if key not in known and text.strip()))
     failures = []
-    if missing:
+    if missing and not only_kept:
         made, failures = _by_a_service(missing, as_html, current, context=context, patient=patient)
         _keep(missing, made, as_html, current, rows)
     first = (configured(current) or [None])[0]
-    if patient and first:
+    if patient and first and not only_kept:
         # Publishing: a paragraph a later service made -- in the editor, against the clock, or
         # while the first one failed -- is given to the first once more. Failing again, it stays.
         again = list(dict.fromkeys(text for text, key in zip(texts, keys)
@@ -293,6 +297,8 @@ def translate(texts, *, as_html=True, context="", patient=False, report=None):
         report.setdefault("services", set()).update(
             rows[key].service for key in keys if key in rows and rows[key].service)
         report.setdefault("failures", []).extend(failures)
+        report["missing"] = report.get("missing", 0) + len(
+            {key for text, key in zip(texts, keys) if text.strip() and key not in rows})
     return [known.get(key, text) for text, key in zip(texts, keys)]
 
 
@@ -347,8 +353,8 @@ class _Patience:
     def __init__(self, patient):
         self.left = WAIT_MAX_SECONDS if patient else 0
         self.sent = deque()  # (when, characters)
-        #: In a page's request: by when the answers must be there -- for all of its translating
-        #: together, the text and its title (gunicorn gives a request 60 seconds).
+        #: In a page's request: by when the answers must be there, for all of its translating
+        #: together (REQUEST_SECONDS).
         self.until = None
         if not patient:
             self.until = _clock() + REQUEST_SECONDS
