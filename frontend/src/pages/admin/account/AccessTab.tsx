@@ -8,8 +8,7 @@
  * tick what is the server's (services/access.py): only what one holds
  * oneself, for somebody who holds no more.
  */
-import { Alert, Checkbox, Group, List, SimpleGrid, Stack, Text, UnstyledButton } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { Alert, Checkbox, Group, SimpleGrid, Stack, Text } from '@mantine/core';
 import { useState } from 'react';
 import { IconShield } from '@tabler/icons-react';
 
@@ -20,31 +19,11 @@ import { Pill } from '../../../components/Pill';
 import { notifyDone, notifyNote } from '../../../lib/notify';
 import { type Account, path, useAccountAction } from './shared';
 import { groupByArea, untick, withNeeds, withoutUnmet } from '../../../lib/permissionSets';
-import classes from './Account.module.css';
 
 type Access = NonNullable<Account['access']>;
 type Role = Access['options'][number];
 
 const SUPERADMIN = 'superadmin';
-
-/** A list kept folded until asked for: a dozen lines above the controls bury the controls. */
-function Folded({ label, items }: { label: string; items: string[] }) {
-  const [open, { toggle }] = useDisclosure(false);
-  return (
-    <div>
-      <UnstyledButton className={classes.fold} onClick={toggle} aria-expanded={open}>
-        {open ? '▾' : '▸'} {label}
-      </UnstyledButton>
-      {open ? (
-        <List size="sm" c="dimmed" mt={4} withPadding>
-          {items.map((item) => (
-            <List.Item key={item}>{item}</List.Item>
-          ))}
-        </List>
-      ) : null}
-    </div>
-  );
-}
 
 function sameSet(a: Iterable<string>, b: Iterable<string>) {
   const left = new Set(a);
@@ -115,7 +94,8 @@ function Editor({ account, access }: { account: Account; access: Access }) {
       <Stack gap="xs">
         <Text fw={600}>Roles</Text>
         <Text size="sm" c="dimmed">
-          A role ticks its permissions; each can then be unticked, or another added.
+          Several can be ticked; the account holds them all. A role ticks its permissions below; each can then
+          be unticked, or another added.
         </Text>
         <Stack gap="md" mt={4}>
           {access.options.map((option) => (
@@ -136,9 +116,6 @@ function Editor({ account, access }: { account: Account; access: Access }) {
                 }
                 description={option.description}
               />
-              <div className={classes.indent}>
-                <Folded label="What this role can do" items={option.permissions} />
-              </div>
             </Stack>
           ))}
         </Stack>

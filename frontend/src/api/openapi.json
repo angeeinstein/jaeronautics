@@ -12,13 +12,6 @@
             "title": "Disable Blockers",
             "type": "array"
           },
-          "effective_permissions": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Effective Permissions",
-            "type": "array"
-          },
           "options": {
             "items": {
               "$ref": "#/components/schemas/RoleOption"
@@ -64,7 +57,6 @@
           "options",
           "permissions",
           "superadmin",
-          "effective_permissions",
           "roles_locked",
           "removal_warning",
           "disable_blockers"
@@ -15746,13 +15738,6 @@
             "title": "Permission Names",
             "type": "array"
           },
-          "permissions": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Permissions",
-            "type": "array"
-          },
           "slug": {
             "title": "Slug",
             "type": "string"
@@ -15764,7 +15749,6 @@
           "description",
           "held",
           "covered_by",
-          "permissions",
           "permission_names",
           "may_change"
         ],

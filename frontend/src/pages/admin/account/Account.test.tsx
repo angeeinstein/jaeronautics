@@ -218,15 +218,10 @@ describe('access', () => {
     expect(cards).toBeDisabled();
   });
 
-  it('keep what a role can do folded until asked', async () => {
-    show(account(), { hash: '#access' });
+  it('several roles can be held together', async () => {
+    show(account({ access: memberAccess() }), { hash: '#access' });
 
-    const [role] = await screen.findAllByRole('button', { name: /What this role can do/ });
-    expect(screen.queryByRole('list')).toBeNull();
-
-    await userEvent.click(role ?? never());
-
-    expect(screen.getByRole('list')).toHaveTextContent('Open the admin workspace');
+    expect(await screen.findByText(/Several can be ticked; the account holds them all/)).toBeInTheDocument();
   });
 
   it('a role ticks its permissions; one unticked is saved as taken away', async () => {
@@ -305,7 +300,6 @@ function roles(held: string[]): Access['options'] {
       description: 'Administers members.',
       held: held.includes('admin'),
       covered_by: held.includes('superadmin') ? 'Super Admin' : null,
-      permissions: ['Open the admin workspace'],
       permission_names: ADMIN,
       may_change: true,
     },
@@ -315,7 +309,6 @@ function roles(held: string[]): Access['options'] {
       description: 'Installs updates.',
       held: held.includes('superadmin'),
       covered_by: null,
-      permissions: ['Install a new version and roll one back'],
       permission_names: PERMISSIONS.map(([name]) => name),
       may_change: true,
     },
@@ -339,7 +332,6 @@ function superadminAccess(): Access {
     options: roles(['superadmin']),
     permissions: permissions(() => true),
     superadmin: true,
-    effective_permissions: PERMISSIONS.map(([, label]) => label),
     roles_locked: null,
     removal_warning: null,
     disable_blockers: [],
@@ -352,7 +344,6 @@ function memberAccess({ notMine = '' } = {}): Access {
     options: roles([]),
     permissions: permissions(() => false, notMine),
     superadmin: false,
-    effective_permissions: [],
   };
 }
 

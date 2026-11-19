@@ -1893,14 +1893,17 @@ the form marks it *included in Super Admin*, and saving says so rather than
 dropping it silently. Roles that merely overlap, such as a moderator and a
 treasurer, both survive; only genuine containment is collapsed.
 
-The page also lists what the account **can currently do**, because that is the
-question a role list is really being asked, and it is what makes an unticked
-Admin box on a Super Admin unalarming. Each role additionally discloses its own
-capabilities, so deciding what to hand somebody does not mean reading this file.
+**Several roles can be held at once**; the account holds what they give
+together. Below the roles the page lists every permission with what the
+account **can currently do** ticked, because that is the question a role list
+is really being asked, and it is what makes an unticked Admin box on a Super
+Admin unalarming. Ticking a role shows at once what it gives, so the roles
+carry no list of their own (dropped 2026-11-19: "if you check one of the roles
+above, then you can already see this down below").
 
 **Compared with Stripe's team-role dialog**, which is the closest widely used
-model: checkboxes, plain-language descriptions, per-role disclosure, "only a
-super administrator can grant this role" and "the account creator gets it
+model: checkboxes, plain-language descriptions, what a role gives shown,
+"only a super administrator can grant this role" and "the account creator gets it
 automatically" all match. Two things there are deliberately not copied —
 grouped, collapsed role categories with a search box, which earn their keep at
 Stripe's dozen-plus groups and are chrome around one decision at two; and the

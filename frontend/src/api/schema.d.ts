@@ -4179,8 +4179,6 @@ export interface components {
         Access: {
             /** Disable Blockers */
             disable_blockers: string[];
-            /** Effective Permissions */
-            effective_permissions: string[];
             /** Options */
             options: components["schemas"]["RoleOption"][];
             /** Permissions */
@@ -9386,8 +9384,6 @@ export interface components {
             may_change: boolean;
             /** Permission Names */
             permission_names: string[];
-            /** Permissions */
-            permissions: string[];
             /** Slug */
             slug: string;
         };

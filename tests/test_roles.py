@@ -607,10 +607,9 @@ class TestRedundantRolesAreNotStoredTwice:
         target = _user("effective@example.com", ROLE_SUPERADMIN)
         _login(client, boss.id)
 
-        can_do = " / ".join(self._access(client, target.id)["effective_permissions"])
+        held = {option["name"] for option in self._access(client, target.id)["permissions"] if option["held"]}
 
-        assert "Open the admin workspace" in can_do
-        assert "Install a new version" in can_do
+        assert {Permission.ADMIN_ACCESS, Permission.SYSTEM_UPDATE} <= held
 
     def test_dropping_the_covering_role_leaves_the_other_tickable(self, client):
         """The covered box must still post, or unticking one would clear both."""
@@ -646,10 +645,9 @@ class TestRedundantRolesAreNotStoredTwice:
         _login(client, boss.id)
 
         # Super Admin's list names what only it carries...
-        assert "Install a new version and roll one back" in self._option(
-            client, target.user_id, ROLE_SUPERADMIN)["permissions"]
+        assert Permission.SYSTEM_UPDATE in self._option(client, target.user_id, ROLE_SUPERADMIN)["permission_names"]
         # ...and Admin's names what an ordinary administrator gets.
-        assert "Approve profile change requests" in self._option(client, target.user_id, ROLE_ADMIN)["permissions"]
+        assert Permission.APPROVALS_REVIEW in self._option(client, target.user_id, ROLE_ADMIN)["permission_names"]
 
     def test_a_new_role_is_inspectable_with_no_template_change(self, app, monkeypatch, client):
         monkeypatch.setitem(
@@ -662,4 +660,4 @@ class TestRedundantRolesAreNotStoredTwice:
         target = make_member(email="newrolefor@example.com")
         _login(client, boss.id)
 
-        assert "Moderate the forum and avatars" in self._option(client, target.user_id, "moderator")["permissions"]
+        assert Permission.FORUM_MODERATE in self._option(client, target.user_id, "moderator")["permission_names"]

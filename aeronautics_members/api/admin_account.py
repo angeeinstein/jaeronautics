@@ -146,9 +146,7 @@ class RoleOption(Model):
     held: bool
     #: The role held that already grants everything this one does.
     covered_by: str | None
-    #: What the role lets somebody do.
-    permissions: list[str]
-    #: The same, by name: what ticking the role ticks.
+    #: What ticking the role ticks, by name.
     permission_names: list[str]
     #: Whether the person looking may give or take it (only what they hold; super admin only by one).
     may_change: bool
@@ -179,8 +177,6 @@ class Access(Model):
     permissions: list[PermissionOption]
     #: A super admin holds every permission and takes no exceptions: nothing to tick.
     superadmin: bool
-    #: What the account can do now, from all its roles.
-    effective_permissions: list[str]
     #: Why the access cannot be changed here at all: one's own, a super admin's, one holding more.
     roles_locked: str | None
     #: Why clearing every role would be refused, said before anybody tries.
@@ -349,10 +345,6 @@ def _teams(user):
     return Teams(roles=roles, memberships=memberships)
 
 
-def _permission_labels(permissions):
-    return sorted(PERMISSION_LABELS.get(permission, permission) for permission in permissions)
-
-
 def _why_locked(own, superadmin, holds_more):
     if own:
         return "You cannot change your own access. Another administrator can, or grant-superadmin on the server."
@@ -387,7 +379,6 @@ def _access(user):
             # Naming the role that already grants all of this is the whole
             # answer to "why is Admin not ticked on a Super Admin?".
             covered_by=role_label(covering) if covering else None,
-            permissions=_permission_labels(ROLE_PERMISSIONS[slug]),
             permission_names=sorted(ROLE_PERMISSIONS[slug]),
             may_change=changeable and (i_am_superadmin if slug == SUPERADMIN else ROLE_PERMISSIONS[slug] <= mine),
         ))
@@ -414,7 +405,6 @@ def _access(user):
         options=options,
         permissions=permissions,
         superadmin=target_superadmin,
-        effective_permissions=_permission_labels(user.permissions),
         roles_locked=_why_locked(own, target_superadmin and not i_am_superadmin, not user.permissions <= mine),
         removal_warning=removal_warning,
         disable_blockers=disable_blockers,
