@@ -222,12 +222,11 @@ class TestTheEnglishView:
 
         sent = []
 
-        def fake(blocks, as_html=True, near=None):
+        def fake(blocks, as_html, current, only=None, context="", patient=False):
             sent.extend(blocks)
-            return [f"EN:{block}" for block in blocks]
+            return [(f"EN:{block}", "deepl") for block in blocks], []
 
-        monkeypatch.setattr(translation, "_by_a_service", lambda blocks, as_html, current, only=None, near="":
-                            (fake(blocks, as_html), "deepl"))
+        monkeypatch.setattr(translation, "_by_a_service", fake)
         monkeypatch.setattr(translation, "configured", lambda current=None: ["deepl"])
         record = editor.start_draft(boss, "statutes", template=_template())
         db.session.commit()
@@ -240,6 +239,7 @@ class TestTheEnglishView:
         send(client, "POST", f"/api/v1/legal/drafts/{record.id}/english", text)
 
         assert first["title"] == "EN:Statuten" and "EN:<p>Eins.</p>" in first["html"]
+        assert first["translated_by"] == "DeepL" and first["translation_note"] is None
         assert sent == ["<p>Zwei, geändert.</p>\n"]
 
     def test_says_when_no_service_is_set_up(self, client, boss):  # noqa: F811

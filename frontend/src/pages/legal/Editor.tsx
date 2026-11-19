@@ -886,8 +886,12 @@ function EnglishView({ recordId, part }: { recordId: number; part: Part }) {
   return (
     <Stack gap="md">
       <Text size="sm" c="dimmed">
-        Made by machine from the German, as members will read it once it is published. It is not edited by
-        hand: terms are kept right by the glossary (Settings › Translation).
+        Made by machine{translated.data.translated_by ? ` (${translated.data.translated_by})` : ''} from the
+        German, as members will read it once it is published. It is not edited by hand: terms are kept right
+        by the glossary (Settings › Translation).
+        {translated.data.translation_note
+          ? ` Not all by the first service: ${translated.data.translation_note}`
+          : ''}
       </Text>
       <h2 className={classes.previewTitle} lang="en">
         {translated.data.title}

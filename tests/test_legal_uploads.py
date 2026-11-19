@@ -78,7 +78,7 @@ class TestUploadingAndPublishing:
         from aeronautics_members.services import outbox, translation
 
         monkeypatch.setattr(translation, "translate",
-                            lambda sent, as_html=True, near=None: [f"{text} [en]" for text in sent])
+                            lambda sent, as_html=True, **_kw: [f"{text} [en]" for text in sent])
         record = legal_uploads.upload_draft(boss, _file(body="## § 1 Name\n\nDer Verein heißt."))
         db.session.commit()
         _publish(boss, record)
@@ -128,7 +128,7 @@ class TestUploadingAndPublishing:
         assert saved.status_code == 200
         assert item.status == ExternalWorkItem.STATUS_PENDING and item.attempts == 0
         monkeypatch.setattr(translation, "translate",
-                            lambda sent, as_html=True, near=None: [f"{text} [en]" for text in sent])
+                            lambda sent, as_html=True, **_kw: [f"{text} [en]" for text in sent])
         outbox.process_pending()
         assert legal.translation(legal.current_version("statutes")).machine_translated
 
@@ -147,7 +147,7 @@ class TestUploadingAndPublishing:
         from aeronautics_members.services import outbox, translation
 
         monkeypatch.setattr(translation, "translate",
-                            lambda sent, as_html=True, near=None: [f"{text} [en]" for text in sent])
+                            lambda sent, as_html=True, **_kw: [f"{text} [en]" for text in sent])
         later = get_membership_today() + timedelta(days=30)
         record = legal_uploads.upload_draft(boss, _file())
         db.session.commit()
@@ -538,9 +538,11 @@ class TestTheEnglishOfAVersion:
         set_setting_value(translation.DEEPL_KEY, "key:fx")
         state = {"round": 1, "sent": []}
 
-        def by_a_service(asked, as_html, current, only=None, near=""):
+        def by_a_service(asked, as_html, current, only=None, context="", patient=False):
             state["sent"] += asked
-            return [f"{text} [round {state['round']}]" for text in asked], "deepl"
+            state["patient"] = patient
+            return ([(f"{text} [round {state['round']}]", state.get("by", "deepl")) for text in asked],
+                    state.get("failures", []))
 
         monkeypatch.setattr(translation, "_by_a_service", by_a_service)
         return state
@@ -578,6 +580,18 @@ class TestTheEnglishOfAVersion:
         assert len(services["sent"]) == 3  # both paragraphs and the title: nothing kept was used
         assert self._listed(client)["english"] == "machine"
         assert db.session.query(AuditLog).filter_by(event_type="legal_english_translated_again").count() == 1
+
+    def test_which_service_made_it_and_why_not_the_first(self, client, boss, services):
+        # Azure, tried first, was refused; DeepL stepped in -- and it was taken for Azure's.
+        services["by"], services["failures"] = "deepl", ["Azure AI Translator: too many requests just now"]
+
+        self._published(boss)
+        _login(client, boss.id)
+        listed = self._listed(client)
+
+        assert services["patient"]  # in the background: a service asking to wait is waited for
+        assert listed["english_by"] == "DeepL"
+        assert listed["english_note"] == "Azure AI Translator: too many requests just now"
 
     def test_taken_away_and_not_made_again_by_itself(self, client, boss, services):
         from aeronautics_members.services import outbox

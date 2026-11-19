@@ -107,6 +107,44 @@ be live translated from German."
 - **Setup guide** for both services: `docs/maintenance.md`, "Setting up a
   translation service".
 
+## Better English, and Azure that works (2026-11-19)
+
+The privacy policy's English was weaker than DeepL is known for ("Right of
+appeal" for *Beschwerderecht*, a verb lost in a long sentence, "his"), and
+the maintainer would not fix it by rewording the German: "if I ever write
+this text again myself or by others, this shouldn't fail the same way".
+
+- **The whole German text as context** (the maintainer's idea): DeepL is
+  told it with every request -- not translated, not counted; up to 50,000
+  characters, for a longer text the part around. Before, a block was told
+  only an English note, and a list item its lead-in. A block is still
+  translated on its own (sent as one text, see above, was worse).
+- **Kept by its own text**, no longer by its context: a change to one
+  paragraph still costs that paragraph. Everything kept before is made anew
+  once (the key changed) -- *Translate again* per version.
+- **DeepL's better model and instructions**: `model_type`
+  `quality_optimized`, and the house style (formal British English,
+  gender-neutral: "they", "their") as `custom_instructions`. A plan that
+  refuses them is asked without, from then on.
+- **Azure's free tier** refuses more than about 33,000 characters a minute
+  ("too many requests"): on the live server it refused the whole privacy
+  policy, and DeepL stepped in unnoticed. Now portions of at most 10,000
+  characters; in the background (publishing) the portal paces itself to
+  30,000 a minute and waits when told to (`Retry-After`), up to four
+  minutes in all; in the editor it goes to the next service at once. What
+  a service managed is kept; only the rest goes to the next one.
+- **Which service made it** is kept with a version's English
+  (`translated_by`, `translation_note`) and shown: Admin › Legal texts
+  ("English by DeepL, as Azure AI Translator failed", the reason in its
+  dialog), the editor's *English* tab.
+- **DeepL's characters:** the Free account made in November 2026 has
+  1,000,000 characters for good, not per month (the maintainer; DeepL's own
+  documentation still says 500,000 a month); the settings page no longer
+  says "this month". At about 40,000 characters for the privacy policy and
+  only changed paragraphs afterwards, they last years. The suggested order:
+  DeepL first (better with context), Azure the fallback -- when DeepL's
+  characters are used up, Azure (2 million a month) steps in by itself.
+
 ## Not built
 
 - Keeping text typed in the last seconds before an editor lost its lock

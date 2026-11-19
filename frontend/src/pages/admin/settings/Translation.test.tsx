@@ -37,10 +37,10 @@ function show(answers: Answers = {}) {
 }
 
 describe('Settings › Translation', () => {
-  it("the services, DeepL's characters this month, and the glossary", async () => {
+  it("the services, DeepL's characters used, and the glossary", async () => {
     show();
 
-    expect(await screen.findByText('1,234 of 500,000 characters used this month.')).toBeInTheDocument();
+    expect(await screen.findByText('1,234 of 500,000 characters used.')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'German term 1' })).toHaveValue('Vorstand');
     expect(screen.getByRole('textbox', { name: 'English term 1' })).toHaveValue('board');
   });

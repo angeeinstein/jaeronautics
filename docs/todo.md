@@ -32,77 +32,24 @@ set apart, deleted price-list items folded into one row, what the teams are
 owed off the dashboard); and the batch of 2026-11-02
 (`claude/update-follow-ups`: cloudflared and the forum's server in the night,
 `deploy/server-night.sh`; the forum and *Shell access* on System health; the
-update's warning of local changes only for the portal's own files).
+update's warning of local changes only for the portal's own files); and the
+batch of 2026-11-19 (`claude/small-fixes`: the legal texts' English told the
+whole German text, Azure's free tier paced, which service made an English
+shown; the installer falling back to `main` from a branch that is gone;
+gunicorn without its control socket; a dead Stripe subscription cleared for
+good).
 
 ## Open
-
-### Which translation service made the English -- and why the first did not
-
-- **Added:** 2026-11-19
-- **What:** the editor's *English* tab, and a published version's English on
-  Admin › Legal texts, say which service translated it (DeepL, Azure, or
-  both, by paragraph), and when the first service in the order failed, why
-  (its message, as the server's log has it: `Translating with … failed: …`).
-- **Why:** twice it was guessed wrong which service had translated: the
-  maintainer took DeepL's English for Azure's. On the live server Azure,
-  tried first, was refused with "too many requests" (its free tier throttles
-  a whole text at once) and DeepL stepped in silently; the log and the
-  `translations` table (`service`, all 488 rows `deepl`) showed it.
-- **Where:** `services/translation.py` (the service is kept per translation
-  in `translations.service`; the failure only goes to the log),
-  `services/legal_translation.py`, `api/legal_editor.py` (`EnglishOut`),
-  `api/admin_legal.py`, `frontend/src/pages/legal/Editor.tsx`
-  (`EnglishView`), `frontend/src/pages/admin/LegalTexts.tsx`.
-- **Open question:** whether a failure is kept somewhere (the last one per
-  service, say, on Settings › Translation) or only shown with the
-  translation it concerns.
-
-### Installer: a remembered branch that is gone
-
-- **Added:** 2026-11-18
-- **What:** `install.sh --mode update` without `--branch` uses the branch the
-  server was last updated to. Once that branch is merged and deleted, the
-  update fails three times over ("Remote branch … not found") and stops
-  (seen on the test server with `claude/translation-follow-ups`).
-- **Where:** `install.sh`, the bootstrap clone (around line 1476).
-- **Proposed:** when the remembered branch no longer exists, say so and fall
-  back to `main` (and remember `main`); an explicit `--branch` that does not
-  exist still fails.
-- **Until then:** `--branch main` once; afterwards a plain update follows it.
-
-### gunicorn's control socket on a read-only file system
-
-- **Added:** 2026-11-18
-- **What:** every start logs `Control server error: [Errno 30] Read-only
-  file system: '/var/www/jaeronautics/.gunicorn'` -- gunicorn (since 26)
-  opens a control socket in the working directory, which the service's
-  sandbox (`ProtectSystem=strict`) keeps read-only. Harmless, but an ERROR
-  line at every start.
-- **Where:** `install.sh`, the unit's `ExecStart` (around line 2713).
-- **Proposed:** `--no-control-socket` -- the portal never uses gunicorn's
-  control interface. (Also with gunicorn 27, #82.)
-
-### A Stripe subscription that is gone, cleared again on every page
-
-- **Added:** 2026-11-18
-- **What:** the test server's log repeats `Stripe subscription … for
-  member_id=2 no longer exists; clearing the stale reference` every few
-  minutes: `billing.get_latest_stripe_subscription_for_member` sets
-  `member.stripe_subscription_id = None`, but on a page that only reads,
-  nothing commits it, so the next view asks Stripe and clears it again.
-- **Where:** `aeronautics_members/services/billing.py` (around line 320) and
-  its callers.
-- **Proposed:** clear it for good (commit it where it is found, or queue the
-  clearing); a test that the second lookup no longer asks Stripe. Only on
-  the test server so far (a subscription deleted in Stripe's test mode).
 
 ### Privacy policy and membership terms drafts: brought up to date for the board
 
 - **Added:** 2026-11-18
-- **Being built** on `claude/legal-drafts-review`. The drafts
-  `legal/{privacy-policy,membership-terms}/de/2026-10-08.md` (still the
-  files; not edited in the portal yet) were checked against the portal; then
-  approved by the board and published from Admin › Legal texts.
+- **Built** (`claude/legal-drafts-review`, merged as #83); what is left is
+  publishing. The drafts were checked against the portal and are drafts in
+  the live portal now (*Edit* pressed, 2026-11-18). The privacy policy waits
+  for a better English (`claude/small-fixes`: the whole text as DeepL's
+  context, Azure paced): once installed, publish it and press *Translate
+  again* if its English was made before, then read it.
 - **Privacy policy, decided (2026-11-18):**
   - Add: the readers' tap log (90 days, time, reader, the card's last
     characters, the answer -- a first name, a balance, a refusal; admins).

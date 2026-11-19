@@ -271,6 +271,10 @@ class EnglishOut(Model):
     html: str
     #: Why there is none, when no translation service translated it.
     unavailable: str | None = None
+    #: Which services translated it: "DeepL", "DeepL and Azure AI Translator".
+    translated_by: str | None = None
+    #: Why the first service in the order did not translate it all (its own message).
+    translation_note: str | None = None
 
 
 @endpoint("POST", "/legal/drafts/<int:record_id>/english", response=EnglishOut, body=CheckIn, tag=TAG)
@@ -279,14 +283,19 @@ def legal_draft_english(record_id, body):
     each kept, so only what changed is sent to the translator."""
     from ..services.translation import TranslationUnavailable
 
+    from ..services import legal_translation
+
     record = editor.editable(current_user, record_id)
+    report = {}
     try:
-        title, html = editor.english(record, body.model_dump())
+        title, html = editor.english(record, body.model_dump(), report)
     except TranslationUnavailable as exc:
         db.session.rollback()
         return EnglishOut(title="", html="", unavailable=str(exc))
     db.session.commit()
-    return EnglishOut(title=title, html=html)
+    by, note = legal_translation.made_by(report)
+    return EnglishOut(title=title, html=html, translated_by=legal_translation.names((by or "").split(",")),
+                      translation_note=note)
 
 
 @endpoint("GET", "/legal/drafts/<int:record_id>/snapshots/<int:snapshot_id>", response=ContentOut, tag=TAG)

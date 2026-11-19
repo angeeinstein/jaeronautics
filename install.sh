@@ -26,6 +26,8 @@ ORIGINAL_ARGS=("$@")
 MODE="${BOOTSTRAP_MODE:-}"
 REPO_URL="${BOOTSTRAP_REPO_URL:-}"
 BRANCH="${BOOTSTRAP_BRANCH:-$DEFAULT_BRANCH}"
+# Given with --branch (rather than remembered from the last update).
+BRANCH_GIVEN=0
 INSTALL_DIR="${BOOTSTRAP_INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
 SERVICE_NAME="${BOOTSTRAP_SERVICE_NAME:-$DEFAULT_SERVICE_NAME}"
 APP_USER="${BOOTSTRAP_APP_USER:-$DEFAULT_APP_USER}"
@@ -595,6 +597,7 @@ parse_args() {
                 ;;
             --branch)
                 BRANCH="${2:-}"
+                BRANCH_GIVEN=1
                 shift 2
                 ;;
             --install-dir)
@@ -1476,6 +1479,25 @@ sync_repo_to_dir() {
     retry 3 git clone --branch "${branch}" --depth 1 "${repo_url}" "${target_dir}"
 }
 
+# A remembered branch -- the one this server was last updated to, from the
+# state file -- that no longer exists (merged and deleted) is not followed:
+# main instead, remembered from then on. Before, the update failed three times
+# over ("Remote branch ... not found") and stopped. A branch given with
+# --branch is kept and fails if it does not exist; so is one that cannot be
+# checked (no network): only a definite "not there" changes it.
+fall_back_from_gone_branch() {
+    if [[ "${BRANCH_GIVEN}" == "1" || -z "${BRANCH}" || "${BRANCH}" == "${DEFAULT_BRANCH}" ]]; then
+        return
+    fi
+    local status=0
+    GIT_TERMINAL_PROMPT=0 git ls-remote --exit-code --heads "${REPO_URL}" "refs/heads/${BRANCH}" \
+        >/dev/null 2>&1 || status=$?
+    if [[ "${status}" == "2" ]]; then
+        warn "The branch ${BRANCH}, which this server was last updated to, no longer exists (merged, most likely). Updating to ${DEFAULT_BRANCH} instead, and following it from now on."
+        BRANCH="${DEFAULT_BRANCH}"
+    fi
+}
+
 bootstrap_self_update() {
     if [[ "${SELF_REEXEC_MARKER:-0}" == "1" ]]; then
         return
@@ -1484,6 +1506,7 @@ bootstrap_self_update() {
     detect_package_manager
     mapfile -t bootstrap_pkg_list < <(bootstrap_packages)
     install_packages "${bootstrap_pkg_list[@]}"
+    fall_back_from_gone_branch
 
     # Always a copy of its own, never the live checkout: the running portal
     # and its background jobs use the code in INSTALL_DIR, and moving it here
@@ -2710,7 +2733,7 @@ EnvironmentFile=${ENV_FILE}
 # than a whole worker: three workers of one request each meant three slow
 # forum calls stalled the entire site. Twelve requests at once now, and the
 # outside calls themselves time out well inside the 60 seconds.
-ExecStart=${INSTALL_DIR}/.venv/bin/gunicorn --workers 3 --threads 4 --timeout 60 --graceful-timeout 30 --keep-alive 75 --bind 127.0.0.1:${APP_PORT} wsgi:application
+ExecStart=${INSTALL_DIR}/.venv/bin/gunicorn --workers 3 --threads 4 --timeout 60 --graceful-timeout 30 --keep-alive 75 --no-control-socket --bind 127.0.0.1:${APP_PORT} wsgi:application
 Restart=always
 RestartSec=5
 TimeoutStartSec=60
@@ -4229,6 +4252,11 @@ print_summary() {
 main() {
     require_root
     load_state
+    # Re-run from the fresh copy: the branch the first run chose, not the one
+    # remembered (it may have fallen back from a branch that is gone).
+    if [[ "${SELF_REEXEC_MARKER:-0}" == "1" && -n "${BOOTSTRAP_BRANCH:-}" ]]; then
+        BRANCH="${BOOTSTRAP_BRANCH}"
+    fi
     parse_args "$@"
 
     REPO_URL="$(detect_repo_url)"

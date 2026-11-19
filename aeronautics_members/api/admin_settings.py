@@ -318,7 +318,8 @@ class TranslationOut(Model):
     azure_region: str
     #: Each a German term and its English one.
     glossary: list[list[str]]
-    #: DeepL's characters this month, when DeepL is set up and answers.
+    #: DeepL's characters used and its limit, when DeepL is set up and answers: a month's on a
+    #: plan that renews, all there is on one that does not (a Free account of November 2026).
     deepl_used: int | None = None
     deepl_limit: int | None = None
 
@@ -350,7 +351,7 @@ def _translation_out():
 
 @endpoint("GET", "/admin/settings/translation", response=TranslationOut, permissions=CREDENTIALS, tag=TAG)
 def admin_settings_translation():
-    """The translation services, their order, DeepL's characters this month, and the glossary."""
+    """The translation services, their order, DeepL's characters used, and the glossary."""
     return _translation_out()
 
 

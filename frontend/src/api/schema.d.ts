@@ -2334,7 +2334,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The translation services, their order, DeepL's characters this month, and the glossary. */
+        /** The translation services, their order, DeepL's characters used, and the glossary. */
         get: operations["admin_settings_translation"];
         /** Save them. A changed glossary is used from the next translation on. */
         put: operations["admin_settings_translation_save"];
@@ -6553,6 +6553,16 @@ export interface components {
             /** Title */
             title: string;
             /**
+             * Translated By
+             * @default null
+             */
+            translated_by?: string | null;
+            /**
+             * Translation Note
+             * @default null
+             */
+            translation_note?: string | null;
+            /**
              * Unavailable
              * @default null
              */
@@ -7314,6 +7324,16 @@ export interface components {
              * @default null
              */
             english?: ("machine" | "hand" | "making" | "failed" | "none") | null;
+            /**
+             * English By
+             * @default null
+             */
+            english_by?: string | null;
+            /**
+             * English Note
+             * @default null
+             */
+            english_note?: string | null;
             /**
              * English Problem
              * @default null
@@ -10772,6 +10792,16 @@ export interface components {
              */
             english?: ("machine" | "hand" | "making" | "failed" | "none") | null;
             /**
+             * English By
+             * @default null
+             */
+            english_by?: string | null;
+            /**
+             * English Note
+             * @default null
+             */
+            english_note?: string | null;
+            /**
              * English Problem
              * @default null
              */
@@ -10912,6 +10942,16 @@ export interface components {
              * @enum {string}
              */
             english: "machine" | "hand" | "making" | "failed" | "none";
+            /**
+             * English By
+             * @default null
+             */
+            english_by?: string | null;
+            /**
+             * English Note
+             * @default null
+             */
+            english_note?: string | null;
             /**
              * English Problem
              * @default null

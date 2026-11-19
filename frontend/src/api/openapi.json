@@ -7315,6 +7315,30 @@
             "title": "Title",
             "type": "string"
           },
+          "translated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Translated By"
+          },
+          "translation_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Translation Note"
+          },
           "unavailable": {
             "anyOf": [
               {
@@ -9654,6 +9678,30 @@
             ],
             "default": null,
             "title": "English"
+          },
+          "english_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English By"
+          },
+          "english_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English Note"
           },
           "english_problem": {
             "anyOf": [
@@ -20011,6 +20059,30 @@
             "default": null,
             "title": "English"
           },
+          "english_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English By"
+          },
+          "english_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English Note"
+          },
           "english_problem": {
             "anyOf": [
               {
@@ -20366,6 +20438,30 @@
             ],
             "title": "English",
             "type": "string"
+          },
+          "english_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English By"
+          },
+          "english_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "English Note"
           },
           "english_problem": {
             "anyOf": [
@@ -31917,7 +32013,7 @@
             "description": "Signed in, without the permission."
           }
         },
-        "summary": "The translation services, their order, DeepL's characters this month, and the glossary.",
+        "summary": "The translation services, their order, DeepL's characters used, and the glossary.",
         "tags": [
           "Admin"
         ],

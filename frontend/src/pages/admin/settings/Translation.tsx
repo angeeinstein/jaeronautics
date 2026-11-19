@@ -149,7 +149,7 @@ function Form({ data }: { data: TranslationOut }) {
             />
             {data.deepl_limit ? (
               <Text size="sm" c="dimmed">
-                {`${(data.deepl_used ?? 0).toLocaleString('en-GB')} of ${data.deepl_limit.toLocaleString('en-GB')} characters used this month.`}
+                {`${(data.deepl_used ?? 0).toLocaleString('en-GB')} of ${data.deepl_limit.toLocaleString('en-GB')} characters used.`}
               </Text>
             ) : null}
             {keySet('deepl') ? (

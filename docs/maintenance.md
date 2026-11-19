@@ -507,7 +507,8 @@ Settings › Translation -- never into a chat, an email or the repository.
 4. The characters used are shown under the key. The test and live servers
    may share one key: each makes and cleans up only its own glossaries at
    DeepL (named with its address). An account made in November 2026 showed
-   1,000,000 characters "for its lifetime" rather than per month.
+   1,000,000 characters "for its lifetime" rather than per month: once used
+   up, the other service steps in.
 
 **Azure AI Translator** (2 million characters a month free; one English,
 `en`):
@@ -526,6 +527,11 @@ Settings › Translation -- never into a chat, an email or the repository.
    needed: the portal uses Azure's global address.
 4. Settings › Translation → Azure AI Translator → the key and the region →
    *Save* → *Try it*.
+
+Azure's free tier takes about 33,000 characters a minute: a whole text is
+sent in portions, paced, when it is published (`docs/legal-translation-plan.md`,
+"Better English"). Which service made a version's English, and why the first
+did not, is shown on Admin › Legal texts.
 
 A key is renewed by making a new one there, saving it here, then deleting
 the old one. *Remove the key* takes a service away; with none left, new

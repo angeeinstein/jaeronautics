@@ -12,12 +12,26 @@ The **glossary** keeps terms right (Verein → association): DeepL takes it as a
 glossary of its own, made anew when it changes; Azure, which has no glossary
 for HTML, gets the English word in place, marked not to be translated, for the
 German word as written.
+
+**Context:** DeepL is told the whole German text with every request -- not
+translated, not counted -- so a paragraph is translated knowing the text it
+stands in (a heading, a list item finishing a sentence); and asked for its
+better model, with the house style as instructions (gender-neutral English).
+Azure takes neither. A paragraph is kept by its own text only: when another
+paragraph changes, it is not translated again.
+
+**Azure's free tier** refuses more than about 33,000 characters a minute: it
+is sent smaller portions, and when publishing (``patient``) the portal paces
+itself and waits as long as Azure says when it refuses. Whatever a service
+cannot do goes to the next one, portion by portion.
 """
 
 import hashlib
 import html
 import json
 import re
+import time
+from collections import deque
 from html.parser import HTMLParser
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -48,12 +62,26 @@ AZURE_ENDPOINT = "https://api.cognitive.microsofttranslator.com"
 #: (Azure has one English, "en".)
 TARGET = "EN-GB"
 TIMEOUT_SECONDS = 30
-#: Told to DeepL with every text, not translated and not counted: what the texts are, and that the
-#: English is gender-neutral -- the German says "sein Verhalten" of a member, the English "their".
-CONTEXT = ("Legal texts of a student association in Austria: statutes, rules, terms, privacy policy. "
-           "Formal British English. Gender-neutral: a member or person is 'they', 'their', never 'he' or 'his'.")
+#: DeepL's instructions with every request (``custom_instructions``: at most 10, 300 characters each):
+#: the German says "sein Verhalten" of a member, the English "their conduct".
+INSTRUCTIONS = [
+    "This is a legal text of a student association in Austria; write formal British English.",
+    "Use gender-neutral language: refer to a member or any person as 'they' or 'their', "
+    "never 'he', 'his', 'she' or 'her'.",
+]
+#: DeepL's better model; asked for, as it is not every account's default.
+MODEL = "quality_optimized"
 #: Texts per request: DeepL takes 50 at a time.
 BATCH = 50
+#: Characters per request: a DeepL request is at most 128 KiB, the context included.
+BATCH_CHARACTERS = 30_000
+#: Of the German around the texts, what DeepL is told at most: a whole legal text, as a rule.
+CONTEXT_MAX = 50_000
+#: Azure's free tier: 2 million characters an hour, counted over the last minute -- about 33,000.
+AZURE_BATCH_CHARACTERS = 10_000
+AZURE_PER_MINUTE = 30_000
+#: How long, in all, a translation in the background waits for a service that asks to wait.
+WAIT_MAX_SECONDS = 240
 GLOSSARY_MAX = 200
 #: The start of the name of every glossary this portal makes at DeepL.
 GLOSSARY_NAME = "jaeronautics legal texts"
@@ -80,7 +108,16 @@ class TranslationUnavailable(Exception):
 
 
 class _ServiceError(Exception):
-    pass
+    def __init__(self, message, *, code=None, retry_after=None):
+        super().__init__(message)
+        self.code = code
+        #: Seconds the service asked to wait before the next try ("too many requests").
+        self.retry_after = retry_after
+
+
+#: Slept on when a service asks to wait; a name of its own, so the tests do not wait.
+_sleep = time.sleep
+_clock = time.monotonic
 
 
 # --- Settings -------------------------------------------------------------------------------
@@ -158,69 +195,127 @@ def _fingerprint(glossary):
 # --- Translating -----------------------------------------------------------------------------
 
 
-def _key(text, as_html, glossary, near=""):
-    # The context is part of it: when it changes, what was translated is translated anew. ``near``
-    # only when there is one, so the translations kept before it existed keep their keys.
-    near_part = f"|{near}" if near else ""
-    return hashlib.sha256(f"{TARGET}|{int(as_html)}|{_fingerprint(glossary)}|{CONTEXT}{near_part}|{text}"
-                          .encode()).hexdigest()
+def _key(text, as_html, glossary):
+    # By the text alone, not its context: a paragraph translated once is not translated again when
+    # another one changes. "2": kept since the context became the whole text (2026-11-19) -- the
+    # translations kept before were made knowing less, and are made anew once.
+    return hashlib.sha256(f"2|{TARGET}|{int(as_html)}|{_fingerprint(glossary)}|{text}".encode()).hexdigest()
 
 
-def translate(texts, *, as_html=True, near=None):
+def translate(texts, *, as_html=True, context="", patient=False, report=None):
     """``texts`` in English, in their order: what was translated before from the store, the rest by
-    the first service that manages it. TranslationUnavailable when none does.
+    the first service that manages it, portion by portion. TranslationUnavailable when none does.
 
-    ``near``: for each text, what is around it that DeepL should know of ("" for nothing) -- the
-    paragraph whose sentence it finishes, say. Told as context, not translated, not counted."""
+    ``context``: the German the texts stand in, as plain text -- told to DeepL, not translated, not
+    counted. ``patient``: in the background (publishing), so a service that asks to wait is
+    waited for, a few minutes in all; in a page's request it goes to the next service at once.
+    ``report``, a dict, gets ``services`` (a set: who translated these texts, now or before) and
+    ``failures`` ("DeepL: …" of a service that failed while another stepped in)."""
     current = settings()
-    near = list(near) if near is not None else [""] * len(texts)
-    keys = [_key(text, as_html, current["glossary"], around) for text, around in zip(texts, near)]
-    known = {row.source_hash: row.target for row in db.session.execute(
+    keys = [_key(text, as_html, current["glossary"]) for text in texts]
+    rows = {row.source_hash: row for row in db.session.execute(
         db.select(Translation).where(Translation.source_hash.in_(set(keys)))).scalars()} if keys else {}
-    missing = list(dict.fromkeys((text, around) for text, around, key in zip(texts, near, keys)
-                                 if key not in known and text.strip()))
-    now = get_now_utc()
-    for around in dict.fromkeys(around for _text, around in missing):
-        asked = [text for text, other in missing if other == around]
-        made, service = _by_a_service(asked, as_html, current, near=around)
-        for text, english in zip(asked, made):
-            key = _key(text, as_html, current["glossary"], around)
+    known = {key: row.target for key, row in rows.items()}
+    services = {row.service for row in rows.values() if row.service}
+    missing = list(dict.fromkeys(text for text, key in zip(texts, keys) if key not in known and text.strip()))
+    failures = []
+    if missing:
+        made, failures = _by_a_service(missing, as_html, current, context=context, patient=patient)
+        now = get_now_utc()
+        for text, (english, service) in zip(missing, made):
+            key = _key(text, as_html, current["glossary"])
             known[key] = english
+            services.add(service)
             if db.session.get(Translation, key) is None:
                 db.session.add(Translation(source_hash=key, source=text, target=english, service=service,
                                            created_at=now))
-    if missing:
         db.session.flush()
+    if report is not None:
+        report.setdefault("services", set()).update(services)
+        report.setdefault("failures", []).extend(failures)
     return [known.get(key, text) for text, key in zip(texts, keys)]
 
 
-def forget(texts, *, as_html=True, near=None):
+def forget(texts, *, as_html=True):
     """The kept translations of ``texts`` forgotten: asked for again next time. Returns how many."""
     glossary = settings()["glossary"]
-    near = list(near) if near is not None else [""] * len(texts)
-    keys = list({_key(text, as_html, glossary, around) for text, around in zip(texts, near)})
+    keys = list({_key(text, as_html, glossary) for text in texts})
     if not keys:
         return 0
     return db.session.execute(db.delete(Translation).where(Translation.source_hash.in_(keys))).rowcount
 
 
-def _by_a_service(texts, as_html, current, only=None, near=""):
+def _batches(texts, name):
+    """``texts`` in portions a request of this service takes: at most BATCH texts, and so many
+    characters -- fewer for Azure's free tier."""
+    most = AZURE_BATCH_CHARACTERS if name == AZURE else BATCH_CHARACTERS
+    batch, size = [], 0
+    for text in texts:
+        if batch and (len(batch) == BATCH or size + len(text) > most):
+            yield batch
+            batch, size = [], 0
+        batch.append(text)
+        size += len(text)
+    if batch:
+        yield batch
+
+
+class _Patience:
+    """How long a translation may still wait, and what was sent to Azure in the last minute."""
+
+    def __init__(self, patient):
+        self.left = WAIT_MAX_SECONDS if patient else 0
+        self.sent = deque()  # (when, characters)
+
+    def wait(self, seconds):
+        seconds = max(1, min(seconds, 120))
+        if seconds > self.left:
+            return False
+        self.left -= seconds
+        _sleep(seconds)
+        return True
+
+    def pace(self, characters):
+        """Before sending ``characters`` to Azure: waits while the last minute's would go over its limit."""
+        while self.left:
+            now = _clock()
+            while self.sent and now - self.sent[0][0] >= 60:
+                self.sent.popleft()
+            if not self.sent or sum(count for _when, count in self.sent) + characters <= AZURE_PER_MINUTE:
+                break
+            if not self.wait(int(60 - (now - self.sent[0][0])) + 1):
+                break
+        self.sent.append((_clock(), characters))
+
+
+def _by_a_service(texts, as_html, current, only=None, context="", patient=False):
+    """``([(english, service), …], failures)``: each portion by the first service that translates it."""
     services = [only] if only else configured(current)
     if not services:
         raise TranslationUnavailable("No translation service is set up (Settings › Translation).")
-    reasons = []
+    made, left, reasons, patience = [], list(texts), [], _Patience(patient)
     for name in services:
         try:
-            made = []
-            for start in range(0, len(texts), BATCH):
-                batch = texts[start:start + BATCH]
-                made += (_deepl(batch, as_html, current, near) if name == DEEPL
-                         else _azure(batch, as_html, current))  # Azure takes no context
-            return [clean_html(text) if as_html else text for text in made], name
+            for batch in _batches(left, name):
+                english = (_deepl(batch, as_html, current, context, patience) if name == DEEPL
+                           else _azure(batch, as_html, current, patience))  # Azure takes no context
+                made += [(clean_html(text) if as_html else text, name) for text in english]
+                left = left[len(batch):]
+            return made, reasons
         except _ServiceError as exc:
             current_app.logger.warning("Translating with %s failed: %s", NAMES[name], exc)
             reasons.append(f"{NAMES[name]}: {exc}")
     raise TranslationUnavailable("; ".join(reasons))
+
+
+def _patiently(patience, send):
+    """``send()``, tried again while the service asks to wait ("too many requests") and there is time."""
+    while True:
+        try:
+            return send()
+        except _ServiceError as exc:
+            if exc.retry_after is None or not patience.wait(exc.retry_after):
+                raise
 
 
 def try_service(name):
@@ -229,22 +324,26 @@ def try_service(name):
         raise ValidationError("No such service.")
     current = settings()
     try:
-        [english], _service = _by_a_service(["Der Vorstand beschließt über die Aufnahme neuer Mitglieder."],
-                                            False, current, only=name)
+        [(english, _service)], _failures = _by_a_service(
+            ["Der Vorstand beschließt über die Aufnahme neuer Mitglieder."], False, current, only=name)
     except TranslationUnavailable as exc:
         raise ValidationError(str(exc), code="translation_failed") from exc
     return english
 
 
 def _call(url, *, data=None, headers=None, method="POST"):
-    request = Request(url, data=json.dumps(data).encode() if data is not None else None, method=method,
-                      headers={"Content-Type": "application/json", "User-Agent": "jaeronautics", **(headers or {})})
+    # ensure_ascii off: an umlaut is two bytes, not six -- a DeepL request, context included, is
+    # at most 128 KiB.
+    body = json.dumps(data, ensure_ascii=False).encode() if data is not None else None
+    request = Request(url, data=body, method=method,
+                      headers={"Content-Type": "application/json; charset=utf-8", "User-Agent": "jaeronautics",
+                               **(headers or {})})
     try:
         with urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # noqa: S310 -- fixed https hosts
             body = response.read()
             return json.loads(body) if body else None
     except HTTPError as exc:
-        raise _ServiceError(_said(exc)) from exc
+        raise _ServiceError(_said(exc), code=exc.code, retry_after=_retry_after(exc)) from exc
     except (URLError, TimeoutError, OSError) as exc:
         raise _ServiceError(f"not reached ({exc})") from exc
     except ValueError as exc:
@@ -258,6 +357,17 @@ def _said(exc):
               456: "a limit of the account is reached"}.get(exc.code, f"error {exc.code}")
     detail = _their_message(exc)
     return f"{reason} ({detail})" if detail else reason
+
+
+def _retry_after(exc):
+    """Seconds to wait before trying again, when the service said "too many requests" (429): its
+    ``Retry-After``, or a minute -- Azure counts the characters of the last minute."""
+    if exc.code != 429:
+        return None
+    try:
+        return int(float((exc.headers or {}).get("Retry-After") or 60))
+    except (TypeError, ValueError):
+        return 60
 
 
 def _their_message(exc):
@@ -340,23 +450,73 @@ def _deepl_glossary(current, fresh=False):
     return glossary_id
 
 
-def _deepl(texts, as_html, current, near=""):
+def _plain_text(text):
+    return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", text)).split())
+
+
+def _around(context, texts):
+    """Of ``context``, what DeepL is told with ``texts``: all of it, or for a text longer than
+    CONTEXT_MAX the part around where the texts stand in it."""
+    if len(context) <= CONTEXT_MAX:
+        return context
+    start = context.find(_plain_text(texts[0])[:80]) if texts else -1
+    start = min(max(0, start - CONTEXT_MAX // 3), len(context) - CONTEXT_MAX) if start >= 0 else 0
+    return context[start:start + CONTEXT_MAX]
+
+
+#: What a DeepL key's plan refused (``custom_instructions``, then ``model_type``): asked without
+#: it from then on, until the portal restarts.
+_REFUSED = {}
+
+
+def _deepl(texts, as_html, current, context="", patience=None):
     key = current["deepl_key"]
-    data = {"text": texts, "source_lang": "DE", "target_lang": TARGET,
-            "context": f"{CONTEXT} {near}" if near else CONTEXT}
+    patience = patience or _Patience(False)
+    key_tag = hashlib.sha256(key.encode()).hexdigest()[:8]
+    data = {"text": texts, "source_lang": "DE", "target_lang": TARGET}
+    if context.strip():
+        data["context"] = _around(context, texts)
+    refused = _REFUSED.setdefault(key_tag, set())
+    extras = {name: value for name, value in (("custom_instructions", INSTRUCTIONS), ("model_type", MODEL))
+              if name not in refused}
+    data.update(extras)
     if as_html:
         data["tag_handling"] = "html"
     glossary_id = _deepl_glossary(current)
     if glossary_id:
         data["glossary_id"] = glossary_id
+
+    def send():
+        return _patiently(patience, lambda: _call(f"{_deepl_base(key)}/v2/translate",
+                                                  headers=_deepl_headers(key), data=data))
+
     try:
-        answer = _call(f"{_deepl_base(key)}/v2/translate", headers=_deepl_headers(key), data=data)
+        answer = send()
     except _ServiceError as exc:
-        if not glossary_id or "glossary" not in str(exc).lower():
+        if glossary_id and "glossary" in str(exc).lower():
+            # The glossary kept is gone at DeepL (deleted by hand, or the account changed): made anew.
+            data["glossary_id"] = _deepl_glossary(current, fresh=True)
+            answer = send()
+        elif exc.code in (400, 403) and extras:
+            # The instructions, or the better model, are not every plan's: asked again without the
+            # instructions, then without the model too -- and from then on without what it took (a key
+            # not accepted fails the same way every time, and nothing is marked).
+            answer, dropped = None, []
+            for name in list(extras):
+                del data[name]
+                dropped.append(name)
+                try:
+                    answer = send()
+                    break
+                except _ServiceError as again:
+                    if again.code not in (400, 403):
+                        raise
+            if answer is None:
+                raise
+            current_app.logger.warning("DeepL refused %s (%s); translating without.", " and ".join(dropped), exc)
+            refused.update(dropped)
+        else:
             raise
-        # The glossary kept is gone at DeepL (deleted by hand, or the account changed): made anew.
-        data["glossary_id"] = _deepl_glossary(current, fresh=True)
-        answer = _call(f"{_deepl_base(key)}/v2/translate", headers=_deepl_headers(key), data=data)
     made = [item.get("text", "") for item in (answer or {}).get("translations", [])]
     if len(made) != len(texts):
         raise _ServiceError("an answer of the wrong length")
@@ -364,7 +524,8 @@ def _deepl(texts, as_html, current, near=""):
 
 
 def deepl_usage():
-    """{"used", "limit"} characters this month, or None when DeepL is not set up or does not answer."""
+    """{"used", "limit"} characters as DeepL counts them -- per month, or for good, by the plan --, or
+    None when DeepL is not set up or does not answer."""
     key = settings()["deepl_key"]
     if not key:
         return None
@@ -386,7 +547,8 @@ def _with_glossary(text, glossary, as_html):
     return text
 
 
-def _azure(texts, as_html, current):
+def _azure(texts, as_html, current, patience=None):
+    patience = patience or _Patience(False)
     headers = {"Ocp-Apim-Subscription-Key": current["azure_key"]}
     if current["azure_region"]:
         headers["Ocp-Apim-Subscription-Region"] = current["azure_region"]
@@ -394,7 +556,8 @@ def _azure(texts, as_html, current):
     url = (f"{AZURE_ENDPOINT}/translate?api-version=3.0&from=de&to=en"
            f"&textType={'html' if as_html else 'plain'}")
     sent = [{"Text": _with_glossary(text, current["glossary"], as_html)} for text in texts]
-    answer = _call(url, headers=headers, data=sent)
+    patience.pace(sum(len(item["Text"]) for item in sent))
+    answer = _patiently(patience, lambda: _call(url, headers=headers, data=sent))
     made = [((item.get("translations") or [{}])[0]).get("text", "") for item in (answer or [])]
     if len(made) != len(texts):
         raise _ServiceError("an answer of the wrong length")
