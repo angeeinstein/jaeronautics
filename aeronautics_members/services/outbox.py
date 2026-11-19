@@ -17,6 +17,7 @@ next -- and lets a test drive the whole loop with a handler of its own.
 """
 
 import threading
+import time
 from datetime import timedelta
 
 from flask import current_app, has_request_context
@@ -314,15 +315,30 @@ def fail(item, error):
     db.session.commit()
 
 
-def process_pending(limit=25, kinds=None, now=None, user_id=None, stop_on_failure=False):
+#: The worker service's runs (process-external-work) claim no new item after this long. Its unit
+#: ends a run after 600 seconds (install.sh), and the longest item -- a legal text's translation
+#: -- takes at most 420 (services/translation.py, JOB_SECONDS): 150 + 420 is within, with room.
+OUTBOX_CLAIM_SECONDS = 150
+
+#: Read for how long a run has been claiming; a name of its own, for the tests.
+_clock = time.monotonic
+
+
+def process_pending(limit=25, kinds=None, now=None, user_id=None, stop_on_failure=False, claim_for=None):
     """Run due work items. Returns (completed, failed).
 
     Safe to run concurrently with itself: each item is claimed before it runs.
     ``stop_on_failure``: the first failure ends the run -- the remote end is
     down or asks us to slow down, and the worker's retries take it from there.
+    ``claim_for``: seconds after which no further item is claimed -- a run with a
+    time limit of its own (the worker service) then still ends in time; the rest
+    waits for the next run.
     """
     completed = failed = 0
+    started = _clock()
     for _ in range(limit):
+        if claim_for is not None and _clock() - started > claim_for:
+            break
         item = claim_next(kinds=kinds, now=now, user_id=user_id)
         if item is None:
             break

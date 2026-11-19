@@ -226,7 +226,7 @@ class TestTheEnglishView:
 
         state = {"sent": [], "failures": [], "fail": None}
 
-        def fake(blocks, as_html, current, only=None, context="", patient=False):
+        def fake(blocks, as_html, current, only=None, context="", patient=False, patience=None):
             if state["fail"]:
                 raise translation.TranslationUnavailable(state["fail"])
             state["sent"].extend(blocks)

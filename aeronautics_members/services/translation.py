@@ -107,8 +107,13 @@ REQUEST_SECONDS = 45
 LLM_BATCH_CHARACTERS = 60_000
 LLM_BATCH_TEXTS = 1_000
 LLM_MAX_TOKENS = 64_000
-#: How long one request may take in the background (a local model is slow).
+#: How long one request may take in the background (a local model is slow) -- within JOB_SECONDS.
 LLM_TIMEOUT_SECONDS = 600
+#: How long a translation in the background may take in all, waits and requests together: what is
+#: not done by then goes to the next service. Below the outbox's lease (10 minutes: another worker
+#: would take the job over) and the worker service's 600 seconds (process-external-work claims no
+#: new job after OUTBOX_CLAIM_SECONDS, so a run with one of these ends in time).
+JOB_SECONDS = 420
 #: A longer text's portions asked at once.
 LLM_AT_ONCE = 6
 #: How much a model thinks before answering (Anthropic's effort): a legal text is worth it.
@@ -283,19 +288,24 @@ def translate(texts, *, as_html=True, context="", patient=False, report=None, on
         db.select(Translation).where(Translation.source_hash.in_(set(keys)))).scalars()} if keys else {}
     known = {key: row.target for key, row in rows.items()}
     missing = list(dict.fromkeys(text for text, key in zip(texts, keys) if key not in known and text.strip()))
+    first = (configured(current) or [None])[0]
+    # Made by a later service before this translation -- while the first failed, some time ago.
+    # Not what a fallback makes just now: the first has just failed at it.
+    earlier = {key for key, row in rows.items() if row.service != first}
+    patience = _Patience(patient)  # one time for all of this translation's requests
     failures = []
     if missing and not only_kept:
-        made, failures = _by_a_service(missing, as_html, current, context=context, patient=patient)
+        made, failures = _by_a_service(missing, as_html, current, context=context, patient=patient,
+                                       patience=patience)
         _keep(missing, made, as_html, current, rows)
-    first = (configured(current) or [None])[0]
     if patient and first and not only_kept:
-        # Publishing: a paragraph a later service made -- in the editor, against the clock, or
-        # while the first one failed -- is given to the first once more. Failing again, it stays.
-        again = list(dict.fromkeys(text for text, key in zip(texts, keys)
-                                   if key in rows and rows[key].service != first and text.strip()))
+        # In the background: a paragraph a later service made earlier is given to the first once
+        # more. Failing again, it stays.
+        again = list(dict.fromkeys(text for text, key in zip(texts, keys) if key in earlier and text.strip()))
         if again:
             try:
-                made, _none = _by_a_service(again, as_html, current, only=first, context=context, patient=True)
+                made, _none = _by_a_service(again, as_html, current, only=first, context=context, patient=True,
+                                            patience=patience)
                 _keep(again, made, as_html, current, rows)
             except TranslationUnavailable as exc:
                 failures.append(str(exc))
@@ -362,27 +372,23 @@ class _Patience:
     def __init__(self, patient):
         self.left = WAIT_MAX_SECONDS if patient else 0
         self.sent = deque()  # (when, characters)
-        #: In a page's request: by when the answers must be there, for all of its translating
-        #: together (REQUEST_SECONDS).
-        self.until = None
-        if not patient:
-            self.until = _clock() + REQUEST_SECONDS
-            if has_request_context():
-                self.until = g.setdefault("translation_until", self.until)
+        #: By when the answers must be there, for all of a translation together: in a page's
+        #: request REQUEST_SECONDS, in the background JOB_SECONDS.
+        self.until = _clock() + (JOB_SECONDS if patient else REQUEST_SECONDS)
+        if not patient and has_request_context():
+            self.until = g.setdefault("translation_until", self.until)
 
     def time_for(self, most):
-        """How long the next request may take: ``most``, or what is left of a page's request --
-        too little left, and the next service gets the rest."""
-        if self.until is None:
-            return most
+        """How long the next request may take: ``most``, or what is left of the time -- too little
+        left, and the next service gets the rest."""
         left = self.until - _clock()
         if left < 5:
-            raise _ServiceError("no time left in this request; the rest by the next service")
+            raise _ServiceError("no time left; the rest by the next service")
         return min(most, left)
 
     def wait(self, seconds):
         seconds = max(1, min(seconds, 120))
-        if seconds > self.left:
+        if seconds > self.left or _clock() + seconds > self.until:
             return False
         self.left -= seconds
         _sleep(seconds)
@@ -401,12 +407,14 @@ class _Patience:
         self.sent.append((_clock(), characters))
 
 
-def _by_a_service(texts, as_html, current, only=None, context="", patient=False):
-    """``([(english, service), …], failures)``: each portion by the first service that translates it."""
+def _by_a_service(texts, as_html, current, only=None, context="", patient=False, patience=None):
+    """``([(english, service), …], failures)``: each portion by the first service that translates it.
+    ``patience``: the time and waits of a translation that asks more than once (``translate``)."""
     services = [only] if only else configured(current)
     if not services:
         raise TranslationUnavailable("No translation service is set up (Settings › Translation).")
-    done, left, reasons, patience = {}, list(range(len(texts))), [], _Patience(patient)
+    done, left, reasons = {}, list(range(len(texts))), []
+    patience = patience or _Patience(patient)
     for name in services:
         left, failure = _with_service(name, texts, left, done, as_html, current, context, patience)
         if failure is not None:

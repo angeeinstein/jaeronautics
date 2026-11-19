@@ -538,7 +538,7 @@ class TestTheEnglishOfAVersion:
         set_setting_value(translation.DEEPL_KEY, "key:fx")
         state = {"round": 1, "sent": []}
 
-        def by_a_service(asked, as_html, current, only=None, context="", patient=False):
+        def by_a_service(asked, as_html, current, only=None, context="", patient=False, patience=None):
             state["sent"] += asked
             state["patient"] = patient
             return ([(f"{text} [round {state['round']}]", state.get("by", "deepl")) for text in asked],

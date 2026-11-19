@@ -645,6 +645,30 @@ class TestALanguageModel:
         assert english == ["[LLM] <p>Eins.</p>"] and report["services"] == {"llm"}
         assert db.session.query(Translation).one().service == "llm"
 
+    def test_what_a_fallback_made_just_now_not_given_to_the_first_again(self, services):
+        # The first service has just failed at it: asking it again at once spends its time twice
+        # (Codex, #85). Only what a fallback made earlier gets another try.
+        _set_up_llm()
+        services.failing.add("llm")
+
+        translation.translate(["<p>Eins.</p>"], patient=True)
+
+        # Asked once (and failing), DeepL once -- not the model a second time.
+        assert len([call for call in services.calls if call[0].endswith("/chat/completions")]) == 1
+        assert len([call for call in services.calls if call[0].endswith("/v2/translate")]) == 1
+
+    def test_in_the_background_a_translation_ends_in_time(self, services, monkeypatch):
+        # The outbox gives a job to another worker after ten minutes, and the worker service ends
+        # a run after 600 seconds: a translation in the background takes at most JOB_SECONDS.
+        _set_up_llm()
+        ticks = iter([0.0])
+        monkeypatch.setattr(translation, "_clock", lambda: next(ticks, translation.JOB_SECONDS - 2.0))
+        monkeypatch.setattr(translation, "_ask_openai", lambda *_a: pytest.fail("asked without time"))
+        report = {}
+
+        assert translation.translate(["<p>Eins.</p>"], patient=True, report=report) == ["[DeepL] <p>Eins.</p>"]
+        assert "no time left" in report["failures"][0]
+
     def test_publishing_keeps_the_fallbacks_when_the_first_fails_again(self, services):
         _set_up_llm()
         services.failing.add("llm")

@@ -174,6 +174,7 @@ from .permissions import (  # noqa: E402
 from .services.diagnostics import collect_system_health  # noqa: E402
 from .services.system_update import describe_update_state  # noqa: E402
 from .services.outbox import (  # noqa: E402
+    OUTBOX_CLAIM_SECONDS,
     failed_items,
     pending_count,
     process_pending,
@@ -4454,7 +4455,9 @@ def create_app(config_overrides=None):
         # Stripe's books, fetched at least hourly even when no webhook said so.
         if _stripe_books.request_sync_if_due() is not None:
             db.session.commit()
-        completed, failed = process_pending(limit=limit)
+        # The service ends a run after 600 seconds (install.sh): no job is claimed after
+        # OUTBOX_CLAIM_SECONDS, and none takes longer than a translation's JOB_SECONDS.
+        completed, failed = process_pending(limit=limit, claim_for=OUTBOX_CLAIM_SECONDS)
         outstanding = pending_count()
         click.echo(f"External work: {completed} completed, {failed} failed, {outstanding} still queued.")
 

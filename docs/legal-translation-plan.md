@@ -199,6 +199,12 @@ cents a text.
   cleaning as every service's answer. Anthropic's models are asked to think
   hard (effort "high"; an older model without it, asked without), and the
   instructions ask for one English form per term, body and role.
+- **Time limits in the background** (Codex, #85): a translation takes at most
+  7 minutes in all (`JOB_SECONDS`), waits and requests together -- the
+  outbox gives a job to another worker after 10, the worker service ends a
+  run after 600 seconds, and its runs claim no new job after 150
+  (`OUTBOX_CLAIM_SECONDS`). And only what a fallback made *earlier* is given
+  to the first service again, not what it made a moment ago in the same run.
 - Before that, a language model's portions were sent **all at once** and the title goes
   with the text, as a heading (tried on the TDT rules, 2026-11-19: one
   portion after another, the model managed § 1 to § 13 within the editor's
