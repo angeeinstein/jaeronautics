@@ -153,7 +153,10 @@ def team_manage(slug, section=None):
     (frontend/src/pages/teams/manage/). An old link to a tab
     (``#manage-applying``) opens that section's page."""
     team = _team_or_404(slug)
-    _may(team, teams_service.TeamPermission.VIEW_MEMBERS)
+    # Each page asks what its data asks (api/team_manage.py): the team's page and joining are
+    # settings, the rest is about people.
+    settings = section in ("page", "applying")
+    _may(team, teams_service.TeamPermission.EDIT_SETTINGS if settings else teams_service.TeamPermission.VIEW_MEMBERS)
     return app_shell()
 
 

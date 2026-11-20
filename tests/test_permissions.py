@@ -320,3 +320,23 @@ class TestAnExceptionThatFlips:
 
         assert saved.status_code == 200 and admin.can(Permission.CARDS_MANAGE)
         assert (Permission.CARDS_MANAGE, True) in [(row.permission, row.granted) for row in admin.permission_exceptions]
+
+
+class TestTheLastGranter:
+    def test_is_not_erased(self, client):
+        # Granting can be held without updating: erasing its last holder would leave nobody to give access.
+        from aeronautics_members.services import privacy
+
+        boss = _user("boss@example.org", "superadmin")
+        granter = _user("granter@example.org")
+        _login(client, boss)
+        _set(client, granter, [], {Permission.ROLES_MANAGE})
+        _user("auditor@example.org", "auditor")  # the workspace still has somebody
+        boss.disabled_at = get_now_utc()  # no longer cover
+        db.session.commit()
+
+        impact = privacy.describe_deletion_impact(granter, actor_user=None)
+
+        assert "last_granter" in impact["blockers"]
+        with pytest.raises(Exception, match="only account that can grant permissions"):
+            privacy.erase_account(granter, initiated_by=privacy.INITIATED_BY_MEMBER)

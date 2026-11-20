@@ -217,3 +217,17 @@ class TestRolesWithinWhatOneHolds:
         refused = send(client, "DELETE", f"{API}/leads/{lead.id}")
 
         assert refused.status_code == 409 and teams.can_in_team(lead, team, P.MESSAGES)
+
+
+@pytest.mark.usefixtures("switched_on")
+class TestThePagesFollowTheirPermission:
+    def test_settings_alone_opens_the_team_page_and_joining(self, app, client):
+        team, lead = _led()
+        anna = _member(team)
+        teams.set_team_member_permissions(lead, team, anna, {P.EDIT_SETTINGS})
+        db.session.commit()
+        _login(client, anna.id)
+
+        assert client.get("/teams/rocket/manage/page").status_code == 200
+        assert client.get("/teams/rocket/manage/applying").status_code == 200
+        assert client.get("/teams/rocket/manage/members").status_code == 403

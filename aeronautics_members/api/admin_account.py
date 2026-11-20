@@ -476,6 +476,8 @@ ERASURE_BLOCKERS = {
     "last_admin": "This is the only administrator account left. Give another account an admin role first.",
     "last_superadmin": "This is the only account that can install updates. Give another account the Super Admin "
                        "role first.",
+    "last_granter": "This is the only account that can grant permissions. Give another account Grant permissions "
+                    "first.",
     "holds_more": "This account holds permissions you do not. Only somebody who holds all of them can erase it.",
 }
 
