@@ -356,7 +356,7 @@ PERMISSION_ROWS = (
     PermissionRow("privacy", "Members", "Data and erasure", "Export a member's data, erase accounts.",
                   (act("Manage", _P.ACCOUNTS_PRIVACY),), sensitive=True),
     PermissionRow("permissions", "Members", "Permissions",
-                  "Give and take roles and permissions -- only those one holds.",
+                  "Give and take roles and permissions, only those one holds.",
                   (act("Grant", _P.ROLES_MANAGE),), sensitive=True),
     PermissionRow("teams", "Teams and money", "Teams",
                   "Create teams, appoint their leads, open every team's page.",

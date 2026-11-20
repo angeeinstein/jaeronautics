@@ -179,7 +179,7 @@ TEAM_PERMISSION_ROWS = (
     PermissionRow("treasurer", "Roles and permissions", "Treasurer", "Appoint and dismiss the treasurer.",
                   (act("Appoint", TeamPermission.APPOINT_TREASURER),)),
     PermissionRow("permissions", "Roles and permissions", "Permissions",
-                  "Change members' permissions -- only those one holds.",
+                  "Change members' permissions, only those one holds.",
                   (act("Change", TeamPermission.PERMISSIONS),)),
     PermissionRow("money", "Money", "Money", "View: what the team earned and was paid. Manage: its bank details.",
                   (view("View", TeamPermission.VIEW_MONEY), act("Manage", TeamPermission.EDIT_BANK_DETAILS))),
