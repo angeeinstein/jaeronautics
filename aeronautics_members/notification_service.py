@@ -1307,18 +1307,10 @@ class NotificationService:
         Erased accounts are excluded; their address is a placeholder on a domain
         that cannot resolve, so every digest to one would bounce.
         """
-        slugs = roles_with(Permission.NOTIFICATIONS_RECEIVE)
-        if not slugs:
-            return []
-        return db.session.execute(
-            db.select(User.email)
-            .where(
-                User.email_verified_at.is_not(None),
-                User.deleted_at.is_(None),
-                User.roles.any(Role.slug.in_(slugs)),
-            )
-            .order_by(User.email.asc())
-        ).scalars().all()
+        from .services.access import holder_emails
+
+        # Person by person: a role no longer says who holds it (permissions added or taken away).
+        return holder_emails(Permission.NOTIFICATIONS_RECEIVE)
 
 
 

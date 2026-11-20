@@ -64,7 +64,7 @@ class TeamFundsOut(Model):
 
 
 def _money_team(slug):
-    if current_user.can(Permission.TEAMS_MONEY):
+    if current_user.can(Permission.TEAMS_MONEY_VIEW):
         try:
             team = teams_service.get_team(slug)
         except ServiceError:

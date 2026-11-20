@@ -33,9 +33,9 @@ from email.utils import make_msgid
 from flask import current_app
 
 from ..config import MEMBERSHIP_TIMEZONE
-from ..db_models import ContactMessage, ContactReply, Role, User, db
+from ..db_models import ContactMessage, ContactReply, db
 from ..mail_utils import send_mail
-from ..permissions import Permission, roles_with
+from ..permissions import Permission
 from ..security_utils import build_public_url
 from . import NotFoundError, ValidationError
 from .audit import log_audit_event
@@ -90,26 +90,19 @@ def _not_a_bot(trap, seconds):
 
 
 def admin_recipients():
-    """Everybody who receives the contact form's messages: verified, not erased."""
-    slugs = roles_with(Permission.MESSAGES_RECEIVE)
-    if not slugs:
-        return []
-    return list(db.session.execute(
-        db.select(User.email).where(
-            User.email_verified_at.is_not(None),
-            User.deleted_at.is_(None),
-            User.disabled_at.is_(None),
-            User.roles.any(Role.slug.in_(slugs)),
-        ).order_by(User.email)
-    ).scalars())
+    """Everybody who receives the contact form's messages: verified, not erased, not switched off."""
+    from .access import holder_emails
+
+    return holder_emails(Permission.MESSAGES_RECEIVE, include_disabled=False)
 
 
 def team_recipients(team):
-    """The team's leads in force; with none, the admins."""
-    from .teams import ROLE_LEAD, role_counts, role_holders
+    """Whoever reads the team's messages there (the leads, unless taken away; a member given it);
+    with nobody, the admins."""
+    from .teams import TeamPermission, team_holders
 
-    leads = [team_role.user.email for team_role in role_holders(team, ROLE_LEAD) if role_counts(team_role)]
-    return leads or admin_recipients()
+    readers = [user.email for user in team_holders(team, TeamPermission.MESSAGES) if user.email]
+    return readers or admin_recipients()
 
 
 def sender_of(user):

@@ -88,6 +88,23 @@ describe('admin: credit', () => {
     expect(screen.getByText('Balances that do not add up')).toBeInTheDocument();
   });
 
+  it('an auditor sees the person’s credit and changes nothing', async () => {
+    const auditor = makeMe({
+      credit_admin: true,
+      permissions: ['admin.access', 'credit.view', 'teams.money.view'],
+    });
+    mockFetch({ ...base, '/api/v1/me': { body: auditor }, '/api/v1/admin/credit/3': { body: holder } });
+    // Who is signed in comes first, as on the real page, so the absence below is not too early.
+    function Signed() {
+      return useMe().data ? <Holder /> : null;
+    }
+    renderPage(<Signed />, { route: '/admin/credit/3', path: '/admin/credit/:userId' });
+
+    expect(await screen.findByText('Booked by Tom Treasurer')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Refund/ })).toBeNull();
+    expect(screen.queryByLabelText('Amount')).toBeNull();
+  });
+
   it('one person: booking cash, and refunding on the second click', async () => {
     const { calls } = mockFetch({
       ...base,
@@ -101,7 +118,7 @@ describe('admin: credit', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Anna Berger' })).toBeInTheDocument();
     expect(screen.getByText('Booked by Tom Treasurer')).toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText('Amount'), '5');
+    await userEvent.type(await screen.findByLabelText('Amount'), '5');
     await userEvent.click(screen.getByRole('button', { name: 'Book' }));
     await waitFor(() => {
       expect(calls.some((call) => call.method === 'POST' && call.url.endsWith('/cash'))).toBe(true);

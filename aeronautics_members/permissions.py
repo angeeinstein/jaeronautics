@@ -23,7 +23,7 @@ Two deliberate consequences:
   future role also carries it.
 """
 
-
+from dataclasses import dataclass
 class Permission:
     """Capability names. Referenced from routes, templates and guards."""
 
@@ -68,11 +68,20 @@ class Permission:
     # What a lead may do inside their own team is not a global permission: it
     # is in services/teams.py, because it holds for one team only.
     TEAMS_MANAGE = "teams.manage"
+    # Every team's money -- figures, payouts, bank details, Stripe's book (Admin
+    # › Money) -- seen, and, separately, acted on: transfers recorded, bank
+    # details changed. Seeing is for auditors (docs/permissions-plan.md).
+    TEAMS_MONEY_VIEW = "teams.money.view"
     TEAMS_MONEY = "teams.money"
-    # Everybody's credit: balances and history, cash booked by hand,
-    # corrections, refunds. Settings for credit are settings.general.
+    # Everybody's credit: balances and history seen, and, separately, cash
+    # booked by hand, corrections, refunds. Settings for credit are
+    # settings.general.
+    CREDIT_VIEW = "credit.view"
     CREDIT_MANAGE = "credit.manage"
-    # The contact form's messages: emailed to its holders, and Admin › Messages.
+    # The contact form's messages: read and answered in Admin › Messages, and,
+    # separately, emailed as they come -- somebody may answer the support
+    # messages without their inbox filling up, or without other admin rights.
+    MESSAGES_ANSWER = "messages.answer"
     MESSAGES_RECEIVE = "messages.receive"
     # Emails to many members: Admin › Announcements (docs/messages-plan.md).
     ANNOUNCEMENTS_SEND = "announcements.send"
@@ -93,8 +102,70 @@ class Permission:
 # To add a role: add an entry, grant it to somebody, done. seed_default_roles()
 # creates the row from this table on the next start, and every existing check
 # starts honouring it without being touched.
+#: Every permission there is.
+ALL_PERMISSIONS = frozenset(value for name, value in vars(Permission).items() if name.isupper())
+
+#: What a permission needs to be any use. Held, it brings these with it; one of them taken
+#: away, it goes too. Every permission of the admin workspace needs the workspace.
+NEEDS = {
+    permission: frozenset({Permission.ADMIN_ACCESS})
+    for permission in ALL_PERMISSIONS - {
+        Permission.ADMIN_ACCESS,
+        # Being emailed, and the forum's own flags: nothing in the workspace.
+        Permission.NOTIFICATIONS_RECEIVE, Permission.FORUM_ADMIN, Permission.FORUM_MODERATOR,
+    }
+}
+# Changing something needs seeing it -- the maintainer, 2026-11-19: "every writing permission
+# also requires the reading permission ... otherwise this doesn't make sense".
+for _needing, _needed in (
+    (Permission.TEAMS_MONEY, Permission.TEAMS_MONEY_VIEW),
+    (Permission.CREDIT_MANAGE, Permission.CREDIT_VIEW),
+    (Permission.MESSAGES_RECEIVE, Permission.MESSAGES_ANSWER),
+    (Permission.LEGAL_PUBLISH, Permission.LEGAL_TEXTS),
+    # Done on a member's account page, which needs seeing the accounts.
+    (Permission.ACCOUNTS_BILLING, Permission.ACCOUNTS_VIEW),
+    (Permission.ACCOUNTS_PRIVACY, Permission.ACCOUNTS_VIEW),
+    (Permission.ROLES_MANAGE, Permission.ACCOUNTS_VIEW),
+):
+    NEEDS[_needing] = NEEDS[_needing] | {_needed}
+# An administrator on the forum is a moderator there too: one row, two levels.
+NEEDS[Permission.FORUM_ADMIN] = frozenset({Permission.FORUM_MODERATOR})
+
+
+def with_needs(permissions):
+    """``permissions`` and everything they need."""
+    granted = set(permissions)
+    while True:
+        more = set().union(*(NEEDS.get(permission, ()) for permission in granted)) - granted
+        if not more:
+            return granted
+        granted |= more
+
+
+def without_unmet(permissions):
+    """``permissions`` less any whose needs are not all among them."""
+    granted = set(permissions)
+    while True:
+        unmet = {permission for permission in granted if not NEEDS.get(permission, frozenset()) <= granted}
+        if not unmet:
+            return granted
+        granted -= unmet
+
+
+#: Full trust: holds every permission, those added later too, and takes no exceptions -- whoever
+#: installs updates, downloads backups and grants permissions could undo any restriction
+#: (docs/permissions-plan.md). Only a super admin makes somebody one.
+SUPERADMIN = "superadmin"
+
+# Roles, and what each one may do: templates. A person holds roles, plus exceptions --
+# permissions added or taken away (UserPermission) --, and a permission added to a role here
+# reaches everybody holding it.
+#
+# To add a role: add an entry, grant it to somebody, done. seed_default_roles()
+# creates the row from this table on the next start, and every existing check
+# starts honouring it without being touched.
 ROLE_PERMISSIONS = {
-    "admin": frozenset({
+    "admin": frozenset(with_needs({
         Permission.ADMIN_ACCESS,
         Permission.ACCOUNTS_VIEW,
         Permission.ACCOUNTS_BILLING,
@@ -105,6 +176,9 @@ ROLE_PERMISSIONS = {
         Permission.NOTIFICATIONS_MANAGE,
         Permission.NOTIFICATIONS_RECEIVE,
         Permission.SETTINGS_GENERAL,
+        # The day-to-day of access is the board's, not the super admin's (2026-11-19): admins
+        # grant permissions, within what they hold themselves.
+        Permission.ROLES_MANAGE,
         Permission.TEAMS_MANAGE,
         Permission.TEAMS_MONEY,
         Permission.CREDIT_MANAGE,
@@ -118,37 +192,10 @@ ROLE_PERMISSIONS = {
         # order on the forum -- decided 2026-09-26. Nobody is made an admin
         # here who would not be trusted with that.
         Permission.FORUM_MODERATOR,
-    }),
-    "superadmin": frozenset({
-        Permission.ADMIN_ACCESS,
-        Permission.ACCOUNTS_VIEW,
-        Permission.ACCOUNTS_BILLING,
-        Permission.ACCOUNTS_PRIVACY,
-        Permission.APPROVALS_REVIEW,
-        Permission.FORUM_MODERATE,
-        Permission.LOGS_VIEW,
-        Permission.NOTIFICATIONS_MANAGE,
-        Permission.NOTIFICATIONS_RECEIVE,
-        Permission.SETTINGS_GENERAL,
-        Permission.SETTINGS_CREDENTIALS,
-        Permission.SYSTEM_UPDATE,
-        Permission.SYSTEM_BACKUP,
-        Permission.ROLES_MANAGE,
-        Permission.TEAMS_MANAGE,
-        Permission.TEAMS_MONEY,
-        Permission.CREDIT_MANAGE,
-        Permission.MESSAGES_RECEIVE,
-        Permission.ANNOUNCEMENTS_SEND,
-        Permission.DEVICES_MANAGE,
-        Permission.CARDS_MANAGE,
-        Permission.LEGAL_TEXTS,
-        Permission.LEGAL_PUBLISH,
-        Permission.FORUM_MODERATOR,
-        # Everything on the forum as well. A Discourse admin can change any
-        # site setting and make API keys, which is the forum's equivalent of
-        # holding the credentials here.
-        Permission.FORUM_ADMIN,
-    }),
+    })),
+    # Everything, the forum too: a Discourse admin can change any site setting and make API
+    # keys, which is the forum's equivalent of holding the credentials here.
+    SUPERADMIN: ALL_PERMISSIONS,
     # Moderates the forum -- flags, editing and moving posts, silencing -- and
     # nothing in this portal. No admin workspace, no member data: somebody
     # keeping a lecture category tidy has no reason to see who has paid.
@@ -158,12 +205,32 @@ ROLE_PERMISSIONS = {
     # The association's treasurer: every team's money and bank account, and
     # recording what was transferred; members' credit and the cash they hand
     # over -- no members, settings or anything else.
-    "treasurer": frozenset({
+    "treasurer": frozenset(with_needs({
         Permission.ADMIN_ACCESS,
         Permission.TEAMS_MONEY,
         Permission.CREDIT_MANAGE,
-    }),
+    })),
+    # The association's auditors (VerG § 5 (5); the university's, here): every team's money,
+    # Stripe's book and members' credit, seen -- nothing changed.
+    "auditor": frozenset(with_needs({
+        Permission.TEAMS_MONEY_VIEW,
+        Permission.CREDIT_VIEW,
+    })),
 }
+
+
+def effective_permissions(role_slugs, added=(), taken=()):
+    """What a person may do: their roles' permissions, plus those added, less those taken away,
+    each with what it needs. A super admin holds everything and takes no exceptions."""
+    slugs = set(role_slugs)
+    if SUPERADMIN in slugs:
+        return set(ALL_PERMISSIONS)
+    granted = without_unmet(with_needs(permissions_for(slugs) | set(added)) - set(taken))
+    # The workspace comes with what is done in it: on its own it opens an empty dashboard.
+    if not any(Permission.ADMIN_ACCESS in NEEDS.get(permission, ()) for permission in granted):
+        granted.discard(Permission.ADMIN_ACCESS)
+    return granted
+
 
 ROLE_LABELS = {
     "admin": (
@@ -173,8 +240,12 @@ ROLE_LABELS = {
     ),
     "superadmin": (
         "Super Admin",
-        "Can install updates, manage credentials and grant administrator access. "
-        "Also an administrator on the forum itself.",
+        "Holds every permission, those added later too, and takes no exceptions: the server, updates, "
+        "backups and credentials. Also an administrator on the forum itself.",
+    ),
+    "auditor": (
+        "Auditor",
+        "Sees every team's money, Stripe's book and members' credit, to check them. Changes nothing.",
     ),
     "treasurer": (
         "Treasurer",
@@ -198,35 +269,143 @@ PROTECTED_PERMISSIONS = {
 }
 
 
-# Short descriptions for showing what an account can actually do, which is the
-# only question a role list is really being asked.
-PERMISSION_LABELS = {
-    Permission.ADMIN_ACCESS: "Open the admin workspace",
-    Permission.ACCOUNTS_VIEW: "See member accounts",
-    Permission.ACCOUNTS_BILLING: "Re-sync a member's billing with Stripe",
-    Permission.ACCOUNTS_PRIVACY: "Export a member's data and erase accounts",
-    Permission.APPROVALS_REVIEW: "Approve profile change requests",
-    Permission.FORUM_MODERATE: "Moderate the forum and avatars",
-    Permission.LOGS_VIEW: "Read the audit log",
-    Permission.NOTIFICATIONS_MANAGE: "Send test email and resolve undelivered email",
-    Permission.NOTIFICATIONS_RECEIVE: "Receive the admin notification emails",
-    Permission.SETTINGS_GENERAL: "Change general and notification settings",
-    Permission.SETTINGS_CREDENTIALS: "Read and change the Stripe, Discourse and SMTP credentials",
-    Permission.FORUM_ADMIN: "Be an administrator on the forum itself",
-    Permission.FORUM_MODERATOR: "Be a moderator on the forum itself",
-    Permission.SYSTEM_UPDATE: "Install a new version and roll one back",
-    Permission.SYSTEM_BACKUP: "Make and download encrypted backups, and resume background jobs after a restore",
-    Permission.ROLES_MANAGE: "Grant and revoke access for other people",
-    Permission.TEAMS_MANAGE: "Create teams, appoint their leads, and open every team's page",
-    Permission.TEAMS_MONEY: "See every team's money, record transfers to teams and change their bank details",
-    Permission.CREDIT_MANAGE: "See everybody's credit, book cash, corrections and refunds",
-    Permission.MESSAGES_RECEIVE: "Receive and read the contact form's messages",
-    Permission.ANNOUNCEMENTS_SEND: "Send announcements to the members",
-    Permission.DEVICES_MANAGE: "Add card readers and other devices, and manage their keys",
-    Permission.CARDS_MANAGE: "Link, block and remove anybody's cards",
-    Permission.LEGAL_TEXTS: "Write the legal texts and the teams' rules: upload, edit and delete drafts",
-    Permission.LEGAL_PUBLISH: "Publish the legal texts and the teams' rules, and correct them",
-}
+@dataclass(frozen=True)
+class Level:
+    """One step of a row on the *Access* tab: its word, and what it adds to the steps below."""
+
+    label: str
+    permissions: frozenset
+    #: Only shows; changes nothing. Drawn tinted rather than filled.
+    sees_only: bool = False
+
+
+@dataclass(frozen=True)
+class PermissionRow:
+    """One thing on the *Access* tab, with its levels -- "None · View · Manage", "None · Install"
+    (docs/permissions-plan.md, "The page with levels"). A higher level includes the lower ones."""
+
+    key: str
+    area: str
+    label: str
+    description: str
+    levels: tuple
+    #: Could be used to gain more rights, or cannot be undone: marked on the page.
+    sensitive: bool = False
+
+    def at(self, level):
+        """Everything held at ``level`` (0: none)."""
+        return frozenset().union(*(step.permissions for step in self.levels[:level]))
+
+    def level_of(self, held):
+        """The highest level whose permissions are all in ``held``."""
+        level = 0
+        for index in range(1, len(self.levels) + 1):
+            if not self.at(index) <= held:
+                break
+            level = index
+        return level
+
+    @property
+    def permissions(self):
+        return self.at(len(self.levels))
+
+
+def view(label, *permissions):
+    return Level(label, frozenset(permissions), sees_only=True)
+
+
+def act(label, *permissions):
+    return Level(label, frozenset(permissions))
+
+
+def needs_by_level(rows, needs, *, implied=()):
+    """For each row, for each level: the levels of other rows it needs, ``{row key: level}``,
+    from what its permissions need (``needs``). ``implied`` comes by itself and is left out."""
+    where = {}
+    for row in rows:
+        for index, step in enumerate(row.levels, start=1):
+            for permission in step.permissions:
+                where[permission] = (row.key, index)
+    result = {}
+    for row in rows:
+        per_level = []
+        for index, step in enumerate(row.levels, start=1):
+            wanted = {}
+            for permission in row.at(index):
+                for needed in needs.get(permission, ()):
+                    if needed in implied or needed in row.at(index):
+                        continue
+                    key, level = where[needed]
+                    wanted[key] = max(wanted.get(key, 0), level)
+            per_level.append(wanted)
+        result[row.key] = per_level
+    return result
+
+
+_P = Permission
+#: Every permission on the *Access* tab, as rows with levels, by area. The workspace itself
+#: (``admin.access``) is no row: it comes with any of these.
+PERMISSION_ROWS = (
+    PermissionRow("accounts", "Members", "Member accounts", "Profiles, memberships, teams and activity.",
+                  (view("View", _P.ACCOUNTS_VIEW),)),
+    PermissionRow("approvals", "Members", "Profile changes",
+                  "Approve or decline what members ask to change, and their photos.",
+                  (act("Approve", _P.APPROVALS_REVIEW),)),
+    PermissionRow("billing", "Members", "Billing", "Re-sync a member's billing with Stripe.",
+                  (act("Re-sync", _P.ACCOUNTS_BILLING),)),
+    PermissionRow("privacy", "Members", "Data and erasure", "Export a member's data, erase accounts.",
+                  (act("Manage", _P.ACCOUNTS_PRIVACY),), sensitive=True),
+    PermissionRow("permissions", "Members", "Permissions",
+                  "Give and take roles and permissions, only those one holds.",
+                  (act("Grant", _P.ROLES_MANAGE),), sensitive=True),
+    PermissionRow("teams", "Teams and money", "Teams",
+                  "Create teams, appoint their leads, open every team's page.",
+                  (act("Manage", _P.TEAMS_MANAGE),)),
+    PermissionRow("team_money", "Teams and money", "Team money",
+                  "View: figures, payouts, bank details, Stripe's book. "
+                  "Manage: record transfers, change bank details.",
+                  (view("View", _P.TEAMS_MONEY_VIEW), act("Manage", _P.TEAMS_MONEY))),
+    PermissionRow("credit", "Teams and money", "Credit",
+                  "View: balances, history, sales. Manage: cash, corrections, refunds, the price list.",
+                  (view("View", _P.CREDIT_VIEW), act("Manage", _P.CREDIT_MANAGE))),
+    PermissionRow("messages", "Messages", "Contact messages",
+                  "Read and answer what is sent through the contact form.",
+                  (act("Answer", _P.MESSAGES_ANSWER),)),
+    PermissionRow("announcements", "Messages", "Announcements", "Write to all members.",
+                  (act("Send", _P.ANNOUNCEMENTS_SEND),)),
+    PermissionRow("delivery", "Messages", "Email delivery", "Send a test email, resolve undelivered ones.",
+                  (act("Manage", _P.NOTIFICATIONS_MANAGE),)),
+    PermissionRow("legal", "Legal texts", "Legal texts and team rules",
+                  "Draft: write, upload and delete drafts. Publish: put them in force, correct them.",
+                  (act("Draft", _P.LEGAL_TEXTS), act("Publish", _P.LEGAL_PUBLISH))),
+    PermissionRow("cards", "Cards and devices", "Cards", "Link, block and remove anybody's cards.",
+                  (act("Manage", _P.CARDS_MANAGE),)),
+    PermissionRow("devices", "Cards and devices", "Devices",
+                  "Add card readers and other devices, manage their keys.",
+                  (act("Manage", _P.DEVICES_MANAGE),)),
+    PermissionRow("forum_moderation", "Forum", "Moderation", "Flags and avatars, from the portal.",
+                  (act("Moderate", _P.FORUM_MODERATE),)),
+    PermissionRow("forum_role", "Forum", "On the forum itself", "A moderator or an administrator there.",
+                  (act("Moderator", _P.FORUM_MODERATOR), act("Administrator", _P.FORUM_ADMIN))),
+    PermissionRow("audit", "System", "Audit log", "Who did what, and when.",
+                  (view("View", _P.LOGS_VIEW),)),
+    PermissionRow("general", "System", "General settings",
+                  "The association's details, notifications, credit.",
+                  (act("Manage", _P.SETTINGS_GENERAL),)),
+    PermissionRow("credentials", "System", "Credentials", "Stripe, Discourse and mail keys.",
+                  (act("Manage", _P.SETTINGS_CREDENTIALS),), sensitive=True),
+    PermissionRow("updates", "System", "Updates", "Install a new version, roll one back.",
+                  (act("Install", _P.SYSTEM_UPDATE),), sensitive=True),
+    PermissionRow("backups", "System", "Backups",
+                  "Make and download encrypted backups, resume background jobs after a restore.",
+                  (act("Manage", _P.SYSTEM_BACKUP),), sensitive=True),
+    PermissionRow("contact_emails", "Emails", "Contact messages by email", "Each new contact message.",
+                  (act("Receive", _P.MESSAGES_RECEIVE),)),
+    PermissionRow("admin_emails", "Emails", "Admin notifications by email",
+                  "Errors, review tasks, money differences.",
+                  (act("Receive", _P.NOTIFICATIONS_RECEIVE),)),
+)
+PERMISSION_ROW_NEEDS = needs_by_level(PERMISSION_ROWS, NEEDS, implied={Permission.ADMIN_ACCESS})
 
 
 def permissions_for(role_slugs):

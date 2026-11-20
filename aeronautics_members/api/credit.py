@@ -23,6 +23,8 @@ from ..services.teams import is_active_association_member
 from ._core import Model, UtcDateTime, endpoint
 
 TAG = "Credit"
+#: Seeing everybody's credit (an auditor), and booking on it.
+VIEW = [Permission.CREDIT_VIEW]
 MANAGE = [Permission.CREDIT_MANAGE]
 
 Kind = Literal["top_up", "cash_in", "cash_out", "purchase", "refund", "reversal", "correction", "taken_back"]
@@ -195,7 +197,7 @@ def _admin_entries(entries):
     return [_admin_entry(entry, taken_back) for entry in entries]
 
 
-@endpoint("GET", "/admin/credit", response=CreditOverviewOut, permissions=MANAGE, tag=TAG)
+@endpoint("GET", "/admin/credit", response=CreditOverviewOut, permissions=VIEW, tag=TAG)
 def admin_credit():
     """Every balance, what came in, and the latest entries."""
     accounts = credit.accounts()
@@ -252,7 +254,7 @@ def _holder_out(user):
     )
 
 
-@endpoint("GET", "/admin/credit/<int:user_id>", response=CreditHolderOut, permissions=MANAGE, tag=TAG)
+@endpoint("GET", "/admin/credit/<int:user_id>", response=CreditHolderOut, permissions=VIEW, tag=TAG)
 def admin_credit_holder(user_id):
     """One person's credit, every entry, and what a refund would give back."""
     return _holder_out(_holder(user_id))
@@ -391,7 +393,7 @@ def _change(team, item_id, body):
     return _price_list(team)
 
 
-@endpoint("GET", "/admin/credit/items", response=PriceListOut, permissions=MANAGE, tag=TAG)
+@endpoint("GET", "/admin/credit/items", response=PriceListOut, permissions=VIEW, tag=TAG)
 def admin_credit_items():
     """The association's own price list: coffee in the student area, say."""
     return _price_list(None)
@@ -525,7 +527,7 @@ def _seller_sales(team):
                           earned_30_days=recent["earned"], sold=ever["count"], earned=ever["earned"], items=items)
 
 
-@endpoint("GET", "/admin/sales", response=SalesOverviewOut, permissions=MANAGE, tag=TAG)
+@endpoint("GET", "/admin/sales", response=SalesOverviewOut, permissions=VIEW, tag=TAG)
 def admin_sales():
     """What was sold for credit, by seller and by item: the last 30 days and ever."""
     from ..services.teams import all_teams

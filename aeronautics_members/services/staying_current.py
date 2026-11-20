@@ -30,8 +30,8 @@ from pathlib import Path
 
 
 from ..config import REPO_ROOT
-from ..db_models import Role, Setting, User, db
-from ..permissions import Permission, roles_with
+from ..db_models import Setting, db
+from ..permissions import Permission
 from .clock import get_now_utc
 
 WAITING = timedelta(days=14)
@@ -360,14 +360,9 @@ def report(now=None):
 
 def _recipients():
     """Whoever may install updates: the only ones who see System health."""
-    slugs = roles_with(Permission.SYSTEM_UPDATE)
-    if not slugs:
-        return []
-    return db.session.execute(
-        db.select(User.email).where(User.email_verified_at.is_not(None), User.deleted_at.is_(None),
-                                    User.roles.any(Role.slug.in_(slugs)))
-        .order_by(User.email.asc())
-    ).scalars().all()
+    from .access import holder_emails
+
+    return holder_emails(Permission.SYSTEM_UPDATE)
 
 
 def tell(now=None):

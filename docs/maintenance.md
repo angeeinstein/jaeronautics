@@ -1825,23 +1825,52 @@ finding every route a moderator should reach and editing its check, which is
 exactly the kind of sweep that gets one route wrong and nobody notices for a
 year.
 
-`ROLE_PERMISSIONS` is the whole access model:
+`ROLE_PERMISSIONS` holds the roles -- named groups of permissions, live
+templates (`docs/permissions-plan.md`):
 
-| Capability | Treasurer | Admin | Super Admin |
-|---|---|---|---|
-| `admin.access` — open the admin workspace | yes | yes | yes |
-| `teams.money` — every team's money, transfers, bank details | yes | yes | yes |
-| `accounts.view`, `accounts.billing`, `accounts.privacy` | no | yes | yes |
-| `approvals.review`, `forum.moderate`, `logs.view` | no | yes | yes |
-| `notifications.manage` — test email, undelivered queue | no | yes | yes |
-| `settings.general`, `teams.manage` | no | yes | yes |
-| `settings.credentials` — Stripe/Discourse keys, mail accounts | no | no | yes |
-| `system.update` — install a version, roll one back | no | no | yes |
-| `roles.manage` — grant or revoke access | no | no | yes |
+| Capability | Auditor | Treasurer | Admin | Super Admin |
+|---|---|---|---|---|
+| `admin.access` — open the admin workspace | yes | yes | yes | yes |
+| `teams.money.view`, `credit.view` — see every team's money, the credit | yes | yes | yes | yes |
+| `teams.money`, `credit.manage` — transfers, bank details, bookings | no | yes | yes | yes |
+| `accounts.view`, `accounts.billing`, `accounts.privacy` | no | no | yes | yes |
+| `approvals.review`, `forum.moderate`, `logs.view` | no | no | yes | yes |
+| `messages.answer`, `messages.receive` — contact messages, their emails | no | no | yes | yes |
+| `notifications.manage` — test email, undelivered queue | no | no | yes | yes |
+| `settings.general`, `teams.manage`, `legal.texts`, `legal.publish` | no | no | yes | yes |
+| `roles.manage` — grant permissions, those one holds | no | no | yes | yes |
+| `settings.credentials` — Stripe/Discourse keys, mail accounts | no | no | no | yes |
+| `system.update`, `system.backup` — versions, backups | no | no | no | yes |
+
+(Not every permission is in the table; `permissions.py` has them all, each
+with its label and its area on the *Access* tab: `PERMISSION_LABELS`,
+`PERMISSION_AREAS`.)
 
 There is **no role implication**: `superadmin` is not "admin plus extra" by
-inheritance, its bundle simply contains the admin bundle. One mechanism rather
-than two, and the table shows the whole truth.
+inheritance, its bundle is simply **every permission** (`ALL_PERMISSIONS`),
+those added later too.
+
+### A person: roles plus exceptions
+
+A person holds roles, and **exceptions** -- permissions added, permissions
+taken away (`user_permissions`, `UserPermission`). What they may do is
+`effective_permissions(roles, added, taken)`: the roles' permissions, plus
+what is added, less what is taken away. A permission added to a role later
+reaches everyone holding the role at once, because nothing is copied into the
+person. A super admin takes no exceptions: whoever can install an update and
+download a backup could undo any restriction anyway.
+
+**A permission brings what it needs** (`NEEDS`): every admin permission needs
+`admin.access`, every changing one its seeing one (`teams.money` needs
+`teams.money.view`; `legal.publish` needs `legal.texts`). Ticked together,
+gone together: `with_needs` adds what is missing, and `without_unmet` drops a
+permission whose needs were taken away, so no account holds a permission it
+cannot reach.
+
+**Who holds a permission** is `access.holders(permission)` -- every account
+with a role or an added permission, asked through `user.can`. Recipients of
+emails (contact messages, legal texts, money checks) come from there, never
+from a role's name.
 
 ### Changing an account's roles
 
@@ -1864,14 +1893,17 @@ the form marks it *included in Super Admin*, and saving says so rather than
 dropping it silently. Roles that merely overlap, such as a moderator and a
 treasurer, both survive; only genuine containment is collapsed.
 
-The page also lists what the account **can currently do**, because that is the
-question a role list is really being asked, and it is what makes an unticked
-Admin box on a Super Admin unalarming. Each role additionally discloses its own
-capabilities, so deciding what to hand somebody does not mean reading this file.
+**Several roles can be held at once**; the account holds what they give
+together. Below the roles the page lists every permission with what the
+account **can currently do** ticked, because that is the question a role list
+is really being asked, and it is what makes an unticked Admin box on a Super
+Admin unalarming. Ticking a role shows at once what it gives, so the roles
+carry no list of their own (dropped 2026-11-19: "if you check one of the roles
+above, then you can already see this down below").
 
 **Compared with Stripe's team-role dialog**, which is the closest widely used
-model: checkboxes, plain-language descriptions, per-role disclosure, "only a
-super administrator can grant this role" and "the account creator gets it
+model: checkboxes, plain-language descriptions, what a role gives shown,
+"only a super administrator can grant this role" and "the account creator gets it
 automatically" all match. Two things there are deliberately not copied —
 grouped, collapsed role categories with a search box, which earn their keep at
 Stripe's dozen-plus groups and are chrome around one decision at two; and the
@@ -1887,9 +1919,26 @@ currently the only relationship between the two roles, which is precisely why
 the redundant state was confusing. The union banner is borrowed regardless,
 since a list of checkboxes otherwise leaves that rule to be inferred.
 
-Three refusals, all enforced in the service so they hold however the change
+The *Access* tab also lists **every permission, as rows with levels, by
+area** (`PERMISSION_ROWS`): "None · View · Manage", "None · Install". A role
+sets its levels, each row can then be set higher or lower, or a level given
+without a role. A row's levels are cumulative; what a level needs of other
+rows comes from `NEEDS` (`needs_by_level`). The page posts the roles and the
+permissions of the levels chosen; the service works out the exceptions
+(`describe_role_change`). A page that posts roles only keeps the exceptions
+as they are. A new permission goes on a row -- a level of its own, or a new
+row -- and `tests/test_permissions.py` fails until it does.
+
+The refusals, all enforced in the service so they hold however the change
 arrives:
 
+- **Only within what one holds** (`roles.manage`, *Grant permissions*, in the
+  admin role): whoever grants gives or takes only permissions they hold
+  themselves, and only for an account that holds no more than they do
+  (`covers`). An account holding more is out of their reach altogether -- its
+  access, its address, its switch, its erasure. So an admin never touches a
+  super admin.
+- **Super admin only by a super admin**, made or unmade.
 - **Not your own account.** Removing your own last privileged role locks you
   out, and a confirmation dialog is not where that should be discovered.
 - **Not the last holder of a protected capability.** `PROTECTED_PERMISSIONS`
@@ -1897,6 +1946,21 @@ arrives:
   an update, granting access — and the check counts what would remain *after*
   the change, ignoring erased accounts, which cannot sign in to do anything.
 - **Not an erased account.**
+
+### A team's permissions per member
+
+The same within a team (`services/teams.py`): lead and treasurer are the
+team's presets (`TEAM_ROLE_PERMISSIONS`), and a member's permissions there are
+their roles' plus exceptions (`team_member_permissions`), counting while they
+are in the team and the association. Whoever holds `team.permissions` there --
+the leads -- changes a member's on the member's page, within what they hold in
+the team, for somebody who holds no more there. `TEAM_NEEDS` couples them as
+`NEEDS` does: deciding about people needs seeing them, the bank details the
+money. A role given or taken drops the exceptions it made pointless.
+Appointing or dismissing a lead or treasurer follows the same rule: only a
+role whose permissions one holds oneself, and only from somebody who holds no
+more there -- a member given *Appoint leads* alone does not make themselves
+a lead.
 
 ### Two surfaces that are not routes
 
@@ -2161,8 +2225,9 @@ reaches the person. Two ways back:
   instead (`password_reset_address`). Once in, they correct the private one
   in their profile.
 - **An admin corrects it** (account page, *Correct the Private Email
-  Address*; `approvals.review`, and for an account with a role
-  `roles.manage`). Whoever reads the new address can sign in, so only once you
+  Address*; `approvals.review`, and for an account holding any permission
+  `roles.manage` and all of its permissions). Whoever reads the new address
+  can sign in, so only once you
   know who is asking. The new address has to be confirmed like any other, the
   old one is emailed if it was ever confirmed, Stripe's customer and the forum
   get the new address, and the change is in the audit log with both.

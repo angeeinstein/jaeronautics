@@ -20,7 +20,7 @@ from flask import current_app
 from ..db_models import ImportedForumProfile, Member, User, db
 from ..permissions import Permission, role_label
 from . import ConflictError, ExternalServiceError, NotFoundError, PermissionError_, ValidationError
-from .access import set_account_disabled, set_account_roles
+from .access import covers, set_account_disabled, set_account_roles
 from .audit import (
     log_audit_event,
     serialize_audit_value,
@@ -175,7 +175,10 @@ def may_correct_email(user, actor_user):
     return (
         user.member is not None and user.deleted_at is None and user.id != actor_user.id
         and actor_user.can(Permission.APPROVALS_REVIEW)
-        and (not user.roles or actor_user.can(Permission.ROLES_MANAGE))
+        # An account holding permissions is handed over only by somebody who
+        # grants them, and holds all of them too.
+        and (not user.permissions or actor_user.can(Permission.ROLES_MANAGE))
+        and covers(actor_user, user)
     )
 
 
@@ -202,10 +205,11 @@ def correct_private_email(user, new_email, *, actor_user):
     new_email = (new_email or "").strip().lower()
     if user.id == actor_user.id:
         raise PermissionError_("Change your own address in your profile.", code="own_account")
-    if user.roles and not actor_user.can(Permission.ROLES_MANAGE):
-        # Their address is a way into somebody else's admin rights.
-        raise PermissionError_("Only somebody who manages access can change the address of an account with a role.",
-                               code="account_has_role")
+    if not covers(actor_user, user) or (user.permissions and not actor_user.can(Permission.ROLES_MANAGE)):
+        # Their address is a way into somebody else's admin rights: whoever could change it could
+        # reset the password and hold them. So only somebody who grants permissions, and holds all of theirs.
+        raise PermissionError_("This account holds permissions you do not: only somebody who holds all of them can "
+                               "change its address.", code="account_has_role")
     if not _EMAIL.fullmatch(new_email):
         raise ValidationError("Enter a valid email address.", details={"fields": {"email": "Enter a valid email address."}})
     old_email = user.email
@@ -406,8 +410,9 @@ def set_disabled(user_id, *, disable, reason, actor_user):
     return {"changed": True}
 
 
-def set_roles(user_id, slugs, *, actor_user):
-    """Set an account's roles to exactly ``slugs``.
+def set_roles(user_id, slugs, *, actor_user, permissions=None):
+    """Set an account's roles to exactly ``slugs`` -- and, when given, its permissions to exactly
+    ``permissions``, the difference from the roles kept as its exceptions.
 
     One action rather than a grant and a revoke per role: the guards that
     matter are about the resulting state -- is anybody left who can install an
@@ -419,7 +424,8 @@ def set_roles(user_id, slugs, *, actor_user):
     lock_administration()
     user = locked_user(user_id)
     before = snapshot_user_for_audit(user)
-    change = set_account_roles(user, list(slugs), actor_user=actor_user)
+    change = set_account_roles(user, list(slugs), actor_user=actor_user,
+                               requested_permissions=None if permissions is None else list(permissions))
     redundant = [role_label(slug) for slug in change["redundant"]]
     if not change["changed"]:
         db.session.rollback()
@@ -447,6 +453,8 @@ def set_roles(user_id, slugs, *, actor_user):
             "revoked_roles": change["revoked"],
             "permissions_gained": change["permissions_gained"],
             "permissions_lost": change["permissions_lost"],
+            "permissions_added": change["added"],
+            "permissions_taken_away": change["taken"],
         },
     )
     db.session.commit()

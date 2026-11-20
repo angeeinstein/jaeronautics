@@ -120,6 +120,8 @@ def export_account_data(user):
             "forum_username": user.forum_username,
             "email_verified_at": user.email_verified_at,
             "roles": sorted(role.slug for role in user.roles),
+            "permission_exceptions": [("+" if row.granted else "-") + row.permission
+                                      for row in user.permission_exceptions],
             "erased_at": user.deleted_at,
         },
         "member_profile": None,
@@ -391,6 +393,11 @@ def describe_deletion_impact(user, actor_user=None):
             user.can(Permission.SYSTEM_UPDATE)
             and _nobody_else_holds(Permission.SYSTEM_UPDATE, user)
         ),
+        # Nobody left to give anybody access: recovering needs a shell on the server too.
+        "is_last_granter": (
+            user.can(Permission.ROLES_MANAGE)
+            and _nobody_else_holds(Permission.ROLES_MANAGE, user)
+        ),
         "is_self": bool(actor_user is not None and actor_user.id == user.id),
         "has_forum_account": user.forum_account is not None,
         "subscription_active": False,
@@ -427,8 +434,14 @@ def describe_deletion_impact(user, actor_user=None):
         impact["blockers"].append("last_admin")
     if impact["is_last_superadmin"]:
         impact["blockers"].append("last_superadmin")
+    if impact["is_last_granter"]:
+        impact["blockers"].append("last_granter")
     if impact["is_self"]:
         impact["blockers"].append("self_deletion_via_admin_page")
+    # An account holding a permission the person erasing it does not -- an admin erasing a super
+    # admin -- is beyond them (services/access.py, covers).
+    if actor_user is not None and not impact["is_self"] and not user.permissions <= actor_user.permissions:
+        impact["blockers"].append("holds_more")
 
     if impact["subscription_active"]:
         impact["warnings"].append("subscription_will_be_cancelled")
@@ -485,11 +498,22 @@ def erase_account(user, *, actor_user=None, initiated_by=INITIATED_BY_ADMIN, not
             "install an update.",
             code="last_superadmin",
         )
+    if "last_granter" in impact["blockers"]:
+        raise ConflictError(
+            "This is the only account that can grant permissions; give another account Grant "
+            "permissions before erasing it, otherwise nobody can give anybody access.",
+            code="last_granter",
+        )
     if initiated_by == INITIATED_BY_ADMIN and impact["is_self"]:
         raise ConflictError(
             "Administrators cannot erase their own account from the admin page; "
             "use the account page so the confirmation goes to your mailbox.",
             code="self_deletion_via_admin_page",
+        )
+    if initiated_by == INITIATED_BY_ADMIN and "holds_more" in impact["blockers"]:
+        raise ConflictError(
+            "This account holds permissions you do not; only somebody who holds all of them can erase it.",
+            code="holds_more",
         )
 
     member = user.member
@@ -673,6 +697,7 @@ def _erase_user_record(user, now):
     # Any outstanding signed link (password reset, verification, forum entry)
     # stops working once the nonces are gone.
     user.roles.clear()
+    user.permission_exceptions.clear()
     user.deleted_at = now
 
 

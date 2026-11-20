@@ -22,6 +22,7 @@ from ..services import teams as teams_service
 from ..services.pictures import picture_url, picture_urls
 from ..services.notifications import flush_marked_notification_channels
 from ._core import Model, UtcDateTime, endpoint
+from .permission_rows import PermissionLevelOut, PermissionRowOut, rows_out
 from .teams import (
     WAITING, LabelsOut, PhotoOut, TeamPermissionName, _labels, _logo_url, _team, photos_out,
 )
@@ -72,17 +73,17 @@ class ManageOut(Model):
 
 
 def _frame_team(slug):
-    """The team for its frame: whoever manages its people, or sees its money -- the
-    association's treasurer for every team, also archived or with teams off."""
-    if current_user.can(Permission.TEAMS_MONEY):
+    """The team for its frame: whoever holds any permission in it -- the association's treasurer
+    and auditors for every team's money, also archived or with teams off."""
+    if current_user.can(Permission.TEAMS_MONEY_VIEW):
         try:
             team = teams_service.get_team(slug)
         except ServiceError:
             abort(404)
     else:
         team = _team(slug)
-    held = teams_service.team_permissions(current_user, team)
-    if P.VIEW_MEMBERS not in held and P.VIEW_MONEY not in held:
+    # Any team permission opens the frame: a member given only the price list needs it too.
+    if not teams_service.team_permissions(current_user, team):
         raise PermissionError_("You may not do that in this team.", code="team_permission")
     return team
 
@@ -267,6 +268,16 @@ class TeamNoteOut(Model):
     body: str
 
 
+class TeamPermissionLevelOut(PermissionLevelOut):
+    permissions: list[TeamPermissionName]
+
+
+class TeamPermissionRowOut(PermissionRowOut):
+    """A team permission row on a member's page (permission_rows.py), for whoever may change them."""
+
+    levels: list[TeamPermissionLevelOut]
+
+
 class TeamPersonOut(Model):
     user_id: int
     name: str
@@ -279,6 +290,8 @@ class TeamPersonOut(Model):
     may_review: bool
     may_remove: bool
     may_write_notes: bool
+    #: Their permissions in the team, for whoever may change them; None otherwise.
+    permissions: list[TeamPermissionRowOut] | None = None
 
 
 def _day(moment):
@@ -315,13 +328,45 @@ def _person_out(team, user_id):
         may_review=teams_service.can_in_team(current_user, team, P.REVIEW_APPLICATIONS),
         may_remove=teams_service.can_in_team(current_user, team, P.REMOVE_MEMBERS),
         may_write_notes=teams_service.can_in_team(current_user, team, P.WRITE_NOTES),
+        permissions=_permission_options(team, person),
     )
+
+
+def _permission_options(team, person):
+    options = teams_service.team_permission_options(current_user, team, person)
+    if options is None:
+        return None
+    held, from_roles, mine = options
+    return rows_out(teams_service.TEAM_PERMISSION_ROWS, teams_service.TEAM_PERMISSION_ROW_NEEDS, held=held,
+                    from_roles=from_roles, mine=mine, row_model=TeamPermissionRowOut,
+                    level_model=TeamPermissionLevelOut)
 
 
 @endpoint("GET", "/teams/<slug>/manage/people/<int:user_id>", response=TeamPersonOut, tag=TAG)
 def team_person(slug, user_id):
     """A person as the leads see them: how to reach them, their application, their history, the notes."""
     return _person_out(_managed(slug), user_id)
+
+
+class TeamPermissionsIn(Model):
+    #: Everything they should hold in the team; what a permission needs comes along.
+    permissions: list[TeamPermissionName] = Field(max_length=40)
+
+
+@endpoint("PUT", "/teams/<slug>/manage/people/<int:user_id>/permissions", body=TeamPermissionsIn,
+          response=TeamPersonOut, tag=TAG)
+def team_person_permissions(slug, user_id, body):
+    """Set a member's permissions in the team: their roles', plus or minus exceptions -- within the
+    viewer's own."""
+    team = _managed(slug, P.PERMISSIONS)
+    person, _history = _person(team, user_id)
+    try:
+        teams_service.set_team_member_permissions(current_user, team, person, body.permissions)
+    except ServiceError:
+        db.session.rollback()
+        raise
+    _commit()
+    return _person_out(team, user_id)
 
 
 def _decide(slug, membership_id, permission, action):

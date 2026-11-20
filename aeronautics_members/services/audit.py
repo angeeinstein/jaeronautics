@@ -87,6 +87,9 @@ def snapshot_user_for_audit(user):
             "email": user.email,
             "forum_username": user.forum_username,
             "roles": sorted(role.slug for role in user.roles),
+            # Exceptions to the roles: "+cards.manage" added, "-credit.manage" taken away.
+            "permission_exceptions": sorted(f"{'+' if row.granted else '-'}{row.permission}"
+                                            for row in user.permission_exceptions),
             "email_verified_at": user.email_verified_at,
         }
     )

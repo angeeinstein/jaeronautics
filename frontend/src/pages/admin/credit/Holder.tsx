@@ -24,6 +24,7 @@ import { useParams } from 'react-router';
 import { IconPencil, IconReceiptRefund } from '@tabler/icons-react';
 
 import { api, ApiError, call } from '../../../api/client';
+import { can, useMe } from '../../../api/session';
 import { AppLink } from '../../../app/AppLink';
 import { ConfirmButton } from '../../../components/ConfirmButton';
 import { PageHeader } from '../../../components/PageHeader';
@@ -236,6 +237,7 @@ function Refund({ holder }: { holder: CreditHolder }) {
 }
 
 function Body({ holder }: { holder: CreditHolder }) {
+  const manage = can(useMe().data, 'credit.manage');
   const take = useHolderChange(holder.user_id);
   const back = useMutation({
     mutationFn: (entryId: number) =>
@@ -271,9 +273,9 @@ function Body({ holder }: { holder: CreditHolder }) {
             : 'Not an active member: cannot top up.'
         }
       />
-      <Book holder={holder} />
-      <Refund holder={holder} />
-      <History entries={holder.entries} onTakeBack={takeBack} />
+      {manage ? <Book holder={holder} /> : null}
+      {manage ? <Refund holder={holder} /> : null}
+      <History entries={holder.entries} onTakeBack={manage ? takeBack : undefined} />
     </Stack>
   );
 }

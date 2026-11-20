@@ -2,26 +2,30 @@
  * A person, as a team's leads see them: how to reach them, what is under
  * way -- their application, with inviting, approving or not accepting; or
  * their membership, with removing -- their history in the team, and the
- * leads' notes. Data: GET /api/v1/teams/<slug>/manage/people/<user> and the
- * decisions under .../memberships/<id>/.
+ * leads' notes; for whoever may change them, their permissions in the team
+ * (docs/permissions-plan.md). Data: GET /api/v1/teams/<slug>/manage/people/<user>,
+ * the decisions under .../memberships/<id>/, PUT .../people/<user>/permissions.
  */
 import { Avatar, Button, Group, SimpleGrid, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useParams } from 'react-router';
-import { IconHistory, IconInfoCircle, IconNotes, IconUser } from '@tabler/icons-react';
+import { IconHistory, IconInfoCircle, IconKey, IconNotes, IconUser } from '@tabler/icons-react';
 
 import { api, call, type Schemas } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
 import { Details } from '../../../components/Details';
 import { Panel } from '../../../components/Panel';
+import { PermissionLevels } from '../../../components/PermissionLevels';
 import { Pill, type Tone } from '../../../components/Pill';
 import { ErrorState, LoadingState } from '../../../components/States';
 import { formatDate, formatDateTime } from '../../../lib/format';
+import { type Levels, levelsOf, permissionsOf, pick, sameLevels } from '../../../lib/permissionLevels';
 import classes from '../Teams.module.css';
 import { ManageHeader, useManageChange, useSlug } from './shared';
 
 type Person = Schemas['TeamPersonOut'];
+type TeamPermission = Schemas['TeamPermissionsIn']['permissions'][number];
 
 const TONES: Record<string, Tone> = {
   applied: 'pending',
@@ -175,6 +179,63 @@ function Now({ person, personKey }: { person: Person; personKey: readonly unknow
   );
 }
 
+/** What they may do in the team: their roles' permissions, each of which can be unticked, or one
+ * added -- within what the person looking holds there themselves. */
+function Permissions({
+  rows,
+  person,
+  personKey,
+}: {
+  rows: NonNullable<Person['permissions']>;
+  person: Person;
+  personKey: readonly unknown[];
+}) {
+  const slug = useSlug();
+  const held = levelsOf(rows);
+  const [levels, setLevels] = useState<Levels>(held);
+  const save = useManageChange(
+    personKey,
+    (permissions: TeamPermission[]) =>
+      call(
+        api.PUT('/api/v1/teams/{slug}/manage/people/{user_id}/permissions', {
+          params: { path: { slug, user_id: person.user_id } },
+          body: { permissions },
+        }),
+      ),
+    'Permissions saved.',
+  );
+  return (
+    <Panel icon={IconKey} title="Permissions">
+      <Stack gap="md">
+        <Text size="sm" c="dimmed">
+          Their roles in the team set the levels; each can be changed. Only what you hold yourself.
+        </Text>
+        <PermissionLevels
+          rows={rows}
+          levels={levels}
+          fromRoles={(row) => row.from_roles}
+          onPick={(key, level) => {
+            setLevels(pick(rows, levels, key, level));
+          }}
+        />
+        <Group>
+          <ConfirmButton
+            color="brand"
+            confirmLabel="Yes, change the permissions"
+            disabled={sameLevels(levels, held)}
+            loading={save.mutation.isPending}
+            onConfirm={() => {
+              save.mutation.mutate(permissionsOf(rows, levels));
+            }}
+          >
+            Save permissions
+          </ConfirmButton>
+        </Group>
+      </Stack>
+    </Panel>
+  );
+}
+
 function Notes({ person, personKey }: { person: Person; personKey: readonly unknown[] }) {
   const slug = useSlug();
   const [body, setBody] = useState('');
@@ -295,7 +356,18 @@ export function Person() {
             </Stack>
           </Panel>
         </Stack>
-        <Notes person={data} personKey={personKey} />
+        <Stack gap="lg">
+          {data.permissions ? (
+            // Keyed by what is held, so a saved change starts afresh.
+            <Permissions
+              key={data.permissions.map((row) => `${row.key}:${String(row.level)}`).join(',')}
+              rows={data.permissions}
+              person={data}
+              personKey={personKey}
+            />
+          ) : null}
+          <Notes person={data} personKey={personKey} />
+        </Stack>
       </SimpleGrid>
     </>
   );

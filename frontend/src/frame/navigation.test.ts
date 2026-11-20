@@ -43,10 +43,17 @@ describe('the admin sidebar', () => {
   });
 
   it('only what a permission allows, and no empty group', () => {
-    const treasurer = makeMe({ permissions: ['admin.access', 'teams.money'] });
-    expect(labels(treasurer)).toEqual([
+    // Seeing the money is enough for its page: an auditor's.
+    const auditor = makeMe({ permissions: ['admin.access', 'teams.money.view'] });
+    expect(labels(auditor)).toEqual([
       ['Overview', ['Dashboard']],
       ['Money', ['Money']],
+    ]);
+    // Answering contact messages, without the emails.
+    const helper = makeMe({ permissions: ['admin.access', 'messages.answer'] });
+    expect(labels(helper)).toEqual([
+      ['Overview', ['Dashboard']],
+      ['Messages', ['Messages']],
     ]);
   });
 

@@ -811,20 +811,18 @@ def seed_default_roles():
 
 
 
-def count_users_with_permission(permission, active_only=True):
+def count_users_with_permission(permission):
     """How many accounts could still do this, whatever role gives it to them.
 
     The lockout guards ask this rather than counting super admins, so a role
     added to permissions.py with SYSTEM_UPDATE starts counting towards "somebody
     can still install an update" without the guards being touched.
     """
-    slugs = roles_with(permission)
-    if not slugs:
-        return 0
-    query = db.select(func.count()).select_from(User).where(User.roles.any(Role.slug.in_(slugs)))
-    if active_only:
-        query = query.where(User.deleted_at.is_(None))
-    return db.session.scalar(query) or 0
+    from .services.access import holders
+
+    # Person by person, erased accounts left out: with permissions added or taken away, a
+    # role no longer says who holds it.
+    return len(holders(permission))
 
 
 

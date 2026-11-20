@@ -71,6 +71,8 @@ interface PriceListProps {
   sales?: Sales;
   /** Refreshed after a change, since what is listed changes with it. */
   salesKey?: readonly unknown[];
+  /** Shown only, for whoever may see the list but not change it (an auditor). */
+  readOnly?: boolean;
 }
 
 function figures(found: ItemSales | undefined, period: Period): { sold: number; made: number } {
@@ -159,6 +161,7 @@ function Row({
   remove,
   shown,
   columns,
+  readOnly,
 }: {
   item: Item;
   icons: Icon[];
@@ -171,6 +174,7 @@ function Row({
   /** Its figures, when the list shows them. */
   shown: { sold: number; made: number } | null;
   columns: number;
+  readOnly: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(item.name);
@@ -270,6 +274,7 @@ function Row({
         <Switch
           size="sm"
           checked={item.active}
+          disabled={readOnly}
           aria-label={`Sell ${item.name}`}
           onChange={(event) => {
             mutation.mutate({ active: event.currentTarget.checked });
@@ -277,7 +282,7 @@ function Row({
         />
       </Table.Td>
       <Table.Td>
-        <Group gap={4} justify="flex-end" wrap="nowrap">
+        <Group gap={4} justify="flex-end" wrap="nowrap" hidden={readOnly}>
           <Tooltip label="Change">
             <ActionIcon
               variant="subtle"
@@ -509,6 +514,7 @@ export function PriceListPanel({
   remove,
   sales,
   salesKey,
+  readOnly = false,
 }: PriceListProps) {
   const [period, setPeriod] = useState<Period>('30');
   const byItem = new Map((sales?.items ?? []).map((found) => [found.item_id, found]));
@@ -586,6 +592,7 @@ export function PriceListPanel({
                     remove={remove}
                     shown={sales ? figures(byItem.get(item.id), period) : null}
                     columns={columns}
+                    readOnly={readOnly}
                   />
                 ))}
                 {sales ? <GoneRows gone={gone} period={period} /> : null}
@@ -613,7 +620,7 @@ export function PriceListPanel({
             <EmptyState>Nothing on the list yet.</EmptyState>
           </Stack>
         )}
-        <AddItem icons={list.icons} queryKey={queryKey} add={add} />
+        {readOnly ? null : <AddItem icons={list.icons} queryKey={queryKey} add={add} />}
       </Stack>
     </Panel>
   );

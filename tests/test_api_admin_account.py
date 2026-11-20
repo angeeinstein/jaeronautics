@@ -126,9 +126,13 @@ class TestWhatThePageMayOffer:
         assert body["actions"] == {
             "sync_billing": False,  # nothing at Stripe to ask about
             "resync_forum": True, "picture_replacement": False, "correct_email": True, "reconnect": True,
-            "manage_access": False, "export_data": True, "erase": True,
+            "manage_access": True, "export_data": True, "erase": True,
         }
-        assert body["access"] is None, "roles are for whoever manages access"
+        # An admin grants permissions (2026-11-19) -- those they hold, never super admin.
+        roles = {option["slug"]: option["may_change"] for option in body["access"]["options"]}
+        assert roles["admin"] is True and roles["superadmin"] is False
+        reach = {row["key"]: row["may_reach"] for row in body["access"]["rows"]}
+        assert reach["cards"] == 1 and reach["updates"] == 0 and reach["forum_role"] == 1
         assert body["teams"] is not None
 
     def test_billing_sync_once_there_is_something_at_stripe(self, client, member):
@@ -151,7 +155,7 @@ class TestWhatThePageMayOffer:
         root = _staff("root@example.org", "superadmin")
         signed_in(client, root)
 
-        assert "cannot change your own roles" in _get(client, root.id)["access"]["roles_locked"]
+        assert "cannot change your own access" in _get(client, root.id)["access"]["roles_locked"]
 
     def test_an_erased_account_offers_no_access_changes(self, client, member):
         from datetime import datetime

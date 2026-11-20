@@ -153,7 +153,10 @@ def team_manage(slug, section=None):
     (frontend/src/pages/teams/manage/). An old link to a tab
     (``#manage-applying``) opens that section's page."""
     team = _team_or_404(slug)
-    _may(team, teams_service.TeamPermission.VIEW_MEMBERS)
+    # Each page asks what its data asks (api/team_manage.py): the team's page and joining are
+    # settings, the rest is about people.
+    settings = section in ("page", "applying")
+    _may(team, teams_service.TeamPermission.EDIT_SETTINGS if settings else teams_service.TeamPermission.VIEW_MEMBERS)
     return app_shell()
 
 
@@ -312,7 +315,7 @@ def team_export(slug):
 
 
 def _money_team_or_404(slug):
-    if not current_user.can(Permission.TEAMS_MONEY):
+    if not current_user.can(Permission.TEAMS_MONEY_VIEW):
         team = _team_or_404(slug)
     else:
         try:
@@ -353,7 +356,7 @@ def team_money_export(slug):
 
 @teams_bp.route("/admin/money", methods=["GET"])
 @login_required
-@requires(Permission.TEAMS_MONEY)
+@requires(Permission.TEAMS_MONEY_VIEW)
 def admin_money():
     """Money, the association's side: drawn by the new front end (frontend/src/pages/admin/money/)."""
     return app_shell()
@@ -361,7 +364,7 @@ def admin_money():
 
 @teams_bp.route("/admin/money/<slug>", methods=["GET"])
 @login_required
-@requires(Permission.TEAMS_MONEY)
+@requires(Permission.TEAMS_MONEY_VIEW)
 def admin_team_money(slug):
     return app_shell()
 

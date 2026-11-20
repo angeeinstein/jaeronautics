@@ -20,16 +20,3 @@
 .empty {
   padding: 0 1rem;
 }
-
-.fold {
-  font-size: var(--mantine-font-size-sm);
-  color: var(--ja-link);
-}
-
-.fold:hover {
-  color: var(--ja-link-hover);
-}
-
-.indent {
-  padding-left: 2rem;
-}

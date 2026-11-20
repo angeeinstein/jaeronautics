@@ -302,35 +302,14 @@ good).
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
 
-- **Permissions per person, roles as templates** -- 2026-11-04. The
-  maintainer's idea: many small permissions, a role only a group of them
-  (as Stripe does); on a person's access tab every permission listed,
-  grouped under the roles; ticking a role ticks its permissions, and any can
-  be unticked or added -- a normal user given one super admin permission,
-  say. The same for teams: team permissions part of the one catalogue, so a
-  lead may also hold some of the portal's admin permissions. To be
-  discussed after the legal texts editor ("we can discuss this a bit
-  later"). What was said so far:
-  - **Today:** every check already asks for a permission, never a role
-    (`permissions.py`: ~27 site-wide; `services/teams.py`, `TeamPermission`:
-    16 per team); roles are fixed bundles in code; a person holds whole roles
-    only, and the permissions are shown nowhere.
-  - **Suggested:** roles stay live -- a person holds roles plus exceptions
-    (permissions added, permissions taken away) -- rather than a role copied
-    into the person, so a permission added to a role later (as
-    `legal.publish` was) reaches everyone holding it.
-  - **Safeguards:** nobody grants what they do not hold; the lockout guard
-    stays; a permission ticks what it needs (`admin.access`); every change
-    logged; the forum follows the permissions.
-  - **Granularity:** split where somebody would decide separately, not per
-    button -- perhaps 50-60, not 200.
-  - **Teams:** one catalogue, two scopes -- a team permission granted in one
-    team or in every team (what `teams.money`/`teams.manage` do today); lead
-    and treasurer as presets with exceptions per person per team.
-  - **Open:** live roles with exceptions, agreed? Built-in roles fixed in
-    code, and own named roles ("Secretary") made in the portal later? May a
-    team's leads adjust permissions within their team (only what they
-    hold), or only site admins?
+- **Two-factor sign-in** -- 2026-11-19. A second factor (passkeys, or an
+  authenticator app) at least for super admins, perhaps optional for
+  everyone: today a super admin's password alone opens every member's data,
+  the credentials and the backups. Came up with the permissions
+  (`docs/permissions-plan.md`, "How other platforms do it": AWS requires MFA
+  for its root user, Microsoft and Google expect it of their top admins).
+  The maintainer: "also on my mind, but not for the moment ... a bit
+  later" -- an idea, not on the open list.
 
 - **The server log in the portal** -- 2026-10-16. The journal of the portal's
   services readable on a phone, for when SSH is not at hand ("if some issue
@@ -462,6 +441,11 @@ Talked about, not agreed as work. Not built unless the maintainer brings them up
 What the maintainer did not want, and why -- a record, not a ban. Any of it
 may be suggested again, saying what has changed since. Only what the
 maintainer explicitly says must never change is marked so.
+
+- **A warning on the *Access* page when there is only one super admin, or
+  more than four** (2026-11-19, from how Microsoft and Google advise it).
+  The maintainer is the only one for now and means to add more later, and
+  a lost super admin can be put right from the server's command line.
 
 - **Small points of the security review of 2026-10-17, left as they are**
   (2026-10-19). The rest of that review is fixed (`claude/audit-fixes`).

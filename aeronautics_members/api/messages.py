@@ -205,14 +205,14 @@ def team_message_send(slug, body):
 
 
 @endpoint("GET", "/admin/messages", response=ContactMessagesOut, query=MessagesQuery,
-          permissions=[Permission.MESSAGES_RECEIVE], tag="Messages")
+          permissions=[Permission.MESSAGES_ANSWER], tag="Messages")
 def admin_messages(query):
     """The contact form's messages, newest first."""
     return _list(None, query.state)
 
 
 @endpoint("PUT", "/admin/messages/<int:message_id>", response=ContactMessageOut, body=MessageDoneIn,
-          permissions=[Permission.MESSAGES_RECEIVE], tag="Messages")
+          permissions=[Permission.MESSAGES_ANSWER], tag="Messages")
 def admin_message_done(message_id, body):
     """Mark a message done (answered), or open again."""
     message = messages_service.message_of(message_id)
@@ -220,7 +220,7 @@ def admin_message_done(message_id, body):
 
 
 @endpoint("POST", "/admin/messages/<int:message_id>/replies", response=ContactMessageOut, body=ReplyIn,
-          status=201, permissions=[Permission.MESSAGES_RECEIVE], tag="Messages")
+          status=201, permissions=[Permission.MESSAGES_ANSWER], tag="Messages")
 def admin_message_reply(message_id, body):
     """Answer a contact message from the portal: emailed to its sender from the
     account chosen for replies; the message is then done."""
