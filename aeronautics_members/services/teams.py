@@ -965,6 +965,17 @@ def _lock_team(team):
     db.session.execute(locked(db.select(Team.id).where(Team.id == team.id))).all()
 
 
+def _within_own(actor, team, permissions):
+    """Refuse a role change that gives or takes team permissions ``actor`` does not hold there
+    (docs/permissions-plan.md): a member given *Appoint leads* alone does not make themselves a
+    lead. Without an actor (the system, the command line) nothing is refused."""
+    if actor is None:
+        return
+    if not set(permissions) <= team_permissions(actor, team):
+        raise ConflictError("You can only give or take a role whose permissions you hold yourself in this team.",
+                            code="team_role_beyond_own")
+
+
 def grant_team_role(actor, team, user, role):
     """Give somebody a role in a team.
 
@@ -976,6 +987,7 @@ def grant_team_role(actor, team, user, role):
         raise ValidationError("That role does not exist.", code="team_role_unknown")
     if user is None or user.deleted_at is not None:
         raise ValidationError("That account cannot hold a role.", code="team_role_holder_invalid")
+    _within_own(actor, team, TEAM_ROLE_PERMISSIONS[role])
 
     _lock_team(team)
     existing = db.session.execute(
@@ -1007,6 +1019,8 @@ def revoke_team_role(actor, team, user, role, *, confirmed=False):
     ).scalar_one_or_none()
     if team_role is None:
         return False
+    # Taking a role away takes what it gives: only from somebody who holds no more there than oneself.
+    _within_own(actor, team, TEAM_ROLE_PERMISSIONS.get(role, frozenset()) | own_team_permissions(user, team))
 
     if role == ROLE_LEAD and not confirmed:
         leads = db.session.scalar(

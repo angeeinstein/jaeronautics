@@ -178,3 +178,42 @@ class TestThePageAsShown:
         assert _set(client, anna, permissions).status_code == 200
         assert db.session.query(TeamMemberPermission).count() == 0
         assert teams.team_permissions(anna, team) == teams.TEAM_ROLE_PERMISSIONS[role]
+
+
+@pytest.mark.usefixtures("switched_on")
+class TestRolesWithinWhatOneHolds:
+    def test_appoint_leads_alone_does_not_make_oneself_a_lead(self, app, client):
+        team, lead = _led()
+        anna = _member(team)
+        teams.set_team_member_permissions(lead, team, anna, {P.APPOINT_LEADS})
+        db.session.commit()
+        _login(client, anna.id)
+
+        refused = send(client, "POST", f"{API}/leads", {"user_id": anna.id})
+
+        assert refused.status_code == 409 and refused.get_json()["error"]["code"] == "team_role_beyond_own"
+        assert teams.team_permissions(anna, team) == {P.APPOINT_LEADS, P.VIEW_MEMBERS}
+
+    def test_nor_a_treasurer_without_the_money(self, app, client):
+        team, lead = _led()
+        anna = _member(team)
+        ben = _member(team, "ben@example.com", "Ben")
+        teams.set_team_member_permissions(lead, team, anna, {P.APPOINT_TREASURER})
+        db.session.commit()
+        _login(client, anna.id)
+
+        refused = send(client, "POST", f"{API}/treasurer", {"user_id": ben.id})
+
+        assert refused.status_code == 409 and not teams.can_in_team(ben, team, P.VIEW_MONEY)
+
+    def test_nor_dismiss_a_lead_who_holds_more(self, app, client):
+        team, lead = _led()
+        anna = _member(team)
+        teams.grant_team_role(None, team, anna, teams.ROLE_LEAD)
+        teams.set_team_member_permissions(lead, team, anna, P.ALL - {P.MESSAGES})
+        db.session.commit()
+        _login(client, anna.id)
+
+        refused = send(client, "DELETE", f"{API}/leads/{lead.id}")
+
+        assert refused.status_code == 409 and teams.can_in_team(lead, team, P.MESSAGES)

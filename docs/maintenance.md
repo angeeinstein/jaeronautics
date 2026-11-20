@@ -1957,6 +1957,10 @@ the leads -- changes a member's on the member's page, within what they hold in
 the team, for somebody who holds no more there. `TEAM_NEEDS` couples them as
 `NEEDS` does: deciding about people needs seeing them, the bank details the
 money. A role given or taken drops the exceptions it made pointless.
+Appointing or dismissing a lead or treasurer follows the same rule: only a
+role whose permissions one holds oneself, and only from somebody who holds no
+more there -- a member given *Appoint leads* alone does not make themselves
+a lead.
 
 ### Two surfaces that are not routes
 

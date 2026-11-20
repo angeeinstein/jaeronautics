@@ -306,3 +306,17 @@ class TestThePageAsShown:
 
         assert saved.status_code == 200 and saved.get_json()["changed"] is False
         assert holder.permission_exceptions == []
+
+
+class TestAnExceptionThatFlips:
+    def test_taken_away_then_added_is_one_row_changed(self, client):
+        # The insert of the new row must not meet the old one still in the database.
+        boss = _user("boss@example.org", "superadmin")
+        admin = _user("admin@example.org", "admin")
+        _login(client, boss)
+        _set(client, admin, ["admin"], ROLE_PERMISSIONS["admin"] - {Permission.CARDS_MANAGE})
+
+        saved = _set(client, admin, [], {Permission.CARDS_MANAGE})
+
+        assert saved.status_code == 200 and admin.can(Permission.CARDS_MANAGE)
+        assert (Permission.CARDS_MANAGE, True) in [(row.permission, row.granted) for row in admin.permission_exceptions]

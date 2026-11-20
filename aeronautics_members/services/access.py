@@ -210,9 +210,14 @@ def set_account_roles(user, requested_slugs, *, actor_user, requested_permission
         user.grant_role(get_role(slug))
     wanted = {permission: True for permission in change["added"]}
     wanted.update({permission: False for permission in change["taken"]})
+    # A row whose sign flips is changed in place: removed and added again, the insert would
+    # reach the database before the delete and break the one-row-per-permission rule.
     for row in list(user.permission_exceptions):
-        if wanted.get(row.permission) is None or wanted[row.permission] != row.granted:
+        if wanted.get(row.permission) is None:
             user.permission_exceptions.remove(row)
+        elif wanted[row.permission] != row.granted:
+            row.granted = wanted[row.permission]
+            row.granted_by_user_id = actor_user.id if actor_user is not None else None
     kept = {row.permission for row in user.permission_exceptions}
     for permission, granted in wanted.items():
         if permission not in kept:
