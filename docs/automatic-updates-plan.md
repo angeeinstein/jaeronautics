@@ -70,6 +70,18 @@ majors do not wait for a person forever; and CI's merge job tries again when
 another update merged a moment before ("Base branch was modified", seen on
 the first day with #47).
 
+### A followed branch that is gone (built 2026-11-20)
+
+A test server follows a feature branch; GitHub deletes the branch when its
+pull request is merged. `git ls-remote --exit-code` then answers 2 (no such
+branch), which `system_update._remote_head` tells apart from no answer at
+all. On a definite "gone" the page and the night's run compare with `main`
+-- what the next update installs, since the installer falls back to `main`
+the same way (`install.sh`, `fall_back_from_gone_branch`) -- and Settings ›
+Updates says the branch no longer exists. A check that fails moves nothing.
+Seen on the test server after PR #86: "Could not be checked right now", and
+the nightly update stopped.
+
 ## Part 3: Ubuntu (built 2026-10-28)
 
 unattended-upgrades installs Ubuntu's security updates already. The installer

@@ -86,7 +86,10 @@ RUNNING_TOO_LONG = timedelta(minutes=60)
 UNCLAIMED_TOO_LONG = timedelta(minutes=15)
 BOOT_ID_PATH = Path("/proc/sys/kernel/random/boot_id")
 
-_remote_cache = {"checked_at": None, "value": None}
+_remote_cache = {"checked_at": None, "value": None, "gone": None}
+
+# What the installer follows when the remembered branch is gone (install.sh, DEFAULT_BRANCH).
+DEFAULT_BRANCH = "main"
 
 # Whether CI passed for the newest revision. The installer only installs a
 # version whose CI passed -- it takes CI's build of the front end -- and waits
@@ -170,12 +173,45 @@ def get_remote_version(force=False):
     if not branch:
         return None
 
-    output = _run_git(["ls-remote", "origin", f"refs/heads/{branch}"], timeout=20)
-    revision = output.split()[0] if output else None
+    revision, gone = _remote_head(branch)
+    # A branch merged and deleted is followed no further: the next update installs main and
+    # follows it from then on, as the installer does (install.sh, fall_back_from_gone_branch).
+    # So main is what there is to compare with -- on this page and for the night's update.
+    if gone and branch != DEFAULT_BRANCH:
+        revision, _ = _remote_head(DEFAULT_BRANCH)
 
     _remote_cache["checked_at"] = now
     _remote_cache["value"] = revision
+    _remote_cache["gone"] = branch if gone else None
     return revision
+
+
+def gone_branch():
+    """The followed branch when the last check found it gone from the remote, else None."""
+    return _remote_cache["gone"]
+
+
+def _remote_head(branch):
+    """``(revision, gone)`` of ``branch`` on the remote. ``gone`` only when the remote answered
+    that it has no such branch (``--exit-code``: 2) -- not when it could not be asked, which
+    leaves both empty: a failed check never moves the server to another branch."""
+    try:
+        result = subprocess.run(
+            ["git", "ls-remote", "--exit-code", "--heads", "origin", f"refs/heads/{branch}"],
+            cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=20, check=False,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        current_app.logger.warning("git ls-remote %s failed: %s", branch, exc)
+        return None, False
+    if result.returncode == 2:
+        return None, True
+    if result.returncode != 0:
+        current_app.logger.warning("git ls-remote %s exited %s: %s", branch, result.returncode,
+                                   result.stderr.strip())
+        return None, False
+    output = result.stdout.strip()
+    return (output.split()[0] if output else None), False
 
 
 def github_slug():
@@ -590,9 +626,11 @@ def describe_update_state(force_remote_check=False):
     status = read_status()
     remote = None
     remote_check_failed = False
+    branch_gone = None
     if runner_is_installed() or local.get("revision"):
         remote = get_remote_version(force=force_remote_check)
         remote_check_failed = remote is None
+        branch_gone = gone_branch()
 
     newer = bool(remote and local.get("revision") and remote != local["revision"])
     # A newer version is offered once CI has passed for it -- or when GitHub
@@ -622,6 +660,8 @@ def describe_update_state(force_remote_check=False):
         "remote_revision": remote,
         "remote_short_revision": remote[:8] if remote else None,
         "remote_check_failed": remote_check_failed,
+        # The followed branch is gone (merged): the next update installs main and follows it.
+        "branch_gone": branch_gone,
         "newer_version": newer,
         "remote_ci": ci,
         "update_available": update_available,

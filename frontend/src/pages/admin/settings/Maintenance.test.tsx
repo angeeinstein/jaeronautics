@@ -284,6 +284,7 @@ const upToDate: Schemas['UpdatesOut'] = {
   },
   latest: 'bbbb2222',
   latest_check_failed: false,
+  branch_gone: null,
   newer_version: true,
   latest_check: {
     state: 'passed',
@@ -337,6 +338,14 @@ describe('updates', () => {
     expect(screen.getByText(/No rollback point has been recorded yet/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Install update now' }));
     expect(calls.some((call) => call.method === 'POST')).toBe(false);
+  });
+
+  it('a followed branch that is gone: main is offered, and the page says why', async () => {
+    show(<Updates />, { [UPDATES]: { body: { ...upToDate, branch_gone: 'claude/permissions' } } });
+
+    expect(await screen.findByText(/claude\/permissions no longer exists/)).toBeInTheDocument();
+    expect(screen.getByText(/follows main from then on/)).toBeInTheDocument();
+    expect(screen.getByText('A newer version is available.')).toBeInTheDocument();
   });
 
   it('a version CI is still checking is not offered yet', async () => {

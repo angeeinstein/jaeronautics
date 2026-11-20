@@ -41,25 +41,6 @@ good).
 
 ## Open
 
-### Updates: a followed branch that is gone (merged and deleted)
-
-- **Added:** 2026-11-20
-- **What:** when the branch the server follows no longer exists on GitHub,
-  Admin › Settings › Updates says so -- "The branch claude/permissions no
-  longer exists (merged or deleted)" -- and offers to follow `main`, instead
-  of "Could not be checked right now". The automatic update at night does
-  the same as the installer: falls back to `main`.
-- **Why:** seen on the test server on 2026-11-20 after PR #86 was merged:
-  GitHub deletes a branch at the merge, `git ls-remote` then answers with
-  nothing, and the page could not tell that from a network failure. The
-  nightly update stopped at the same check ("the newest version could not
-  be asked for"), so the test server stayed on the old branch.
-- **Where:** `services/system_update.py` (`get_remote_version`: an empty
-  answer is a missing branch, no answer is a failed check;
-  `describe_update_state`), the automatic run, `Updates.tsx`. The installer
-  already falls back (`install.sh`, `main`, "a branch that is gone").
-- **Decided:** follow `main`, as the installer does; not some other branch.
-
 ### Azure: spaces lost around the glossary's words
 
 - **Added:** 2026-11-19

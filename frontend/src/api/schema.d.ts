@@ -11076,6 +11076,8 @@ export interface components {
         /** UpdatesOut */
         UpdatesOut: {
             automatic: components["schemas"]["AutomaticUpdatesOut"];
+            /** Branch Gone */
+            branch_gone: string | null;
             /** In Progress */
             in_progress: boolean;
             installed: components["schemas"]["VersionOut"];

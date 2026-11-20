@@ -202,12 +202,19 @@ function Version({ state, onCheck, checking }: { state: State; onCheck: () => vo
                 Could not be checked right now.
               </Text>
             ) : (
-              <Group gap="xs">
-                <Code>{state.latest ?? 'unknown'}</Code>
-                {state.latest_check?.state === 'passed' ? <Pill tone="active">Checks passed</Pill> : null}
-                {state.latest_check?.state === 'running' ? <Pill tone="pending">Being checked</Pill> : null}
-                {state.latest_check?.state === 'failed' ? <Pill tone="failed">Checks failed</Pill> : null}
-              </Group>
+              <Stack gap={2}>
+                <Group gap="xs">
+                  <Code>{state.latest ?? 'unknown'}</Code>
+                  {state.latest_check?.state === 'passed' ? <Pill tone="active">Checks passed</Pill> : null}
+                  {state.latest_check?.state === 'running' ? <Pill tone="pending">Being checked</Pill> : null}
+                  {state.latest_check?.state === 'failed' ? <Pill tone="failed">Checks failed</Pill> : null}
+                </Group>
+                {state.branch_gone ? (
+                  <Text size="xs" c="dimmed">
+                    {`${state.branch_gone} no longer exists (merged, most likely): this is main's newest version. The next update installs it and follows main from then on.`}
+                  </Text>
+                ) : null}
+              </Stack>
             ),
           ],
         ]}
