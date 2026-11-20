@@ -231,3 +231,53 @@ class TestEachKindToWhoeverHandlesIt:
 
         assert sent[1:] == [(["mod@example.org"], ["the forum"])]
         assert forum.status == "sent" and forum.delivered_to == ["boss@example.org", "mod@example.org"]
+
+    def _routed(self, app, monkeypatch, holders):
+        service = ns.NotificationService(app)
+        monkeypatch.setattr(service, "get_admin_recipient_emails", lambda permission: holders.get(permission, []))
+        sent = []
+        monkeypatch.setattr(service, "_send_admin_digest_mail", lambda recipients, subject, template_vars: (
+            sent.append((recipients, sorted(event["summary"] for event in template_vars["events"]))) or (True, None)))
+        return service, sent
+
+    def test_a_kind_nobody_can_receive_yet_waits_for_somebody(self, app, clock, monkeypatch):
+        # Codex on PR #87: marked sent with nobody to receive it, it never reached whoever came to hold it.
+        from aeronautics_members.db_models import NotificationEvent
+        from aeronautics_members.permissions import Permission
+
+        holders = {Permission.SYSTEM_UPDATE: ["boss@example.org"]}
+        service, sent = self._routed(app, monkeypatch, holders)
+        service.queue_admin_error("forum_sync_failed", "the forum")
+        service.queue_admin_error("internal_server_error", "the server")
+        db.session.commit()
+
+        _deliver(service)
+        forum = db.session.query(NotificationEvent).filter_by(event_type="forum_sync_failed").one()
+        assert sent == [(["boss@example.org"], ["the server"])] and forum.status == "pending"
+
+        holders[Permission.FORUM_MODERATE] = ["mod@example.org"]
+        clock["now"] += timedelta(hours=6)
+        _deliver(service)
+
+        assert sent[1:] == [(["mod@example.org"], ["the forum"])] and forum.status == "sent"
+
+    def test_the_hourly_limit_holds_across_the_digests_of_one_run(self, app, clock, monkeypatch):
+        # Codex on PR #87: one run sends a digest per group of recipients; the limit was asked once.
+        from aeronautics_members.db_models import NotificationBatch
+        from aeronautics_members.permissions import Permission
+
+        service, sent = self._routed(app, monkeypatch, {
+            Permission.FORUM_MODERATE: ["mod@example.org"], Permission.SYSTEM_UPDATE: ["boss@example.org"]})
+        for _ in range(ns.ADMIN_EMAILS_PER_HOUR - 1):
+            db.session.add(NotificationBatch(channel=ns.ADMIN_ERROR_CHANNEL, status="sent", recipient_scope="x",
+                                             recipient_count=1, event_count=1, sent_at=clock["now"]))
+        service.queue_admin_error("forum_sync_failed", "the forum")
+        service.queue_admin_error("internal_server_error", "the server")
+        db.session.commit()
+
+        _deliver(service)
+
+        assert len(sent) == 1
+        clock["now"] += timedelta(hours=2)
+        _deliver(service)
+        assert len(sent) == 2

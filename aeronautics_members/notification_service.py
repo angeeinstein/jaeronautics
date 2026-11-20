@@ -471,7 +471,13 @@ class NotificationService:
 
         sent_batches = failed_batches = 0
         error = None
+        held_back = False
         for events, recipients in by_events.values():
+            # Several digests now go out in one run: the hourly limit is asked before each, and
+            # what it holds back stays pending for the next run.
+            if self._hourly_admin_gate(now) > now:
+                held_back = True
+                break
             recipients.sort()
             batch = NotificationBatch(
                 channel=channel,
@@ -501,10 +507,11 @@ class NotificationService:
                     event.delivery_error = error
 
         # Sent once it has reached everybody it is for; until then it stays to be sent again to
-        # those it has not reached -- never twice to those it has.
+        # those it has not reached -- never twice to those it has. One that nobody can receive yet
+        # (no verified holder of its permission) stays too, for whoever comes to hold it.
         sent_events = 0
         for event in pending_events:
-            if meant_for[event.id] <= set(event.delivered_to or ()):
+            if meant_for[event.id] and meant_for[event.id] <= set(event.delivered_to or ()):
                 event.status = "sent"
                 event.processed_at = now
                 event.delivery_error = None
@@ -514,10 +521,12 @@ class NotificationService:
             self._record_failure(state, channel, now, error)
         else:
             self._record_success(state, channel, now)
+            # A kind counts as sent for its throttle once all of its events went out.
             for kind in due_kinds:
-                self._record_kind_sent(channel, kind, now)
+                if all(event.status == "sent" for event in pending_events if event.event_type == kind):
+                    self._record_kind_sent(channel, kind, now)
         db.session.commit()
-        result = {}
+        result = {"deferred": True} if held_back else {}
         if sent_batches:
             result.update(sent_batches=sent_batches, sent_events=sent_events)
         if failed_batches:
