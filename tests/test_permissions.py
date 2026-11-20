@@ -288,3 +288,21 @@ class TestEmailsAndCountsFollowThePerson:
         _set(client, admin, ["admin"], ROLE_PERMISSIONS["admin"] | {Permission.SYSTEM_UPDATE})
 
         assert app_module.count_users_with_permission(Permission.SYSTEM_UPDATE) == 2
+
+
+class TestThePageAsShown:
+    @pytest.mark.parametrize("role", sorted(ROLE_PERMISSIONS))
+    def test_saving_it_unchanged_changes_nothing(self, client, role):
+        # What the Access tab sends back: the roles held, and the permissions of each row's level.
+        boss = _user("boss@example.org", "superadmin")
+        holder = _user("holder@example.org", role)
+        _login(client, boss)
+        access = client.get(f"/api/v1/admin/accounts/{holder.id}").get_json()["access"]
+        roles = [option["slug"] for option in access["options"] if option["held"]]
+        permissions = {permission for row in access["rows"] if row["level"]
+                       for permission in row["levels"][row["level"] - 1]["permissions"]}
+
+        saved = _set(client, holder, roles, permissions)
+
+        assert saved.status_code == 200 and saved.get_json()["changed"] is False
+        assert holder.permission_exceptions == []

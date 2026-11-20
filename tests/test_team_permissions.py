@@ -160,3 +160,21 @@ class TestWhileInTheTeam:
 
         assert db.session.query(TeamMemberPermission).count() == 0
         assert teams.team_permissions(anna, team) == P.MONEY
+
+
+@pytest.mark.usefixtures("switched_on")
+class TestThePageAsShown:
+    @pytest.mark.parametrize("role", [teams.ROLE_LEAD, teams.ROLE_TREASURER])
+    def test_saving_it_unchanged_changes_nothing(self, app, client, role):
+        team, lead = _led()
+        anna = _member(team)
+        teams.grant_team_role(lead, team, anna, role)
+        db.session.commit()
+        _login(client, lead.id)
+        rows = client.get(f"{API}/people/{anna.id}").get_json()["permissions"]
+        permissions = {permission for row in rows if row["level"]
+                       for permission in row["levels"][row["level"] - 1]["permissions"]}
+
+        assert _set(client, anna, permissions).status_code == 200
+        assert db.session.query(TeamMemberPermission).count() == 0
+        assert teams.team_permissions(anna, team) == teams.TEAM_ROLE_PERMISSIONS[role]
