@@ -153,36 +153,52 @@ describe('a person', () => {
 });
 
 describe('a member’s permissions in the team', () => {
-  const option = (
-    name: Schemas['TeamPermissionOption']['name'],
+  type Row = Schemas['TeamPermissionRowOut'];
+  type Name = Row['levels'][number]['permissions'][number];
+  const row = (
+    key: string,
     label: string,
     area: string,
-    fields: Partial<Schemas['TeamPermissionOption']> = {},
-  ): Schemas['TeamPermissionOption'] => ({
-    name,
+    steps: [string, boolean, Name[], Record<string, number>?][],
+    fields: Partial<Row> = {},
+  ): Row => ({
+    key,
     label,
     area,
-    held: false,
-    from_roles: false,
-    needs: [],
-    may_change: true,
+    description: `${label}, said in more words.`,
+    sensitive: false,
+    levels: steps.map(([stepLabel, seesOnly, permissions, needs]) => ({
+      label: stepLabel,
+      sees_only: seesOnly,
+      permissions,
+      needs: needs ?? {},
+    })),
+    level: 0,
+    from_roles: 0,
+    may_reach: steps.length,
     ...fields,
   });
   const member: Schemas['TeamPersonOut'] = {
     ...applicant,
     now: { ...(applicant.now ?? never()), status: 'active', status_label: 'Member' },
     permissions: [
-      option('team.view_members', 'See the members and applications', 'People'),
-      option('team.write_notes', 'Write notes about people', 'People', { needs: ['team.view_members'] }),
-      option('team.view_money', 'See the team’s money', 'Money', { held: true, from_roles: true }),
-      option('team.edit_bank_details', 'Change the bank details', 'Money', {
-        needs: ['team.view_money'],
-        may_change: false,
-      }),
+      row('members', 'Members', 'People', [['View', true, ['team.view_members']]]),
+      row('notes', 'Notes', 'People', [['Write', false, ['team.write_notes'], { members: 1 }]]),
+      row(
+        'money',
+        'Money',
+        'Money',
+        [
+          ['View', true, ['team.view_money']],
+          ['Manage', false, ['team.edit_bank_details', 'team.view_money']],
+        ],
+        { level: 1, from_roles: 1, may_reach: 1 },
+      ),
     ],
   };
+  const levels = (name: string) => within(screen.getByRole('radiogroup', { name }));
 
-  it('one added brings what it needs; one taken away is said; saved after asking again', async () => {
+  it('a level added brings what it needs; one taken away is said; saved after asking again', async () => {
     const { calls } = show(
       <Person />,
       {
@@ -193,11 +209,12 @@ describe('a member’s permissions in the team', () => {
       '/teams/:slug/manage/people/:userId',
     );
 
-    await userEvent.click(await screen.findByRole('checkbox', { name: /Write notes/ }));
-    expect(screen.getByRole('checkbox', { name: /See the members/ })).toBeChecked();
-    await userEvent.click(screen.getByRole('checkbox', { name: /See the team’s money/ }));
-    expect(screen.getByText('taken away')).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: /Change the bank details/ })).toBeDisabled();
+    await screen.findByRole('radiogroup', { name: 'Notes' });
+    await userEvent.click(levels('Notes').getByRole('radio', { name: 'Write' }));
+    expect(levels('Members').getByRole('radio', { name: 'View' })).toBeChecked();
+    await userEvent.click(levels('Money').getByRole('radio', { name: 'None' }));
+    expect(screen.getByText('Taken away')).toBeInTheDocument();
+    expect(levels('Money').getByRole('radio', { name: 'Manage' })).toBeDisabled();
 
     await userEvent.click(screen.getByRole('button', { name: 'Save permissions' }));
     await userEvent.click(screen.getByRole('button', { name: 'Yes, change the permissions' }));

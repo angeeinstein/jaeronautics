@@ -22,6 +22,7 @@ from ..services import teams as teams_service
 from ..services.pictures import picture_url, picture_urls
 from ..services.notifications import flush_marked_notification_channels
 from ._core import Model, UtcDateTime, endpoint
+from .permission_rows import PermissionLevelOut, PermissionRowOut, rows_out
 from .teams import (
     WAITING, LabelsOut, PhotoOut, TeamPermissionName, _labels, _logo_url, _team, photos_out,
 )
@@ -267,21 +268,14 @@ class TeamNoteOut(Model):
     body: str
 
 
-class TeamPermissionOption(Model):
-    """One team permission on a member's page, for whoever may change theirs."""
+class TeamPermissionLevelOut(PermissionLevelOut):
+    permissions: list[TeamPermissionName]
 
-    name: TeamPermissionName
-    label: str
-    area: str
-    #: They hold it now (while in the team).
-    held: bool
-    #: Their roles in the team give it.
-    from_roles: bool
-    #: What it brings along (and goes without).
-    needs: list[TeamPermissionName]
-    #: The viewer may tick or untick it: they hold it themselves, and this
-    #: person holds no more in the team than they do.
-    may_change: bool
+
+class TeamPermissionRowOut(PermissionRowOut):
+    """A team permission row on a member's page (permission_rows.py), for whoever may change them."""
+
+    levels: list[TeamPermissionLevelOut]
 
 
 class TeamPersonOut(Model):
@@ -297,7 +291,7 @@ class TeamPersonOut(Model):
     may_remove: bool
     may_write_notes: bool
     #: Their permissions in the team, for whoever may change them; None otherwise.
-    permissions: list[TeamPermissionOption] | None = None
+    permissions: list[TeamPermissionRowOut] | None = None
 
 
 def _day(moment):
@@ -342,12 +336,10 @@ def _permission_options(team, person):
     options = teams_service.team_permission_options(current_user, team, person)
     if options is None:
         return None
-    area_of = {permission: area for area, permissions in teams_service.TEAM_PERMISSION_AREAS
-               for permission in permissions}
-    return [TeamPermissionOption(
-        name=permission, label=teams_service.TEAM_PERMISSION_LABELS[permission], area=area_of[permission],
-        held=held, from_roles=from_roles, needs=sorted(teams_service.TEAM_NEEDS.get(permission, ())),
-        may_change=may_change) for permission, held, from_roles, may_change in options]
+    held, from_roles, mine = options
+    return rows_out(teams_service.TEAM_PERMISSION_ROWS, teams_service.TEAM_PERMISSION_ROW_NEEDS, held=held,
+                    from_roles=from_roles, mine=mine, row_model=TeamPermissionRowOut,
+                    level_model=TeamPermissionLevelOut)
 
 
 @endpoint("GET", "/teams/<slug>/manage/people/<int:user_id>", response=TeamPersonOut, tag=TAG)

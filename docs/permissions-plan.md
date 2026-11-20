@@ -91,11 +91,15 @@ the treasurers have the bank account, and the chairperson signs contracts.
    others, not a lead beyond their own. Otherwise an admin could change a
    super admin's address, reset the password and hold the account.
 
-## The page with levels (discussed 2026-11-19, not built yet)
+## The page with levels (agreed and built 2026-11-19)
 
 After trying the *Access* tab on the test server, the maintainer asked for a
-clearer naming scheme and for seeing and changing to look different. Agreed
-direction, a mock-up made to decide the rest:
+clearer naming scheme and for seeing and changing to look different. A
+mock-up showed the rows below; the maintainer: "I think this is intuitive and
+easy to use. So please build it this way." Built in `permissions.py`
+(`PermissionRow`, `PERMISSION_ROWS`), `services/teams.py`
+(`TEAM_PERMISSION_ROWS`), `api/permission_rows.py` and
+`frontend/src/components/PermissionLevels.tsx`:
 
 - **One row per thing, with levels** (as Stripe's restricted keys and
   GitHub's tokens): "None · View · Manage" where seeing and changing are
@@ -107,15 +111,17 @@ direction, a mock-up made to decide the rest:
   the code (`teams.money.view`), a short friendly one on the row ("Team
   money"), and a line under it saying more where needed.
 - **Seeing and changing told apart quietly**: a level that only shows is
-  tinted, one that changes is filled; small icons only if they fit the
-  portal's style.
+  tinted, one that changes is filled, with a small eye or pencil.
+- *Open the admin workspace* is no row: it comes with any admin
+  permission, and goes when the last one goes.
 - **A few marked *Sensitive*** (granting permissions, credentials,
   updates, backups, export and erasure), as Entra marks privileged roles --
   "just don't overdo this".
 - **Emails**: open -- the maintainer: "normally I would say emails don't tell
   more than what the portal does". Then an email would follow the permission
   that shows the same in the portal, and each person could switch it off,
-  instead of separate "receive" permissions.
+  instead of separate "receive" permissions. Until decided, the two stay as
+  rows of their own, *Emails*.
 
 ## How other platforms do it (researched 2026-11-19)
 

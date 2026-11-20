@@ -607,9 +607,9 @@ class TestRedundantRolesAreNotStoredTwice:
         target = _user("effective@example.com", ROLE_SUPERADMIN)
         _login(client, boss.id)
 
-        held = {option["name"] for option in self._access(client, target.id)["permissions"] if option["held"]}
+        levels = {row["key"]: row["level"] for row in self._access(client, target.id)["rows"]}
 
-        assert {Permission.ADMIN_ACCESS, Permission.SYSTEM_UPDATE} <= held
+        assert levels["updates"] == 1 and levels["team_money"] == 2
 
     def test_dropping_the_covering_role_leaves_the_other_tickable(self, client):
         """The covered box must still post, or unticking one would clear both."""
@@ -645,9 +645,10 @@ class TestRedundantRolesAreNotStoredTwice:
         _login(client, boss.id)
 
         # Super Admin's list names what only it carries...
-        assert Permission.SYSTEM_UPDATE in self._option(client, target.user_id, ROLE_SUPERADMIN)["permission_names"]
+        assert self._option(client, target.user_id, ROLE_SUPERADMIN)["levels"]["updates"] == 1
         # ...and Admin's names what an ordinary administrator gets.
-        assert Permission.APPROVALS_REVIEW in self._option(client, target.user_id, ROLE_ADMIN)["permission_names"]
+        assert self._option(client, target.user_id, ROLE_ADMIN)["levels"]["approvals"] == 1
+        assert "updates" not in self._option(client, target.user_id, ROLE_ADMIN)["levels"]
 
     def test_a_new_role_is_inspectable_with_no_template_change(self, app, monkeypatch, client):
         monkeypatch.setitem(
@@ -660,4 +661,4 @@ class TestRedundantRolesAreNotStoredTwice:
         target = make_member(email="newrolefor@example.com")
         _login(client, boss.id)
 
-        assert Permission.FORUM_MODERATE in self._option(client, target.user_id, "moderator")["permission_names"]
+        assert self._option(client, target.user_id, "moderator")["levels"] == {"forum_moderation": 1}

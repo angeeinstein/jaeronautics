@@ -208,14 +208,16 @@ describe('profile', () => {
 });
 
 describe('access', () => {
-  it('a super admin: all ticked and greyed, and why', async () => {
+  const levels = (name: string) => within(screen.getByRole('radiogroup', { name }));
+
+  it('a super admin: every row at its top, greyed, and why', async () => {
     show(account(), { hash: '#access' });
 
     expect(await screen.findByText('included in Super Admin')).toBeInTheDocument();
     expect(screen.getByText(/holds every permission, those added later too/)).toBeInTheDocument();
-    const cards = screen.getByRole('checkbox', { name: /Manage cards/ });
-    expect(cards).toBeChecked();
-    expect(cards).toBeDisabled();
+    const manage = levels('Cards').getByRole('radio', { name: 'Manage' });
+    expect(manage).toBeChecked();
+    expect(manage).toBeDisabled();
   });
 
   it('several roles can be held together', async () => {
@@ -224,45 +226,47 @@ describe('access', () => {
     expect(await screen.findByText(/Several can be ticked; the account holds them all/)).toBeInTheDocument();
   });
 
-  it('a role ticks its permissions; one unticked is saved as taken away', async () => {
+  it('a role sets its levels; one lowered is saved as taken away', async () => {
     const { calls } = show(account({ access: memberAccess() }), {
       hash: '#access',
       answers: { [`PUT ${ACCOUNT}/roles`]: { body: { changed: true, redundant: [] } } },
     });
 
     await userEvent.click(await screen.findByRole('checkbox', { name: /^Admin/ }));
-    expect(screen.getByRole('checkbox', { name: /Change the money/ })).toBeChecked();
-    await userEvent.click(screen.getByRole('checkbox', { name: /Manage cards/ }));
-    expect(screen.getByText('taken away')).toBeInTheDocument();
+    expect(levels('Team money').getByRole('radio', { name: 'Manage' })).toBeChecked();
+    await userEvent.click(levels('Cards').getByRole('radio', { name: 'None' }));
+    expect(screen.getByText('Taken away')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Save access' }));
     await userEvent.click(screen.getByRole('button', { name: 'Yes, change the access' }));
 
     expect(await sent(calls, 'PUT', `${ACCOUNT}/roles`)).toEqual({
       roles: ['admin'],
-      permissions: ['admin.access', 'money.manage', 'money.view'],
+      permissions: ['accounts.billing', 'accounts.view', 'money.manage', 'money.view'],
     });
   });
 
-  it('a permission brings what it needs, and goes with it', async () => {
+  it('a level brings what it needs, and goes with it', async () => {
     show(account({ access: memberAccess() }), { hash: '#access' });
 
-    await userEvent.click(await screen.findByRole('checkbox', { name: /Change the money/ }));
+    await screen.findByRole('radiogroup', { name: 'Billing' });
+    await userEvent.click(levels('Billing').getByRole('radio', { name: 'Re-sync' }));
 
-    expect(screen.getByRole('checkbox', { name: /See the money/ })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: /Open the admin workspace/ })).toBeChecked();
-    expect(screen.getAllByText('added')).toHaveLength(3);
+    expect(levels('Member accounts').getByRole('radio', { name: 'View' })).toBeChecked();
+    expect(screen.getAllByText('Added')).toHaveLength(2);
 
-    await userEvent.click(screen.getByRole('checkbox', { name: /Open the admin workspace/ }));
+    await userEvent.click(levels('Member accounts').getByRole('radio', { name: 'None' }));
 
-    expect(screen.getByRole('checkbox', { name: /Change the money/ })).not.toBeChecked();
+    expect(levels('Billing').getByRole('radio', { name: 'None' })).toBeChecked();
     expect(screen.getByRole('button', { name: 'Save access' })).toBeDisabled();
   });
 
-  it('what the person looking does not hold stays greyed', async () => {
-    show(account({ access: memberAccess({ notMine: 'system.update' }) }), { hash: '#access' });
+  it('what the person looking does not hold stays greyed, and is marked when sensitive', async () => {
+    show(account({ access: memberAccess() }), { hash: '#access' });
 
-    expect(await screen.findByRole('checkbox', { name: /Install a new version/ })).toBeDisabled();
-    expect(screen.getByRole('checkbox', { name: /Manage cards/ })).toBeEnabled();
+    await screen.findByRole('radiogroup', { name: 'Updates' });
+    expect(levels('Updates').getByRole('radio', { name: 'Install' })).toBeDisabled();
+    expect(levels('Cards').getByRole('radio', { name: 'Manage' })).toBeEnabled();
+    expect(screen.getByText('Sensitive')).toBeInTheDocument();
   });
 
   it('nothing to save until something changes', async () => {
@@ -282,15 +286,56 @@ describe('access', () => {
 });
 
 type Access = NonNullable<AccountOut['access']>;
+type Row = Access['rows'][number];
 
-const PERMISSIONS: [string, string, string, string[]][] = [
-  ['admin.access', 'Open the admin workspace', 'Admin workspace', []],
-  ['cards.manage', 'Manage cards', 'Cards and devices', ['admin.access']],
-  ['money.view', 'See the money', 'Teams and money', ['admin.access']],
-  ['money.manage', 'Change the money', 'Teams and money', ['admin.access', 'money.view']],
-  ['system.update', 'Install a new version', 'Settings and server', ['admin.access']],
-];
-const ADMIN = ['admin.access', 'cards.manage', 'money.manage', 'money.view'];
+function needsOf(key: string): Record<string, number> {
+  return key === 'billing' ? { accounts: 1 } : {};
+}
+
+function row(
+  key: string,
+  label: string,
+  area: string,
+  steps: [string, boolean, string[]][],
+  extra: Partial<Row> = {},
+): Row {
+  return {
+    key,
+    label,
+    area,
+    description: `${label}, said in more words.`,
+    sensitive: false,
+    levels: steps.map(([stepLabel, seesOnly, permissions]) => ({
+      label: stepLabel,
+      sees_only: seesOnly,
+      permissions,
+      needs: needsOf(key),
+    })),
+    level: 0,
+    from_roles: 0,
+    may_reach: steps.length,
+    ...extra,
+  };
+}
+
+function rows(level: (key: string, top: number) => number, mayReach: (key: string, top: number) => number) {
+  return [
+    row('accounts', 'Member accounts', 'Members', [['View', true, ['accounts.view']]]),
+    row('billing', 'Billing', 'Members', [['Re-sync', false, ['accounts.billing']]]),
+    row('team_money', 'Team money', 'Teams and money', [
+      ['View', true, ['money.view']],
+      ['Manage', false, ['money.manage', 'money.view']],
+    ]),
+    row('cards', 'Cards', 'Cards and devices', [['Manage', false, ['cards.manage']]]),
+    row('updates', 'Updates', 'System', [['Install', false, ['system.update']]], { sensitive: true }),
+  ].map((one) => ({
+    ...one,
+    level: level(one.key, one.levels.length),
+    may_reach: mayReach(one.key, one.levels.length),
+  }));
+}
+
+const ADMIN = { accounts: 1, billing: 1, team_money: 2, cards: 1 };
 
 function roles(held: string[]): Access['options'] {
   return [
@@ -300,7 +345,7 @@ function roles(held: string[]): Access['options'] {
       description: 'Administers members.',
       held: held.includes('admin'),
       covered_by: held.includes('superadmin') ? 'Super Admin' : null,
-      permission_names: ADMIN,
+      levels: ADMIN,
       may_change: true,
     },
     {
@@ -309,28 +354,19 @@ function roles(held: string[]): Access['options'] {
       description: 'Installs updates.',
       held: held.includes('superadmin'),
       covered_by: null,
-      permission_names: PERMISSIONS.map(([name]) => name),
+      levels: { ...ADMIN, updates: 1 },
       may_change: true,
     },
   ];
 }
 
-function permissions(held: (name: string) => boolean, notMine = ''): Access['permissions'] {
-  return PERMISSIONS.map(([name, label, area, needs]) => ({
-    name,
-    label,
-    area,
-    needs,
-    held: held(name),
-    from_roles: held(name),
-    may_change: name !== notMine,
-  }));
-}
-
 function superadminAccess(): Access {
   return {
     options: roles(['superadmin']),
-    permissions: permissions(() => true),
+    rows: rows(
+      (_key, top) => top,
+      (_key, top) => top,
+    ),
     superadmin: true,
     roles_locked: null,
     removal_warning: null,
@@ -338,11 +374,15 @@ function superadminAccess(): Access {
   };
 }
 
-function memberAccess({ notMine = '' } = {}): Access {
+/** A plain member, seen by an admin: everything but updates within reach. */
+function memberAccess(): Access {
   return {
     ...superadminAccess(),
     options: roles([]),
-    permissions: permissions(() => false, notMine),
+    rows: rows(
+      () => 0,
+      (key, top) => (key === 'updates' ? 0 : top),
+    ),
     superadmin: false,
   };
 }

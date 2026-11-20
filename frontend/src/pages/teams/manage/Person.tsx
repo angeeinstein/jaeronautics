@@ -6,7 +6,7 @@
  * (docs/permissions-plan.md). Data: GET /api/v1/teams/<slug>/manage/people/<user>,
  * the decisions under .../memberships/<id>/, PUT .../people/<user>/permissions.
  */
-import { Avatar, Button, Checkbox, Group, SimpleGrid, Stack, Text, Textarea, TextInput } from '@mantine/core';
+import { Avatar, Button, Group, SimpleGrid, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useParams } from 'react-router';
@@ -16,10 +16,11 @@ import { api, call, type Schemas } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
 import { Details } from '../../../components/Details';
 import { Panel } from '../../../components/Panel';
+import { PermissionLevels } from '../../../components/PermissionLevels';
 import { Pill, type Tone } from '../../../components/Pill';
 import { ErrorState, LoadingState } from '../../../components/States';
 import { formatDate, formatDateTime } from '../../../lib/format';
-import { groupByArea, untick, withNeeds } from '../../../lib/permissionSets';
+import { type Levels, levelsOf, permissionsOf, pick, sameLevels } from '../../../lib/permissionLevels';
 import classes from '../Teams.module.css';
 import { ManageHeader, useManageChange, useSlug } from './shared';
 
@@ -181,19 +182,17 @@ function Now({ person, personKey }: { person: Person; personKey: readonly unknow
 /** What they may do in the team: their roles' permissions, each of which can be unticked, or one
  * added -- within what the person looking holds there themselves. */
 function Permissions({
-  options,
+  rows,
   person,
   personKey,
 }: {
-  options: NonNullable<Person['permissions']>;
+  rows: NonNullable<Person['permissions']>;
   person: Person;
   personKey: readonly unknown[];
 }) {
   const slug = useSlug();
-  const needs = new Map(options.map((option) => [option.name, option.needs]));
-  const held = options.filter((option) => option.held).map((option) => option.name);
-  const [chosen, setChosen] = useState<Set<TeamPermission>>(new Set(held));
-  const unchanged = chosen.size === held.length && held.every((name) => chosen.has(name));
+  const held = levelsOf(rows);
+  const [levels, setLevels] = useState<Levels>(held);
   const save = useManageChange(
     personKey,
     (permissions: TeamPermission[]) =>
@@ -209,48 +208,24 @@ function Permissions({
     <Panel icon={IconKey} title="Permissions">
       <Stack gap="md">
         <Text size="sm" c="dimmed">
-          What their roles in the team give is ticked; each can be unticked, or another added. Only what you
-          hold yourself.
+          Their roles in the team set the levels; each can be changed. Only what you hold yourself.
         </Text>
-        {groupByArea(options).map(([area, listed]) => (
-          <Stack key={area} gap={6}>
-            <Text size="sm" fw={600}>
-              {area}
-            </Text>
-            {listed.map((option) => {
-              const ticked = chosen.has(option.name);
-              return (
-                <Checkbox
-                  key={option.name}
-                  checked={ticked}
-                  disabled={!option.may_change}
-                  onChange={(event) => {
-                    setChosen(
-                      event.currentTarget.checked
-                        ? withNeeds([...chosen, option.name], needs)
-                        : untick(chosen, option.name, needs),
-                    );
-                  }}
-                  label={
-                    <Group gap={6} component="span">
-                      {option.label}
-                      {ticked && !option.from_roles ? <Pill tone="info">added</Pill> : null}
-                      {!ticked && option.from_roles ? <Pill tone="pending">taken away</Pill> : null}
-                    </Group>
-                  }
-                />
-              );
-            })}
-          </Stack>
-        ))}
+        <PermissionLevels
+          rows={rows}
+          levels={levels}
+          fromRoles={(row) => row.from_roles}
+          onPick={(key, level) => {
+            setLevels(pick(rows, levels, key, level));
+          }}
+        />
         <Group>
           <ConfirmButton
             color="brand"
             confirmLabel="Yes, change the permissions"
-            disabled={unchanged}
+            disabled={sameLevels(levels, held)}
             loading={save.mutation.isPending}
             onConfirm={() => {
-              save.mutation.mutate([...chosen].sort());
+              save.mutation.mutate(permissionsOf(rows, levels));
             }}
           >
             Save permissions
@@ -385,8 +360,8 @@ export function Person() {
           {data.permissions ? (
             // Keyed by what is held, so a saved change starts afresh.
             <Permissions
-              key={data.permissions.map((option) => `${option.name}:${String(option.held)}`).join(',')}
-              options={data.permissions}
+              key={data.permissions.map((row) => `${row.key}:${String(row.level)}`).join(',')}
+              rows={data.permissions}
               person={data}
               personKey={personKey}
             />

@@ -20,7 +20,7 @@ from sqlalchemy.orm import selectinload
 
 from ..db_models import AuditLog, User, db
 from ..member_categories import CATEGORY_LABELS
-from ..permissions import (PERMISSION_LABELS, ROLE_PERMISSIONS, Permission, covering_role, permissions_for,
+from ..permissions import (ROLE_PERMISSIONS, Permission, covering_role, permissions_for,
                            role_description, role_label)
 from ..services import NotFoundError
 from ..services import account_admin as actions
@@ -31,6 +31,7 @@ from ..services.membership import PAYMENT_STATUS_LABELS
 from ..services.privacy import describe_deletion_impact, refresh_subscription_state_before_deletion
 from ..services.pictures import picture_url
 from ._core import Model, UtcDateTime, endpoint
+from .permission_rows import PermissionRowOut, rows_out
 from .admin_accounts import AccountState, MembershipState, Role
 
 TAG = "Admin"
@@ -146,26 +147,9 @@ class RoleOption(Model):
     held: bool
     #: The role held that already grants everything this one does.
     covered_by: str | None
-    #: What ticking the role ticks, by name.
-    permission_names: list[str]
+    #: What ticking the role sets: each row's level, ``{row key: level}``.
+    levels: dict[str, int]
     #: Whether the person looking may give or take it (only what they hold; super admin only by one).
-    may_change: bool
-
-
-class PermissionOption(Model):
-    """One permission on a person's Access tab (docs/permissions-plan.md)."""
-
-    name: str
-    label: str
-    #: The group it is listed in.
-    area: str
-    #: Held now: by a role, or added.
-    held: bool
-    #: Given by the roles held -- unticked, it is taken away as an exception.
-    from_roles: bool
-    #: What it brings with it, and what goes when one of these goes.
-    needs: list[str]
-    #: Whether the person looking may tick or untick it: only what they hold themselves.
     may_change: bool
 
 
@@ -173,8 +157,8 @@ class Access(Model):
     """Roles, permissions and switching the account off -- for whoever manages access."""
 
     options: list[RoleOption]
-    #: Every permission, grouped, with what the account holds and why.
-    permissions: list[PermissionOption]
+    #: Every permission, as rows with levels, by area: what the account holds and why.
+    rows: list[PermissionRowOut]
     #: A super admin holds every permission and takes no exceptions: nothing to tick.
     superadmin: bool
     #: Why the access cannot be changed here at all: one's own, a super admin's, one holding more.
@@ -358,7 +342,7 @@ def _why_locked(own, superadmin, holds_more):
 def _access(user):
     if not current_user.can(Permission.ROLES_MANAGE):
         return None
-    from ..permissions import NEEDS, PERMISSION_AREAS, SUPERADMIN, with_needs
+    from ..permissions import PERMISSION_ROW_NEEDS, PERMISSION_ROWS, SUPERADMIN, with_needs
     from ..services.access import is_superadmin
 
     held = {role.slug for role in user.roles}
@@ -366,11 +350,13 @@ def _access(user):
     own = user.id == current_user.id
     i_am_superadmin = is_superadmin(current_user)
     target_superadmin = SUPERADMIN in held
-    # A super admin is changed only by a super admin; one's own access by somebody else.
+    # A super admin is changed only by a super admin; one's own access by somebody else; an
+    # account holding more than the person looking by somebody who holds as much.
     changeable = not own and (i_am_superadmin or not target_superadmin) and user.permissions <= mine
     options = []
     for slug in assignable_roles():
         covering = covering_role(slug, held)
+        given = ROLE_PERMISSIONS[slug]
         options.append(RoleOption(
             slug=slug,
             label=role_label(slug),
@@ -379,20 +365,12 @@ def _access(user):
             # Naming the role that already grants all of this is the whole
             # answer to "why is Admin not ticked on a Super Admin?".
             covered_by=role_label(covering) if covering else None,
-            permission_names=sorted(ROLE_PERMISSIONS[slug]),
-            may_change=changeable and (i_am_superadmin if slug == SUPERADMIN else ROLE_PERMISSIONS[slug] <= mine),
+            levels={row.key: row.level_of(given) for row in PERMISSION_ROWS if row.level_of(given)},
+            may_change=changeable and (i_am_superadmin if slug == SUPERADMIN else given <= mine),
         ))
-    from_roles = with_needs(permissions_for(slug for slug in held))
-    effective = user.permissions
-    permissions = [
-        PermissionOption(
-            name=permission, label=PERMISSION_LABELS.get(permission, permission), area=area,
-            held=permission in effective, from_roles=permission in from_roles,
-            needs=sorted(NEEDS.get(permission, ())),
-            may_change=changeable and not target_superadmin and permission in mine,
-        )
-        for area, listed in PERMISSION_AREAS for permission in listed
-    ]
+    rows = rows_out(PERMISSION_ROWS, PERMISSION_ROW_NEEDS, held=user.permissions,
+                    from_roles=with_needs(permissions_for(held)),
+                    mine=mine if changeable and not target_superadmin else frozenset())
     removal_warning = None
     if user.deleted_at is None:
         blockers = describe_role_change(user, [])["blockers"]
@@ -403,7 +381,7 @@ def _access(user):
                             describe_account_disable(user, actor_user=current_user, disable=True)["blockers"]]
     return Access(
         options=options,
-        permissions=permissions,
+        rows=rows,
         superadmin=target_superadmin,
         roles_locked=_why_locked(own, target_superadmin and not i_am_superadmin, not user.permissions <= mine),
         removal_warning=removal_warning,

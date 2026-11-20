@@ -11,7 +11,7 @@ from api_helpers import send
 from conftest import app_module, db, make_member
 from aeronautics_members.db_models import UserPermission
 from aeronautics_members.permissions import (
-    ALL_PERMISSIONS, NEEDS, PERMISSION_AREAS, PERMISSION_LABELS, ROLE_PERMISSIONS, Permission,
+    ALL_PERMISSIONS, NEEDS, PERMISSION_ROW_NEEDS, PERMISSION_ROWS, ROLE_PERMISSIONS, Permission,
     effective_permissions)
 from aeronautics_members.services import access, messages
 from aeronautics_members.services.clock import get_now_utc
@@ -41,11 +41,28 @@ def _set(client, user, roles, permissions=None):
 
 
 class TestTheCatalogue:
-    def test_every_permission_has_a_label_and_an_area_once(self):
-        listed = [permission for _area, permissions in PERMISSION_AREAS for permission in permissions]
+    def test_every_permission_is_on_one_row_but_the_workspace(self):
+        listed = [permission for row in PERMISSION_ROWS for permission in row.permissions]
 
-        assert sorted(listed) == sorted(ALL_PERMISSIONS) and len(listed) == len(set(listed))
-        assert set(PERMISSION_LABELS) == ALL_PERMISSIONS
+        assert sorted(listed) == sorted(ALL_PERMISSIONS - {Permission.ADMIN_ACCESS})
+        assert len(listed) == len(set(listed)) and len({row.key for row in PERMISSION_ROWS}) == len(PERMISSION_ROWS)
+
+    def test_a_row_and_its_levels(self):
+        money = next(row for row in PERMISSION_ROWS if row.key == "team_money")
+
+        assert [step.label for step in money.levels] == ["View", "Manage"] and money.levels[0].sees_only
+        assert money.at(2) == {Permission.TEAMS_MONEY_VIEW, Permission.TEAMS_MONEY}
+        assert money.level_of({Permission.TEAMS_MONEY_VIEW}) == 1 and money.level_of(set()) == 0
+        # Re-syncing billing is done on the account's page, so needs seeing the accounts.
+        assert PERMISSION_ROW_NEEDS["billing"] == [{"accounts": 1}]
+
+    def test_the_workspace_comes_with_what_is_done_in_it(self):
+        assert effective_permissions(["auditor"], taken=[Permission.TEAMS_MONEY_VIEW, Permission.CREDIT_VIEW]) == set()
+        assert effective_permissions([], added=[Permission.FORUM_MODERATOR]) == {Permission.FORUM_MODERATOR}
+
+    def test_a_forum_administrator_is_a_moderator_there_too(self):
+        assert effective_permissions([], added=[Permission.FORUM_ADMIN]) == {
+            Permission.FORUM_ADMIN, Permission.FORUM_MODERATOR}
 
     def test_changing_needs_seeing(self):
         # "every writing permission also requires the reading permission" (2026-11-19)
@@ -164,7 +181,8 @@ class TestOnlyWhatOneHolds:
 
         assert refused.status_code == 409 and backup.can(Permission.ACCOUNTS_VIEW)
         assert "holds permissions you do not" in page["roles_locked"]
-        assert not any(option["may_change"] for option in page["permissions"] + page["options"])
+        assert not any(row["may_reach"] for row in page["rows"])
+        assert not any(option["may_change"] for option in page["options"])
 
     def test_a_super_admin_out_of_an_admins_reach(self, client):
         # Otherwise an admin could change the super admin's address, reset the password and hold it.

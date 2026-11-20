@@ -1919,11 +1919,15 @@ currently the only relationship between the two roles, which is precisely why
 the redundant state was confusing. The union banner is borrowed regardless,
 since a list of checkboxes otherwise leaves that rule to be inferred.
 
-The *Access* tab also lists **every permission, by area**: ticking a role
-ticks its permissions, each can then be unticked, or one added without a
-role. The page posts the roles and the permissions wanted; the service works
-out the exceptions (`describe_role_change`). A page that posts roles only
-keeps the exceptions as they are.
+The *Access* tab also lists **every permission, as rows with levels, by
+area** (`PERMISSION_ROWS`): "None · View · Manage", "None · Install". A role
+sets its levels, each row can then be set higher or lower, or a level given
+without a role. A row's levels are cumulative; what a level needs of other
+rows comes from `NEEDS` (`needs_by_level`). The page posts the roles and the
+permissions of the levels chosen; the service works out the exceptions
+(`describe_role_change`). A page that posts roles only keeps the exceptions
+as they are. A new permission goes on a row -- a level of its own, or a new
+row -- and `tests/test_permissions.py` fails until it does.
 
 The refusals, all enforced in the service so they hold however the change
 arrives:

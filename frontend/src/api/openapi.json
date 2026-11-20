@@ -19,13 +19,6 @@
             "title": "Options",
             "type": "array"
           },
-          "permissions": {
-            "items": {
-              "$ref": "#/components/schemas/PermissionOption"
-            },
-            "title": "Permissions",
-            "type": "array"
-          },
           "removal_warning": {
             "anyOf": [
               {
@@ -48,6 +41,13 @@
             ],
             "title": "Roles Locked"
           },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/PermissionRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
           "superadmin": {
             "title": "Superadmin",
             "type": "boolean"
@@ -55,7 +55,7 @@
         },
         "required": [
           "options",
-          "permissions",
+          "rows",
           "superadmin",
           "roles_locked",
           "removal_warning",
@@ -14107,52 +14107,96 @@
         "title": "PeriodQuery",
         "type": "object"
       },
-      "PermissionOption": {
+      "PermissionLevelOut": {
         "additionalProperties": false,
-        "description": "One permission on a person's Access tab (docs/permissions-plan.md).",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "needs": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Needs",
+            "type": "object"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "sees_only": {
+            "title": "Sees Only",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "label",
+          "sees_only",
+          "permissions",
+          "needs"
+        ],
+        "title": "PermissionLevelOut",
+        "type": "object"
+      },
+      "PermissionRowOut": {
+        "additionalProperties": false,
         "properties": {
           "area": {
             "title": "Area",
             "type": "string"
           },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
           "from_roles": {
             "title": "From Roles",
-            "type": "boolean"
+            "type": "integer"
           },
-          "held": {
-            "title": "Held",
-            "type": "boolean"
+          "key": {
+            "title": "Key",
+            "type": "string"
           },
           "label": {
             "title": "Label",
             "type": "string"
           },
-          "may_change": {
-            "title": "May Change",
-            "type": "boolean"
+          "level": {
+            "title": "Level",
+            "type": "integer"
           },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "needs": {
+          "levels": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/PermissionLevelOut"
             },
-            "title": "Needs",
+            "title": "Levels",
             "type": "array"
+          },
+          "may_reach": {
+            "title": "May Reach",
+            "type": "integer"
+          },
+          "sensitive": {
+            "title": "Sensitive",
+            "type": "boolean"
           }
         },
         "required": [
-          "name",
-          "label",
+          "key",
           "area",
-          "held",
+          "label",
+          "description",
+          "sensitive",
+          "levels",
+          "level",
           "from_roles",
-          "needs",
-          "may_change"
+          "may_reach"
         ],
-        "title": "PermissionOption",
+        "title": "PermissionRowOut",
         "type": "object"
       },
       "PersonCardsOut": {
@@ -15727,16 +15771,16 @@
             "title": "Label",
             "type": "string"
           },
+          "levels": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Levels",
+            "type": "object"
+          },
           "may_change": {
             "title": "May Change",
             "type": "boolean"
-          },
-          "permission_names": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Permission Names",
-            "type": "array"
           },
           "slug": {
             "title": "Slug",
@@ -15749,7 +15793,7 @@
           "description",
           "held",
           "covered_by",
-          "permission_names",
+          "levels",
           "may_change"
         ],
         "title": "RoleOption",
@@ -18967,54 +19011,21 @@
         "title": "TeamPayment",
         "type": "object"
       },
-      "TeamPermissionOption": {
+      "TeamPermissionLevelOut": {
         "additionalProperties": false,
-        "description": "One team permission on a member's page, for whoever may change theirs.",
         "properties": {
-          "area": {
-            "title": "Area",
-            "type": "string"
-          },
-          "from_roles": {
-            "title": "From Roles",
-            "type": "boolean"
-          },
-          "held": {
-            "title": "Held",
-            "type": "boolean"
-          },
           "label": {
             "title": "Label",
             "type": "string"
           },
-          "may_change": {
-            "title": "May Change",
-            "type": "boolean"
-          },
-          "name": {
-            "enum": [
-              "team.view_members",
-              "team.review_applications",
-              "team.remove_members",
-              "team.write_notes",
-              "team.export",
-              "team.edit_settings",
-              "team.send_access_list",
-              "team.view_money",
-              "team.edit_bank_details",
-              "team.appoint_treasurer",
-              "team.appoint_leads",
-              "team.edit_prices",
-              "team.messages",
-              "team.devices",
-              "team.attendance",
-              "team.rules",
-              "team.permissions"
-            ],
-            "title": "Name",
-            "type": "string"
-          },
           "needs": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Needs",
+            "type": "object"
+          },
+          "permissions": {
             "items": {
               "enum": [
                 "team.view_members",
@@ -19037,20 +19048,79 @@
               ],
               "type": "string"
             },
-            "title": "Needs",
+            "title": "Permissions",
             "type": "array"
+          },
+          "sees_only": {
+            "title": "Sees Only",
+            "type": "boolean"
           }
         },
         "required": [
-          "name",
           "label",
-          "area",
-          "held",
-          "from_roles",
-          "needs",
-          "may_change"
+          "sees_only",
+          "permissions",
+          "needs"
         ],
-        "title": "TeamPermissionOption",
+        "title": "TeamPermissionLevelOut",
+        "type": "object"
+      },
+      "TeamPermissionRowOut": {
+        "additionalProperties": false,
+        "description": "A team permission row on a member's page (permission_rows.py), for whoever may change them.",
+        "properties": {
+          "area": {
+            "title": "Area",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "from_roles": {
+            "title": "From Roles",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "levels": {
+            "items": {
+              "$ref": "#/components/schemas/TeamPermissionLevelOut"
+            },
+            "title": "Levels",
+            "type": "array"
+          },
+          "may_reach": {
+            "title": "May Reach",
+            "type": "integer"
+          },
+          "sensitive": {
+            "title": "Sensitive",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "area",
+          "label",
+          "description",
+          "sensitive",
+          "levels",
+          "level",
+          "from_roles",
+          "may_reach"
+        ],
+        "title": "TeamPermissionRowOut",
         "type": "object"
       },
       "TeamPermissionsIn": {
@@ -19140,7 +19210,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/TeamPermissionOption"
+                  "$ref": "#/components/schemas/TeamPermissionRowOut"
                 },
                 "type": "array"
               },

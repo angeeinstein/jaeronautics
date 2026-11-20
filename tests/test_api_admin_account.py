@@ -131,8 +131,8 @@ class TestWhatThePageMayOffer:
         # An admin grants permissions (2026-11-19) -- those they hold, never super admin.
         roles = {option["slug"]: option["may_change"] for option in body["access"]["options"]}
         assert roles["admin"] is True and roles["superadmin"] is False
-        permissions = {option["name"]: option["may_change"] for option in body["access"]["permissions"]}
-        assert permissions["cards.manage"] is True and permissions["system.update"] is False
+        reach = {row["key"]: row["may_reach"] for row in body["access"]["rows"]}
+        assert reach["cards"] == 1 and reach["updates"] == 0 and reach["forum_role"] == 1
         assert body["teams"] is not None
 
     def test_billing_sync_once_there_is_something_at_stripe(self, client, member):

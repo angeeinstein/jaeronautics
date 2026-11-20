@@ -31,7 +31,7 @@ from pathlib import Path
 from flask import current_app
 
 from ..db_models import Member, Setting, Team, TeamMemberPermission, TeamMembership, TeamRole, User, db
-from ..permissions import Permission
+from ..permissions import Permission, PermissionRow, act, needs_by_level, view
 from . import ConflictError, NotFoundError, ValidationError
 from .audit import log_audit_event
 from .clock import get_now_utc
@@ -157,37 +157,44 @@ def without_unmet_team_needs(permissions):
     return result
 
 
-#: The team permissions as a lead sees them on a member's page, by area.
-TEAM_PERMISSION_AREAS = (
-    ("People", (TeamPermission.VIEW_MEMBERS, TeamPermission.REVIEW_APPLICATIONS, TeamPermission.REMOVE_MEMBERS,
-                TeamPermission.WRITE_NOTES, TeamPermission.EXPORT, TeamPermission.MESSAGES,
-                TeamPermission.ATTENDANCE)),
-    ("Roles and permissions", (TeamPermission.APPOINT_LEADS, TeamPermission.APPOINT_TREASURER,
-                               TeamPermission.PERMISSIONS)),
-    ("Money", (TeamPermission.VIEW_MONEY, TeamPermission.EDIT_BANK_DETAILS, TeamPermission.EDIT_PRICES)),
-    ("The team", (TeamPermission.EDIT_SETTINGS, TeamPermission.RULES, TeamPermission.DEVICES,
-                  TeamPermission.SEND_ACCESS_LIST)),
+#: The team permissions as a lead sees them on a member's page: rows with levels, by area, as
+#: on a person's *Access* tab (permissions.PermissionRow).
+TEAM_PERMISSION_ROWS = (
+    PermissionRow("members", "People", "Members", "The members and applications, how to reach them.",
+                  (view("View", TeamPermission.VIEW_MEMBERS),)),
+    PermissionRow("applications", "People", "Applications", "Invite, approve or decline applicants.",
+                  (act("Review", TeamPermission.REVIEW_APPLICATIONS),)),
+    PermissionRow("removing", "People", "Removing members", "End a membership now, with a reason.",
+                  (act("Remove", TeamPermission.REMOVE_MEMBERS),)),
+    PermissionRow("notes", "People", "Notes", "Notes about people, seen by the leads.",
+                  (act("Write", TeamPermission.WRITE_NOTES),)),
+    PermissionRow("export", "People", "Export", "Download the member list.",
+                  (act("Export", TeamPermission.EXPORT),)),
+    PermissionRow("messages", "People", "Messages", "Read the messages to the leads, write to the members.",
+                  (act("Read and write", TeamPermission.MESSAGES),)),
+    PermissionRow("attendance", "People", "Attendance", "Check-ins at the team's readers, hours, corrections.",
+                  (act("Manage", TeamPermission.ATTENDANCE),)),
+    PermissionRow("leads", "Roles and permissions", "Leads", "Appoint and dismiss the team's leads.",
+                  (act("Appoint", TeamPermission.APPOINT_LEADS),)),
+    PermissionRow("treasurer", "Roles and permissions", "Treasurer", "Appoint and dismiss the treasurer.",
+                  (act("Appoint", TeamPermission.APPOINT_TREASURER),)),
+    PermissionRow("permissions", "Roles and permissions", "Permissions",
+                  "Change members' permissions -- only those one holds.",
+                  (act("Change", TeamPermission.PERMISSIONS),)),
+    PermissionRow("money", "Money", "Money", "View: what the team earned and was paid. Manage: its bank details.",
+                  (view("View", TeamPermission.VIEW_MONEY), act("Manage", TeamPermission.EDIT_BANK_DETAILS))),
+    PermissionRow("prices", "Money", "Prices", "The price list for what the team sells for credit.",
+                  (act("Manage", TeamPermission.EDIT_PRICES),)),
+    PermissionRow("settings", "The team", "Settings", "The team's page, joining, its fee.",
+                  (act("Manage", TeamPermission.EDIT_SETTINGS),)),
+    PermissionRow("rules", "The team", "Rules", "Upload drafts of the team's rules.",
+                  (act("Draft", TeamPermission.RULES),)),
+    PermissionRow("devices", "The team", "Devices", "The team's readers: names, places, what they do.",
+                  (act("Manage", TeamPermission.DEVICES),)),
+    PermissionRow("access_list", "The team", "Access list", "Send the current members, for access to the rooms.",
+                  (act("Send", TeamPermission.SEND_ACCESS_LIST),)),
 )
-
-TEAM_PERMISSION_LABELS = {
-    TeamPermission.VIEW_MEMBERS: "See the members and applications",
-    TeamPermission.REVIEW_APPLICATIONS: "Decide on applications",
-    TeamPermission.REMOVE_MEMBERS: "Remove members",
-    TeamPermission.WRITE_NOTES: "Write notes about people",
-    TeamPermission.EXPORT: "Export the member list",
-    TeamPermission.MESSAGES: "Read the messages to the leads, write to the members",
-    TeamPermission.ATTENDANCE: "Attendance",
-    TeamPermission.APPOINT_LEADS: "Appoint and dismiss leads",
-    TeamPermission.APPOINT_TREASURER: "Appoint and dismiss the treasurer",
-    TeamPermission.PERMISSIONS: "Change members' permissions -- those one holds oneself",
-    TeamPermission.VIEW_MONEY: "See the team's money",
-    TeamPermission.EDIT_BANK_DETAILS: "Change the bank details",
-    TeamPermission.EDIT_PRICES: "Change the price list",
-    TeamPermission.EDIT_SETTINGS: "Change the team's settings",
-    TeamPermission.RULES: "Team rules",
-    TeamPermission.DEVICES: "The team's devices",
-    TeamPermission.SEND_ACCESS_LIST: "Send the access list",
-}
+TEAM_PERMISSION_ROW_NEEDS = needs_by_level(TEAM_PERMISSION_ROWS, TEAM_NEEDS)
 
 #: Leave a field as it is: settings are saved part by part -- the leads'
 #: sections, the admins' form -- and a part does not touch what it lacks.
@@ -1033,19 +1040,16 @@ def _tidy_team_exceptions(team, user):
 
 
 def team_permission_options(actor, team, user):
-    """Every team permission as ``actor`` sees it on ``user``'s page, or None
-    when ``actor`` may not change ``user``'s: ``(permission, held, from_roles,
-    may_change)``."""
+    """What ``actor`` sees of ``user``'s permissions in ``team``, or None when ``actor`` may not
+    change them: ``(held, from_roles, mine)`` -- the permissions held, those their roles give,
+    and those ``actor`` may give or take (none when ``user`` holds more there than ``actor``)."""
     if actor is None or user is None or actor.id == user.id:
         return None
     mine = team_permissions(actor, team)
     if TeamPermission.PERMISSIONS not in mine or active_team_membership(user, team) is None:
         return None
     theirs = own_team_permissions(user, team)
-    within = theirs <= mine
-    from_roles = _from_team_roles(user, team)
-    return [(permission, permission in theirs, permission in from_roles, within and permission in mine)
-            for _area, permissions in TEAM_PERMISSION_AREAS for permission in permissions]
+    return theirs, _from_team_roles(user, team), (mine if theirs <= mine else frozenset())
 
 
 def set_team_member_permissions(actor, team, user, requested):

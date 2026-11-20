@@ -31,11 +31,11 @@ def _set(client, person, permissions):
 
 
 class TestTheCatalogue:
-    def test_every_team_permission_has_a_label_and_an_area_once(self):
-        listed = [permission for _area, permissions in teams.TEAM_PERMISSION_AREAS for permission in permissions]
+    def test_every_team_permission_is_on_one_row(self):
+        listed = [permission for row in teams.TEAM_PERMISSION_ROWS for permission in row.permissions]
 
         assert sorted(listed) == sorted(P.ALL) and len(listed) == len(set(listed))
-        assert set(teams.TEAM_PERMISSION_LABELS) == P.ALL
+        assert teams.TEAM_PERMISSION_ROW_NEEDS["notes"] == [{"members": 1}]
 
     def test_changing_needs_seeing(self):
         assert teams.with_team_needs({P.EDIT_BANK_DETAILS}) == {P.EDIT_BANK_DETAILS, P.VIEW_MONEY}
@@ -54,7 +54,7 @@ class TestALead:
         _login(client, lead.id)
 
         page = client.get(f"{API}/people/{anna.id}").get_json()
-        assert {option["name"] for option in page["permissions"] if option["may_change"]} == set(P.ALL)
+        assert all(row["may_reach"] == len(row["levels"]) for row in page["permissions"])
         saved = _set(client, anna, {P.WRITE_NOTES})
 
         assert saved.status_code == 200
@@ -108,8 +108,7 @@ class TestWithinWhatOneHolds:
         refused = _set(client, ben, {P.REMOVE_MEMBERS})
         given = _set(client, ben, {P.WRITE_NOTES})
 
-        assert {option["name"] for option in page["permissions"] if option["may_change"]} == {
-            P.VIEW_MEMBERS, P.WRITE_NOTES, P.PERMISSIONS}
+        assert {row["key"] for row in page["permissions"] if row["may_reach"]} == {"members", "notes", "permissions"}
         assert refused.status_code == 409 and given.status_code == 200
         assert teams.team_permissions(ben, team) == {P.VIEW_MEMBERS, P.WRITE_NOTES}
 
@@ -122,7 +121,7 @@ class TestWithinWhatOneHolds:
 
         page = client.get(f"{API}/people/{lead.id}").get_json()
 
-        assert not any(option["may_change"] for option in page["permissions"])
+        assert not any(row["may_reach"] for row in page["permissions"])
         assert _set(client, lead, P.ALL - {P.MESSAGES}).status_code == 409
         assert teams.team_permissions(lead, team) == P.ALL
 

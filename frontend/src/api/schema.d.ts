@@ -4181,12 +4181,12 @@ export interface components {
             disable_blockers: string[];
             /** Options */
             options: components["schemas"]["RoleOption"][];
-            /** Permissions */
-            permissions: components["schemas"]["PermissionOption"][];
             /** Removal Warning */
             removal_warning: string | null;
             /** Roles Locked */
             roles_locked: string | null;
+            /** Rows */
+            rows: components["schemas"]["PermissionRowOut"][];
             /** Superadmin */
             superadmin: boolean;
         };
@@ -8831,25 +8831,39 @@ export interface components {
              */
             start?: string | null;
         };
-        /**
-         * PermissionOption
-         * @description One permission on a person's Access tab (docs/permissions-plan.md).
-         */
-        PermissionOption: {
-            /** Area */
-            area: string;
-            /** From Roles */
-            from_roles: boolean;
-            /** Held */
-            held: boolean;
+        /** PermissionLevelOut */
+        PermissionLevelOut: {
             /** Label */
             label: string;
-            /** May Change */
-            may_change: boolean;
-            /** Name */
-            name: string;
             /** Needs */
-            needs: string[];
+            needs: {
+                [key: string]: number;
+            };
+            /** Permissions */
+            permissions: string[];
+            /** Sees Only */
+            sees_only: boolean;
+        };
+        /** PermissionRowOut */
+        PermissionRowOut: {
+            /** Area */
+            area: string;
+            /** Description */
+            description: string;
+            /** From Roles */
+            from_roles: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Level */
+            level: number;
+            /** Levels */
+            levels: components["schemas"]["PermissionLevelOut"][];
+            /** May Reach */
+            may_reach: number;
+            /** Sensitive */
+            sensitive: boolean;
         };
         /** PersonCardsOut */
         PersonCardsOut: {
@@ -9380,10 +9394,12 @@ export interface components {
             held: boolean;
             /** Label */
             label: string;
+            /** Levels */
+            levels: {
+                [key: string]: number;
+            };
             /** May Change */
             may_change: boolean;
-            /** Permission Names */
-            permission_names: string[];
             /** Slug */
             slug: string;
         };
@@ -10460,28 +10476,42 @@ export interface components {
             /** Refunded */
             refunded: number;
         };
-        /**
-         * TeamPermissionOption
-         * @description One team permission on a member's page, for whoever may change theirs.
-         */
-        TeamPermissionOption: {
-            /** Area */
-            area: string;
-            /** From Roles */
-            from_roles: boolean;
-            /** Held */
-            held: boolean;
+        /** TeamPermissionLevelOut */
+        TeamPermissionLevelOut: {
             /** Label */
             label: string;
-            /** May Change */
-            may_change: boolean;
-            /**
-             * Name
-             * @enum {string}
-             */
-            name: "team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices" | "team.attendance" | "team.rules" | "team.permissions";
             /** Needs */
-            needs: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices" | "team.attendance" | "team.rules" | "team.permissions")[];
+            needs: {
+                [key: string]: number;
+            };
+            /** Permissions */
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices" | "team.attendance" | "team.rules" | "team.permissions")[];
+            /** Sees Only */
+            sees_only: boolean;
+        };
+        /**
+         * TeamPermissionRowOut
+         * @description A team permission row on a member's page (permission_rows.py), for whoever may change them.
+         */
+        TeamPermissionRowOut: {
+            /** Area */
+            area: string;
+            /** Description */
+            description: string;
+            /** From Roles */
+            from_roles: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Level */
+            level: number;
+            /** Levels */
+            levels: components["schemas"]["TeamPermissionLevelOut"][];
+            /** May Reach */
+            may_reach: number;
+            /** Sensitive */
+            sensitive: boolean;
         };
         /** TeamPermissionsIn */
         TeamPermissionsIn: {
@@ -10508,7 +10538,7 @@ export interface components {
              * Permissions
              * @default null
              */
-            permissions?: components["schemas"]["TeamPermissionOption"][] | null;
+            permissions?: components["schemas"]["TeamPermissionRowOut"][] | null;
             /**
              * Picture Url
              * @default null
