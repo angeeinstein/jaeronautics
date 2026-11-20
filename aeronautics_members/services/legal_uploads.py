@@ -436,10 +436,10 @@ def _tell_the_leads(record):
     team = _team_of(record.team_slug)
     if team is None:
         return
-    for team_role in teams_service.role_holders(team, teams_service.ROLE_LEAD):
-        if teams_service.role_counts(team_role) and team_role.user.email:
+    for holder in teams_service.team_holders(team, teams_service.TeamPermission.RULES):
+        if holder.email:
             queue_user_status_notification(
-                RULES_PUBLISHED, f"The rules of {team.name} are published", team_role.user.email,
+                RULES_PUBLISHED, f"The rules of {team.name} are published", holder.email,
                 payload={"team": team.name, "title": record.title,
                          "effective_from": record.effective_from.isoformat(), "slug": team.slug})
     current_app.logger.info("Told the leads of %s that their rules are published", team.slug)

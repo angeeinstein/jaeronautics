@@ -231,3 +231,45 @@ class TestThePagesFollowTheirPermission:
         assert client.get("/teams/rocket/manage/page").status_code == 200
         assert client.get("/teams/rocket/manage/applying").status_code == 200
         assert client.get("/teams/rocket/manage/members").status_code == 403
+
+
+@pytest.mark.usefixtures("switched_on")
+class TestEmailsFollowTheTeamPermission:
+    def test_team_messages_go_to_whoever_reads_them(self, app, client):
+        from aeronautics_members.services import messages
+
+        team, lead = _led()
+        anna = _member(team)
+        ben = _member(team, "ben@example.com", "Ben")
+        teams.grant_team_role(None, team, ben, teams.ROLE_LEAD)
+        teams.set_team_member_permissions(lead, team, ben, P.ALL - {P.MESSAGES})
+        teams.set_team_member_permissions(lead, team, anna, {P.MESSAGES})
+        db.session.commit()
+
+        assert messages.team_recipients(team) == ["anna@example.com", lead.email]
+
+    def test_news_about_people_goes_to_whoever_sees_them(self, app, client):
+        team, lead = _led()
+        anna = _member(team)
+        teams.set_team_member_permissions(lead, team, anna, {P.VIEW_MEMBERS})
+        db.session.commit()
+
+        assert [user.email for user in teams.team_holders(team, P.VIEW_MEMBERS)] == ["anna@example.com", lead.email]
+        assert [user.email for user in teams.team_holders(team, P.RULES)] == [lead.email]
+
+
+@pytest.mark.usefixtures("switched_on")
+class TestTheFrame:
+    def test_opens_with_any_team_permission(self, app, client):
+        team, lead = _led()
+        anna = _member(team)
+        ben = _member(team, "ben@example.com", "Ben")
+        teams.set_team_member_permissions(lead, team, anna, {P.EDIT_PRICES, P.DEVICES})
+        db.session.commit()
+
+        _login(client, anna.id)
+        frame = client.get(API)
+        _login(client, ben.id)
+
+        assert frame.status_code == 200 and set(frame.get_json()["permissions"]) == {P.EDIT_PRICES, P.DEVICES}
+        assert client.get(API).status_code == 403

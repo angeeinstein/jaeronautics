@@ -97,11 +97,12 @@ def admin_recipients():
 
 
 def team_recipients(team):
-    """The team's leads in force; with none, the admins."""
-    from .teams import ROLE_LEAD, role_counts, role_holders
+    """Whoever reads the team's messages there (the leads, unless taken away; a member given it);
+    with nobody, the admins."""
+    from .teams import TeamPermission, team_holders
 
-    leads = [team_role.user.email for team_role in role_holders(team, ROLE_LEAD) if role_counts(team_role)]
-    return leads or admin_recipients()
+    readers = [user.email for user in team_holders(team, TeamPermission.MESSAGES) if user.email]
+    return readers or admin_recipients()
 
 
 def sender_of(user):

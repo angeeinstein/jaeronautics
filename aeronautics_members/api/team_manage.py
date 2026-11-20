@@ -73,8 +73,8 @@ class ManageOut(Model):
 
 
 def _frame_team(slug):
-    """The team for its frame: whoever manages its people, or sees its money -- the
-    association's treasurer and auditors for every team, also archived or with teams off."""
+    """The team for its frame: whoever holds any permission in it -- the association's treasurer
+    and auditors for every team's money, also archived or with teams off."""
     if current_user.can(Permission.TEAMS_MONEY_VIEW):
         try:
             team = teams_service.get_team(slug)
@@ -82,8 +82,8 @@ def _frame_team(slug):
             abort(404)
     else:
         team = _team(slug)
-    held = teams_service.team_permissions(current_user, team)
-    if P.VIEW_MEMBERS not in held and P.VIEW_MONEY not in held:
+    # Any team permission opens the frame: a member given only the price list needs it too.
+    if not teams_service.team_permissions(current_user, team):
         raise PermissionError_("You may not do that in this team.", code="team_permission")
     return team
 

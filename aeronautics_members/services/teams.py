@@ -952,6 +952,18 @@ def role_holders(team, role=None):
     return sorted(roles, key=lambda team_role: (team_role.role, (team_role.user.email or "")))
 
 
+def team_holders(team, permission):
+    """The team's people who hold ``permission`` there now -- by a role or an exception, while in
+    the team and the association -- by address: whom an email about it goes to. A lead holds every
+    team permission unless one is taken away."""
+    members = db.session.execute(
+        db.select(User).join(TeamMembership, TeamMembership.user_id == User.id)
+        .where(TeamMembership.team_id == team.id, TeamMembership.status == ACTIVE)
+    ).scalars().unique().all()
+    return sorted((user for user in members if permission in own_team_permissions(user, team)),
+                  key=lambda user: user.email or "")
+
+
 def has_lead_in_force(team):
     return any(role_counts(team_role) for team_role in role_holders(team, ROLE_LEAD))
 
@@ -1389,7 +1401,8 @@ def _tell_leads(team, event_type, summary, **extra):
     """Email the team's leads; with none in force, the site admins instead."""
     from .notifications import queue_curated_admin_notification, queue_user_status_notification
 
-    leads = [team_role.user for team_role in role_holders(team, ROLE_LEAD) if role_counts(team_role)]
+    # About the team's people: to whoever sees them there.
+    leads = team_holders(team, TeamPermission.VIEW_MEMBERS)
     payload = {"team_name": team.name, "team_slug": team.slug, "team_logo_token": team.logo_token, **extra}
     if not leads:
         from ..notification_service import ADMIN_GENERAL_CHANNEL
@@ -2195,8 +2208,8 @@ def next_access_list_date(team, today=None):
 
 
 def access_list_cc(team):
-    """The leads in force, copied in."""
-    return [team_role.user.email for team_role in role_holders(team, ROLE_LEAD) if role_counts(team_role)]
+    """Whoever sends the list in the team (the leads), copied in."""
+    return [user.email for user in team_holders(team, TeamPermission.SEND_ACCESS_LIST) if user.email]
 
 
 def access_list_message(team, today=None):
