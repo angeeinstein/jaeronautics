@@ -63,10 +63,11 @@ good).
   technical errors to the super admins (`system.update`). The table of event
   to permission is written into `docs/permissions-plan.md` when built. Team
   emails already follow team permissions (PR #86).
-- **Proposed, to confirm:** each person can switch each kind off in *My
-  account* (somebody answering contact messages without wanting every one
-  by email). Nobody left receiving one kind: the admins get it, as a team
-  without anybody holding *Messages* does now.
+- **No switches per person** (2026-11-20): "If somebody doesn't want to get
+  any notifications of contact messages, why would they then have the
+  permission for this?" Holding the permission means being emailed. Nobody
+  left holding one: the admins get it, as a team without anybody holding
+  *Messages* does now.
 - **Where:** `services/messages.py` (`admin_recipients`),
   `notification_service.py` (`get_admin_recipient_emails`),
   `services/money_checks.py` (`recipients`), `permissions.py` (the two
@@ -75,6 +76,25 @@ good).
 - **Privacy policy:** § 27, § 32 (contact form) say who gets which emails;
   the wording given to the maintainer on 2026-11-20 already says "who may
   answer them".
+
+### Updates: a followed branch that is gone (merged and deleted)
+
+- **Added:** 2026-11-20
+- **What:** when the branch the server follows no longer exists on GitHub,
+  Admin › Settings › Updates says so -- "The branch claude/permissions no
+  longer exists (merged or deleted)" -- and offers to follow `main`, instead
+  of "Could not be checked right now". The automatic update at night does
+  the same as the installer: falls back to `main`.
+- **Why:** seen on the test server on 2026-11-20 after PR #86 was merged:
+  GitHub deletes a branch at the merge, `git ls-remote` then answers with
+  nothing, and the page could not tell that from a network failure. The
+  nightly update stopped at the same check ("the newest version could not
+  be asked for"), so the test server stayed on the old branch.
+- **Where:** `services/system_update.py` (`get_remote_version`: an empty
+  answer is a missing branch, no answer is a failed check;
+  `describe_update_state`), the automatic run, `Updates.tsx`. The installer
+  already falls back (`install.sh`, `main`, "a branch that is gone").
+- **Decided:** follow `main`, as the installer does; not some other branch.
 
 ### Azure: spaces lost around the glossary's words
 
