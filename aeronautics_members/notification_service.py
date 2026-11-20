@@ -96,6 +96,43 @@ KIND_COLLECT_WINDOW = {
 # A photo or change request left undecided this long gets a daily reminder.
 REVIEW_REMINDER_AFTER = timedelta(hours=24)
 REVIEW_REMINDER_EVENT = "reviews_still_waiting"
+
+#: Who gets each kind of admin email: whoever holds the permission whose page shows the same
+#: (docs/permissions-plan.md, "Emails"). Exact kinds first, then by their beginning; anything
+#: else -- a server error, a kind added later -- goes to the super admins, who hold every
+#: permission, so no kind is ever left without anybody.
+EVENT_PERMISSIONS = {
+    "identity_change_request_created": Permission.APPROVALS_REVIEW,
+    "forum_avatar_uploaded": Permission.APPROVALS_REVIEW,
+    REVIEW_REMINDER_EVENT: Permission.APPROVALS_REVIEW,
+    "manual_billing_sync_failed": Permission.ACCOUNTS_BILLING,
+    "dispute_subscription_not_cancelled": Permission.ACCOUNTS_BILLING,
+    "welcome_email_failed": Permission.NOTIFICATIONS_MANAGE,
+    "welcome_email_retry_exhausted": Permission.NOTIFICATIONS_MANAGE,
+    "team_access_list_failed": Permission.TEAMS_MANAGE,
+}
+EVENT_PERMISSION_PREFIXES = (
+    ("credit_", Permission.CREDIT_MANAGE),
+    ("team_payment", Permission.TEAMS_MONEY),
+    ("team_paid", Permission.TEAMS_MONEY),
+    ("team_subscription", Permission.TEAMS_MONEY),
+    ("team_", Permission.TEAMS_MANAGE),  # a team's news while it has no lead
+    ("stripe_", Permission.ACCOUNTS_BILLING),
+    ("billing_", Permission.ACCOUNTS_BILLING),
+    ("forum_", Permission.FORUM_MODERATE),
+    ("notification_", Permission.NOTIFICATIONS_MANAGE),
+    ("email_", Permission.NOTIFICATIONS_MANAGE),
+)
+
+
+def permission_for_event(event_type):
+    """The permission whose holders an admin email of this kind goes to."""
+    if event_type in EVENT_PERMISSIONS:
+        return EVENT_PERMISSIONS[event_type]
+    for prefix, permission in EVENT_PERMISSION_PREFIXES:
+        if event_type.startswith(prefix):
+            return permission
+    return Permission.SYSTEM_UPDATE
 CHANNEL_AUDIENCE = {
     ADMIN_GENERAL_CHANNEL: "admin",
     ADMIN_ERROR_CHANNEL: "admin",
@@ -412,45 +449,74 @@ class NotificationService:
             return {"deferred": True}
         pending_events = [event for event in pending_events if event.event_type in due_kinds]
 
-        recipients = self.get_admin_recipient_emails()
-        if not recipients:
+        # Each person gets the kinds whose permission they hold; people who get the same kinds
+        # share one email (as blind copies, as before).
+        holders = {}
+        groups = {}
+        for event in pending_events:
+            permission = permission_for_event(event.event_type)
+            if permission not in holders:
+                holders[permission] = self.get_admin_recipient_emails(permission)
+            for email in holders[permission]:
+                groups.setdefault(email, []).append(event)
+        if not groups:
             return {"deferred": True}
+        by_events = {}
+        for email, events in groups.items():
+            by_events.setdefault(tuple(event.id for event in events), (events, []))[1].append(email)
 
-        batch = NotificationBatch(
-            channel=channel,
-            status="failed",
-            recipient_scope="verified_admins",
-            recipient_count=len(recipients),
-            event_count=len(pending_events),
-        )
-        db.session.add(batch)
-        subject, template_vars = self._build_admin_digest_message(channel, pending_events, now)
-        template_vars["resolved_count"] = resolved
-        batch.subject = subject
+        sent_batches = failed_batches = 0
+        sent_ids = set()
+        error = None
+        for events, recipients in by_events.values():
+            recipients.sort()
+            batch = NotificationBatch(
+                channel=channel,
+                status="failed",
+                recipient_scope="by_permission",
+                recipient_count=len(recipients),
+                event_count=len(events),
+            )
+            db.session.add(batch)
+            subject, template_vars = self._build_admin_digest_message(channel, events, now)
+            template_vars["resolved_count"] = resolved
+            batch.subject = subject
+            success, error = self._send_admin_digest_mail(recipients, subject, template_vars)
+            if success:
+                batch.status = "sent"
+                batch.sent_at = now
+                sent_batches += 1
+                for event in events:
+                    if event.id in sent_ids:
+                        continue
+                    sent_ids.add(event.id)
+                    event.batch = batch
+                    event.status = "sent"
+                    event.last_attempted_at = now
+                    event.processed_at = now
+                    event.delivery_error = None
+            else:
+                failed_batches += 1
+                batch.error_text = sanitize_notification_error(error)
+                for event in events:
+                    if event.id not in sent_ids:
+                        event.last_attempted_at = now
+                        event.delivery_error = error
 
-        success, error = self._send_admin_digest_mail(recipients, subject, template_vars)
-        if success:
-            batch.status = "sent"
-            batch.sent_at = now
-            for event in pending_events:
-                event.batch = batch
-                event.status = "sent"
-                event.last_attempted_at = now
-                event.processed_at = now
-                event.delivery_error = None
+        if failed_batches:
+            self._record_failure(state, channel, now, error)
+        else:
             self._record_success(state, channel, now)
             for kind in due_kinds:
                 self._record_kind_sent(channel, kind, now)
-            db.session.commit()
-            return {"sent_batches": 1, "sent_events": len(pending_events)}
-
-        batch.error_text = sanitize_notification_error(error)
-        for event in pending_events:
-            event.last_attempted_at = now
-            event.delivery_error = error
-        self._record_failure(state, channel, now, error)
         db.session.commit()
-        return {"failed_batches": 1, "failed_events": len(pending_events)}
+        result = {}
+        if sent_batches:
+            result.update(sent_batches=sent_batches, sent_events=len(sent_ids))
+        if failed_batches:
+            result.update(failed_batches=failed_batches,
+                          failed_events=sum(1 for event in pending_events if event.id not in sent_ids))
+        return result
 
     def _set_aside_resolved(self, events, now):
         """Mark the events whose problem has gone away; the rest, and how many went."""
@@ -1296,8 +1362,9 @@ class NotificationService:
         )
         db.session.commit()
 
-    def get_admin_recipient_emails(self):
-        """Who the admin digests go to.
+    def get_admin_recipient_emails(self, permission=Permission.SYSTEM_UPDATE):
+        """Who an admin digest of one kind goes to: whoever holds ``permission``
+        (permission_for_event).
 
         Asked as a capability, not as ``Role.slug == "admin"``. That literal was
         wrong the moment an account could hold super admin without the admin row
@@ -1309,8 +1376,8 @@ class NotificationService:
         """
         from .services.access import holder_emails
 
-        # Person by person: a role no longer says who holds it (permissions added or taken away).
-        return holder_emails(Permission.NOTIFICATIONS_RECEIVE)
+        # Person by person (permissions added or taken away), and only accounts that can sign in.
+        return holder_emails(permission, include_disabled=False)
 
 
 

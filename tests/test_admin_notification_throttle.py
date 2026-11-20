@@ -32,7 +32,7 @@ def clock(monkeypatch):
 def service(app, clock, monkeypatch):
     service = ns.NotificationService(app)
     sent = []
-    monkeypatch.setattr(service, "get_admin_recipient_emails", lambda: ["admin@example.org"])
+    monkeypatch.setattr(service, "get_admin_recipient_emails", lambda *_: ["admin@example.org"])
 
     def send(recipients, subject, template_vars):
         sent.append(sorted({e["summary"] for e in template_vars["events"]}))
@@ -159,3 +159,41 @@ def test_a_photo_waiting_over_a_day_brings_a_daily_reminder(service, clock):
     clock["now"] += timedelta(hours=2)
     _deliver(service, ns.ADMIN_GENERAL_CHANNEL)
     assert len(service.sent) == 1, "once a day, not every run"
+
+
+class TestEachKindToWhoeverHandlesIt:
+    """An admin email goes to whoever holds the permission of the page that shows the same
+    (2026-11-20): no separate permission for being emailed."""
+
+    def test_the_kinds_and_their_permissions(self):
+        from aeronautics_members.permissions import Permission
+
+        assert ns.permission_for_event("identity_change_request_created") == Permission.APPROVALS_REVIEW
+        assert ns.permission_for_event("credit_payment_unmatched") == Permission.CREDIT_MANAGE
+        assert ns.permission_for_event("team_payment_unmatched") == Permission.TEAMS_MONEY
+        assert ns.permission_for_event("team_member_left") == Permission.TEAMS_MANAGE
+        assert ns.permission_for_event("stripe_webhook_processing_failed") == Permission.ACCOUNTS_BILLING
+        assert ns.permission_for_event("forum_sync_failed") == Permission.FORUM_MODERATE
+        assert ns.permission_for_event("welcome_email_failed") == Permission.NOTIFICATIONS_MANAGE
+        # A server error, or a kind nobody mapped: the super admins, who hold everything.
+        assert ns.permission_for_event("internal_server_error") == Permission.SYSTEM_UPDATE
+        assert ns.permission_for_event("something_new") == Permission.SYSTEM_UPDATE
+
+    def test_each_person_gets_only_their_kinds(self, app, clock, monkeypatch):
+        from aeronautics_members.permissions import Permission
+
+        service = ns.NotificationService(app)
+        holders = {Permission.FORUM_MODERATE: ["boss@example.org", "mod@example.org"],
+                   Permission.SYSTEM_UPDATE: ["boss@example.org"]}
+        monkeypatch.setattr(service, "get_admin_recipient_emails", lambda permission: holders.get(permission, []))
+        sent = []
+        monkeypatch.setattr(service, "_send_admin_digest_mail", lambda recipients, subject, template_vars: (
+            sent.append((recipients, sorted(event["summary"] for event in template_vars["events"]))) or (True, None)))
+
+        service.queue_admin_error("forum_sync_failed", "the forum")
+        service.queue_admin_error("internal_server_error", "the server")
+        db.session.commit()
+        _deliver(service)
+
+        assert sorted(sent) == [(["boss@example.org"], ["the forum", "the server"]),
+                                (["mod@example.org"], ["the forum"])]

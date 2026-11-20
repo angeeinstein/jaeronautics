@@ -69,7 +69,6 @@ class TestTheCatalogue:
         assert Permission.TEAMS_MONEY_VIEW in NEEDS[Permission.TEAMS_MONEY]
         assert Permission.CREDIT_VIEW in NEEDS[Permission.CREDIT_MANAGE]
         assert Permission.LEGAL_TEXTS in NEEDS[Permission.LEGAL_PUBLISH]
-        assert Permission.MESSAGES_ANSWER in NEEDS[Permission.MESSAGES_RECEIVE]
 
     def test_a_permission_brings_what_it_needs_and_goes_with_it(self):
         assert effective_permissions([], added=[Permission.LEGAL_PUBLISH]) == {
@@ -214,15 +213,16 @@ class TestWhoHoldsIt:
         helper = _user("helper@example.org")
         admin = _user("admin@example.org", "admin")
         _login(client, boss)
-        _set(client, helper, [], {Permission.MESSAGES_RECEIVE})
-        _set(client, admin, ["admin"], ROLE_PERMISSIONS["admin"] - {Permission.MESSAGES_RECEIVE})
+        _set(client, helper, [], {Permission.MESSAGES_ANSWER})
+        _set(client, admin, ["admin"], ROLE_PERMISSIONS["admin"] - {Permission.MESSAGES_ANSWER})
         for user in (boss, helper, admin):
             user.email_verified_at = get_now_utc()
         db.session.commit()
 
+        # Whoever may answer the contact form's messages is emailed them; nobody else.
         assert messages.admin_recipients() == ["boss@example.org", "helper@example.org"]
         assert {user.email for user in access.holders(Permission.MESSAGES_ANSWER)} == {
-            "boss@example.org", "helper@example.org", "admin@example.org"}
+            "boss@example.org", "helper@example.org"}
 
     def test_a_row_survives_only_while_it_differs(self, client):
         boss = _user("boss@example.org", "superadmin")
@@ -252,7 +252,9 @@ class TestTheSplit:
 
         assert settings.status_code == 403 and booking.status_code == 403
 
-    def test_answering_messages_without_the_emails(self, client):
+    def test_answering_messages_comes_with_their_emails(self, client):
+        # 2026-11-20: "having this together with the viewing of this information in the page itself
+        # makes more sense" -- no separate permission for being emailed.
         boss = _user("boss@example.org", "superadmin")
         helper = _user("helper@example.org")
         _login(client, boss)
@@ -262,7 +264,7 @@ class TestTheSplit:
         _login(client, helper)
 
         assert client.get("/api/v1/admin/messages").status_code == 200
-        assert "helper@example.org" not in messages.admin_recipients()
+        assert "helper@example.org" in messages.admin_recipients()
 
 
 class TestEmailsAndCountsFollowThePerson:
@@ -273,13 +275,14 @@ class TestEmailsAndCountsFollowThePerson:
         helper = _user("helper@example.org")
         admin = _user("admin@example.org", "admin")
         _login(client, boss)
-        _set(client, helper, [], {Permission.NOTIFICATIONS_RECEIVE})
-        _set(client, admin, ["admin"], ROLE_PERMISSIONS["admin"] - {Permission.NOTIFICATIONS_RECEIVE})
+        _set(client, helper, [], {Permission.APPROVALS_REVIEW})
+        _set(client, admin, ["admin"], ROLE_PERMISSIONS["admin"] - {Permission.APPROVALS_REVIEW})
         for user in (boss, helper, admin):
             user.email_verified_at = get_now_utc()
         db.session.commit()
 
-        assert NotificationService().get_admin_recipient_emails() == ["boss@example.org", "helper@example.org"]
+        assert NotificationService().get_admin_recipient_emails(Permission.APPROVALS_REVIEW) == [
+            "boss@example.org", "helper@example.org"]
 
     def test_who_can_install_an_update_counts_an_added_permission(self, client):
         boss = _user("boss@example.org", "superadmin")

@@ -39,10 +39,8 @@ class Permission:
     FORUM_MODERATE = "forum.moderate"
     LOGS_VIEW = "logs.view"
     NOTIFICATIONS_MANAGE = "notifications.manage"
-    # Being emailed the admin digests. Separate from managing them on purpose:
-    # a future role may well need to act on review tasks without every error
-    # report landing in its holders' inboxes, and the reverse.
-    NOTIFICATIONS_RECEIVE = "notifications.receive"
+    # No permission for being emailed: an admin email goes to whoever holds the permission whose
+    # page shows the same (notification_service.permission_for_event; 2026-11-20).
 
     # Configuration. The split is "settings anyone administering the site may
     # change" against "settings that hand over the association's credentials".
@@ -78,11 +76,9 @@ class Permission:
     # settings.general.
     CREDIT_VIEW = "credit.view"
     CREDIT_MANAGE = "credit.manage"
-    # The contact form's messages: read and answered in Admin › Messages, and,
-    # separately, emailed as they come -- somebody may answer the support
-    # messages without their inbox filling up, or without other admin rights.
+    # The contact form's messages: read and answered in Admin › Messages, and emailed as they come
+    # to whoever may answer them -- without other admin rights, if so given.
     MESSAGES_ANSWER = "messages.answer"
-    MESSAGES_RECEIVE = "messages.receive"
     # Emails to many members: Admin › Announcements (docs/messages-plan.md).
     ANNOUNCEMENTS_SEND = "announcements.send"
     # Card readers and other devices, and their keys: Admin › Settings ›
@@ -111,8 +107,8 @@ NEEDS = {
     permission: frozenset({Permission.ADMIN_ACCESS})
     for permission in ALL_PERMISSIONS - {
         Permission.ADMIN_ACCESS,
-        # Being emailed, and the forum's own flags: nothing in the workspace.
-        Permission.NOTIFICATIONS_RECEIVE, Permission.FORUM_ADMIN, Permission.FORUM_MODERATOR,
+        # The forum's own flags: nothing in the workspace.
+        Permission.FORUM_ADMIN, Permission.FORUM_MODERATOR,
     }
 }
 # Changing something needs seeing it -- the maintainer, 2026-11-19: "every writing permission
@@ -120,7 +116,6 @@ NEEDS = {
 for _needing, _needed in (
     (Permission.TEAMS_MONEY, Permission.TEAMS_MONEY_VIEW),
     (Permission.CREDIT_MANAGE, Permission.CREDIT_VIEW),
-    (Permission.MESSAGES_RECEIVE, Permission.MESSAGES_ANSWER),
     (Permission.LEGAL_PUBLISH, Permission.LEGAL_TEXTS),
     # Done on a member's account page, which needs seeing the accounts.
     (Permission.ACCOUNTS_BILLING, Permission.ACCOUNTS_VIEW),
@@ -174,7 +169,6 @@ ROLE_PERMISSIONS = {
         Permission.FORUM_MODERATE,
         Permission.LOGS_VIEW,
         Permission.NOTIFICATIONS_MANAGE,
-        Permission.NOTIFICATIONS_RECEIVE,
         Permission.SETTINGS_GENERAL,
         # The day-to-day of access is the board's, not the super admin's (2026-11-19): admins
         # grant permissions, within what they hold themselves.
@@ -182,7 +176,7 @@ ROLE_PERMISSIONS = {
         Permission.TEAMS_MANAGE,
         Permission.TEAMS_MONEY,
         Permission.CREDIT_MANAGE,
-        Permission.MESSAGES_RECEIVE,
+        Permission.MESSAGES_ANSWER,
         Permission.ANNOUNCEMENTS_SEND,
         Permission.DEVICES_MANAGE,
         Permission.CARDS_MANAGE,
@@ -369,7 +363,7 @@ PERMISSION_ROWS = (
                   "View: balances, history, sales. Manage: cash, corrections, refunds, the price list.",
                   (view("View", _P.CREDIT_VIEW), act("Manage", _P.CREDIT_MANAGE))),
     PermissionRow("messages", "Messages", "Contact messages",
-                  "Read and answer what is sent through the contact form.",
+                  "Read and answer what is sent through the contact form; each is emailed.",
                   (act("Answer", _P.MESSAGES_ANSWER),)),
     PermissionRow("announcements", "Messages", "Announcements", "Write to all members.",
                   (act("Send", _P.ANNOUNCEMENTS_SEND),)),
@@ -399,11 +393,6 @@ PERMISSION_ROWS = (
     PermissionRow("backups", "System", "Backups",
                   "Make and download encrypted backups, resume background jobs after a restore.",
                   (act("Manage", _P.SYSTEM_BACKUP),), sensitive=True),
-    PermissionRow("contact_emails", "Emails", "Contact messages by email", "Each new contact message.",
-                  (act("Receive", _P.MESSAGES_RECEIVE),)),
-    PermissionRow("admin_emails", "Emails", "Admin notifications by email",
-                  "Errors, review tasks, money differences.",
-                  (act("Receive", _P.NOTIFICATIONS_RECEIVE),)),
 )
 PERMISSION_ROW_NEEDS = needs_by_level(PERMISSION_ROWS, NEEDS, implied={Permission.ADMIN_ACCESS})
 

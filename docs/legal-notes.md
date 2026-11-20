@@ -125,8 +125,9 @@ urgent.
 - Stripe webhook events processed (IDs, for not processing one twice).
 - Contact messages (`docs/messages-plan.md`): name, address, topic, subject,
   message; for somebody signed in their account number, whether the
-  membership is active, and the page they wrote from. Seen by the admins
-  (messages.receive), not the treasurer; a team's by its leads only.
+  membership is active, and the page they wrote from. Seen by whoever may
+  answer them (messages.answer: the admins), not the treasurer; a team's by
+  whoever reads its messages (team.messages: its leads).
 - Announcements and team mailings: the text, who wrote it, and per recipient
   the address and whether it was delivered. Whether somebody switched the
   association's news off (`users.news_unsubscribed_at`). In the privacy

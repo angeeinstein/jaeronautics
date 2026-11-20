@@ -41,42 +41,6 @@ good).
 
 ## Open
 
-### Emails follow the permission that shows the same in the portal
-
-- **Added:** 2026-11-20
-- **What:** drop the two separate email permissions (`messages.receive`,
-  `notifications.receive`; the *Emails* rows on the *Access* tab). Each email
-  goes to whoever holds the permission whose page shows the same thing.
-- **Why:** the maintainer, 2026-11-20: "I'd say having this together with
-  the viewing of this information in the page itself makes more sense";
-  earlier: "normally I would say emails don't tell more than what the portal
-  does". The other option was the separate "receive" permissions as now.
-- **Decided:** contact-form messages to `messages.answer` holders. The admin
-  emails (`notification_service.py`, `ADMIN_GENERAL_CHANNEL`,
-  `ADMIN_ERROR_CHANNEL`; queued from `services/workflows.py`, `account.py`,
-  `account_admin.py`, `forum.py`, `forum_import.py`, `teams.py`,
-  `team_payments.py`, `credit.py`, `money_checks.py`) each mapped to the
-  permission of the page that shows the same: review tasks to
-  `approvals.review`, money differences and failed payments to
-  `teams.money` / `credit.manage` (changing, not only seeing: an auditor is
-  not woken for what they cannot fix), forum errors to `forum.moderate`,
-  technical errors to the super admins (`system.update`). The table of event
-  to permission is written into `docs/permissions-plan.md` when built. Team
-  emails already follow team permissions (PR #86).
-- **No switches per person** (2026-11-20): "If somebody doesn't want to get
-  any notifications of contact messages, why would they then have the
-  permission for this?" Holding the permission means being emailed. Nobody
-  left holding one: the admins get it, as a team without anybody holding
-  *Messages* does now.
-- **Where:** `services/messages.py` (`admin_recipients`),
-  `notification_service.py` (`get_admin_recipient_emails`),
-  `services/money_checks.py` (`recipients`), `permissions.py` (the two
-  permissions, `PERMISSION_ROWS` *Emails* area), a migration removing their
-  exception rows; *My account* for the switches.
-- **Privacy policy:** § 27, § 32 (contact form) say who gets which emails;
-  the wording given to the maintainer on 2026-11-20 already says "who may
-  answer them".
-
 ### Updates: a followed branch that is gone (merged and deleted)
 
 - **Added:** 2026-11-20
@@ -206,9 +170,10 @@ good).
   proposal in `docs/team-passive-members.md` is not needed for TDT.
 - **Waiting for:** the association's board.
 
-### Stripe's Python package: from 13 to 16
+### Stripe's Python package: from 13 to 16 (put off)
 
 - **Added:** 2026-11-02
+- **Put off:** 2026-11-20, left out of the batch by the maintainer ("the Stripe thing I don't want to touch right now").
 - **What:** move `stripe` from 13.0.1 (API version `2025-09-30.clover`) to
   16.x (`2026-09-30.endive`). Dependabot's #63 did only the version and was
   closed: CI passed because the tests fake Stripe with plain dicts, but on
@@ -248,9 +213,10 @@ good).
 - **Put off (2026-11-02):** "Let's keep Stripe for later" -- not with the
   batch of that day; its own branch when the maintainer asks.
 
-### Team leads answer their team's messages in the portal
+### Team leads answer their team's messages in the portal (put off)
 
 - **Added:** 2026-10-18
+- **Put off:** 2026-11-20, left out of the batch by the maintainer.
 - **What:** a feature, its own branch. Admins choose a mail account for a
   team (its shared mailbox); the team's leads in force answer a message on
   the team's Messages page; it goes out from that account; answers come back

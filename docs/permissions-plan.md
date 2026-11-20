@@ -120,8 +120,26 @@ easy to use. So please build it this way." Built in `permissions.py`
 - **Emails** (decided 2026-11-20): an email follows the permission that
   shows the same in the portal -- "having this together with the viewing of
   this information in the page itself makes more sense". The separate
-  "receive" permissions go. To build: `docs/todo.md`, "Emails follow the
-  permission that shows the same in the portal".
+  "receive" permissions go; no switch per person ("If somebody doesn't want
+  to get any notifications of contact messages, why would they then have the
+  permission for this?"). Built 2026-11-20 (`notification_service.py`,
+  `permission_for_event`):
+
+  | Email | Goes to holders of |
+  |---|---|
+  | Contact-form message | `messages.answer` |
+  | Profile change, photo, reviews still waiting | `approvals.review` |
+  | Membership billing, Stripe webhooks, disputes | `accounts.billing` |
+  | Team payments and subscriptions | `teams.money` |
+  | Credit payments | `credit.manage` |
+  | Money checks (Stripe's book against the portal) | `teams.money` |
+  | A team's news while it has no lead, access lists | `teams.manage` |
+  | Forum sync, renames, old accounts | `forum.moderate` |
+  | Welcome emails, email delivery | `notifications.manage` |
+  | Server errors, any kind not mapped | `system.update` (super admins) |
+
+  Super admins hold every permission, so no kind is ever without anybody.
+  Changing, not seeing: an auditor is not emailed what they cannot fix.
 
 ## How other platforms do it (researched 2026-11-19)
 
@@ -187,7 +205,7 @@ and fit the university's financial auditors.
 - The split as built: team money and Stripe's book (Admin › Money) seen with
   `teams.money.view`, changed with `teams.money`; credit and sales seen with
   `credit.view`, booked and priced with `credit.manage`; contact messages
-  answered with `messages.answer`, emailed with `messages.receive`. Member
+  answered with `messages.answer` (and emailed to the same people). Member
   accounts were already split (`accounts.view`, `.billing`, `.privacy`) and
   stay so.
 - **Left for the maintainer:** the privacy policy, § 38, names roles --

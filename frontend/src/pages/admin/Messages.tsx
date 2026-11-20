@@ -1,6 +1,6 @@
 /**
  * Admin › Messages: what came through the contact form (docs/messages-plan.md),
- * for everybody who receives it (messages.receive). Answered here -- sent from
+ * for everybody who may answer it (messages.answer). Answered here -- sent from
  * the mail account chosen for replies in Settings › Email, not one's own
  * mailbox -- and then done. Data: GET /api/v1/admin/messages, PUT .../<id>,
  * POST .../<id>/replies.
