@@ -265,6 +265,30 @@ class TestEachKindToWhoeverHandlesIt:
         assert sent[1:] == [(["mod@example.org"], ["the forum"])]
         assert forum.status == "sent" and forum.delivered_to == ["boss@example.org", "mod@example.org"]
 
+    def test_a_kind_delivered_counts_for_its_throttle_when_another_digest_failed(self, app, clock, monkeypatch):
+        # Codex on PR #87: the forum digest went, the server one failed, and the forum kind's
+        # throttle never moved -- its events were done and never came back to count.
+        from aeronautics_members.db_models import NotificationChannelState
+        from aeronautics_members.permissions import Permission
+
+        service = ns.NotificationService(app)
+        holders = {Permission.FORUM_MODERATE: ["mod@example.org"], Permission.SYSTEM_UPDATE: ["boss@example.org"]}
+        monkeypatch.setattr(service, "get_admin_recipient_emails", lambda permission: holders.get(permission, []))
+        monkeypatch.setattr(service, "_send_admin_digest_mail", lambda recipients, subject, template_vars: (
+            (False, "the mail server refused") if recipients == ["boss@example.org"] else (True, None)))
+        service.queue_admin_error("forum_sync_failed", "the forum")
+        service.queue_admin_error("internal_server_error", "the server")
+        db.session.commit()
+
+        _deliver(service)
+
+        def stage(kind):
+            state = db.session.get(NotificationChannelState, service._kind_key(ns.ADMIN_ERROR_CHANNEL, kind))
+            return state.cooldown_stage if state is not None else 0
+
+        assert stage("forum_sync_failed") == 1
+        assert stage("internal_server_error") == 0  # not delivered: it does not count yet
+
     def _routed(self, app, monkeypatch, holders):
         service = ns.NotificationService(app)
         monkeypatch.setattr(service, "get_admin_recipient_emails", lambda permission: holders.get(permission, []))

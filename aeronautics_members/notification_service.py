@@ -529,10 +529,11 @@ class NotificationService:
             self._record_failure(state, channel, now, error)
         else:
             self._record_success(state, channel, now)
-            # A kind counts as sent for its throttle once all of its events went out.
-            for kind in due_kinds:
-                if all(event.status == "sent" for event in pending_events if event.event_type == kind):
-                    self._record_kind_sent(channel, kind, now)
+        # A kind counts as sent for its throttle once all of its events went out -- whatever
+        # another digest of the same run did: those events are done and will not come back.
+        for kind in due_kinds:
+            if all(event.status == "sent" for event in pending_events if event.event_type == kind):
+                self._record_kind_sent(channel, kind, now)
         db.session.commit()
         result = {"deferred": True} if held_back else {}
         if sent_batches:
