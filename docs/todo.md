@@ -37,7 +37,11 @@ batch of 2026-11-19 (`claude/small-fixes`: the legal texts' English told the
 whole German text, Azure's free tier paced, which service made an English
 shown; the installer falling back to `main` from a branch that is gone;
 gunicorn without its control socket; a dead Stripe subscription cleared for
-good).
+good); then permissions per person (`docs/permissions-plan.md`, PR #86); and
+the batch of 2026-11-20 (`claude/email-permissions`: emails follow the
+permission whose page shows the same; the updates page and the night's update
+when the followed branch is gone; DeepL's glossary on a Free account and
+Azure's spaces around the glossary's words).
 
 ## Open
 
