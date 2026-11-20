@@ -15,6 +15,7 @@ from aeronautics_members.services import privacy, teams
 from test_admin_reviews import _staff
 from test_emails import FakeSMTP, _user_status_event, outbox  # noqa: F401
 from test_teams_flow import _led, _login, _person, switched_on  # noqa: F401
+from test_teams_foundation import _in_team
 
 
 @pytest.mark.usefixtures("switched_on")
@@ -37,6 +38,26 @@ class TestTheDataExport:
         [note] = exported["teams"]["notes_by_leads"]
         assert (note["team"], note["text"]) == ("Rocket", "Owes us a soldering iron.")
         assert lead.email not in str(exported["teams"])
+
+    def test_includes_team_permissions_given_or_taken_away(self, app):
+        P = teams.TeamPermission
+        team, lead = _led()
+        anna, ben = _person(), _person("ben@example.com", "Ben", "Berger")
+        for person in (anna, ben):
+            _in_team(person, team)
+        teams.set_team_member_permissions(lead, team, anna, {P.MESSAGES})
+        teams.grant_team_role(lead, team, ben, teams.ROLE_TREASURER)
+        db.session.commit()
+        teams.set_team_member_permissions(lead, team, ben, set())  # all the role gives, taken away
+        db.session.commit()
+
+        given = privacy.export_account_data(anna)["teams"]["permissions"]
+        taken = privacy.export_account_data(ben)["teams"]["permissions"]
+
+        assert [(row["team"], row["permission"]) for row in given] == [("Rocket", "+team.messages")]
+        assert given[0]["since"] is not None
+        assert {row["permission"] for row in taken} == {"-" + permission for permission in P.MONEY}
+        assert lead.email not in str(given) + str(taken)  # not who gave it
 
 
 @pytest.mark.usefixtures("switched_on")
