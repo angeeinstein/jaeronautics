@@ -98,24 +98,29 @@ REVIEW_REMINDER_AFTER = timedelta(hours=24)
 REVIEW_REMINDER_EVENT = "reviews_still_waiting"
 
 #: Who gets each kind of admin email: whoever holds the permission whose page shows the same
-#: (docs/permissions-plan.md, "Emails"). Exact kinds first, then by their beginning; anything
-#: else -- a server error, a kind added later -- goes to the super admins, who hold every
-#: permission, so no kind is ever left without anybody.
+#: (docs/permissions-plan.md, "Emails"). Exact kinds first, then by their end, then by their
+#: beginning; anything else -- a server error, a kind added later -- goes to the super admins,
+#: who hold every permission, so no kind is ever left without anybody.
 EVENT_PERMISSIONS = {
     "identity_change_request_created": Permission.APPROVALS_REVIEW,
     "forum_avatar_uploaded": Permission.APPROVALS_REVIEW,
     REVIEW_REMINDER_EVENT: Permission.APPROVALS_REVIEW,
     "manual_billing_sync_failed": Permission.ACCOUNTS_BILLING,
     "dispute_subscription_not_cancelled": Permission.ACCOUNTS_BILLING,
-    "welcome_email_failed": Permission.NOTIFICATIONS_MANAGE,
     "welcome_email_retry_exhausted": Permission.NOTIFICATIONS_MANAGE,
     "team_access_list_failed": Permission.TEAMS_MANAGE,
 }
+#: An email that could not be sent -- welcome, verification, password reset, deletion, any
+#: added later -- is email delivery, whatever it was about.
+EVENT_PERMISSION_SUFFIXES = (
+    ("_email_failed", Permission.NOTIFICATIONS_MANAGE),
+)
 EVENT_PERMISSION_PREFIXES = (
     ("credit_", Permission.CREDIT_MANAGE),
     ("team_payment", Permission.TEAMS_MONEY),
     ("team_paid", Permission.TEAMS_MONEY),
     ("team_subscription", Permission.TEAMS_MONEY),
+    ("team_dispute", Permission.TEAMS_MONEY),
     ("team_", Permission.TEAMS_MANAGE),  # a team's news while it has no lead
     ("stripe_", Permission.ACCOUNTS_BILLING),
     ("billing_", Permission.ACCOUNTS_BILLING),
@@ -129,6 +134,9 @@ def permission_for_event(event_type):
     """The permission whose holders an admin email of this kind goes to."""
     if event_type in EVENT_PERMISSIONS:
         return EVENT_PERMISSIONS[event_type]
+    for suffix, permission in EVENT_PERMISSION_SUFFIXES:
+        if event_type.endswith(suffix):
+            return permission
     for prefix, permission in EVENT_PERMISSION_PREFIXES:
         if event_type.startswith(prefix):
             return permission

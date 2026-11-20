@@ -130,12 +130,12 @@ easy to use. So please build it this way." Built in `permissions.py`
   | Contact-form message | `messages.answer` |
   | Profile change, photo, reviews still waiting | `approvals.review` |
   | Membership billing, Stripe webhooks, disputes | `accounts.billing` |
-  | Team payments and subscriptions | `teams.money` |
+  | Team payments, subscriptions, chargebacks | `teams.money` |
   | Credit payments | `credit.manage` |
   | Money checks (Stripe's book against the portal) | `teams.money` |
   | A team's news while it has no lead, access lists | `teams.manage` |
   | Forum sync, renames, old accounts | `forum.moderate` |
-  | Welcome emails, email delivery | `notifications.manage` |
+  | Welcome emails, email delivery, any email that could not be sent | `notifications.manage` |
   | Server errors, any kind not mapped | `system.update` (super admins) |
 
   Super admins hold every permission, so no kind is ever without anybody.

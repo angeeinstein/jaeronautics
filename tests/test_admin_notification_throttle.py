@@ -179,6 +179,39 @@ class TestEachKindToWhoeverHandlesIt:
         assert ns.permission_for_event("internal_server_error") == Permission.SYSTEM_UPDATE
         assert ns.permission_for_event("something_new") == Permission.SYSTEM_UPDATE
 
+    def test_an_email_that_could_not_be_sent_goes_to_who_manages_email(self):
+        # Codex on PR #87: these fell through to the super admins.
+        from aeronautics_members.permissions import Permission
+
+        for kind in ("verification_email_failed", "work_verification_email_failed",
+                     "password_reset_email_failed", "account_deletion_email_failed",
+                     "account_action_email_failed"):
+            assert ns.permission_for_event(kind) == Permission.NOTIFICATIONS_MANAGE, kind
+        assert ns.permission_for_event("team_dispute_unmatched") == Permission.TEAMS_MONEY
+
+    def test_every_kind_the_code_sends_has_somebody_besides_the_super_admins(self):
+        # Every literal kind handed to an admin email in the code; only a server error is meant
+        # for the super admins alone.
+        import pathlib
+        import re
+
+        from aeronautics_members.permissions import Permission
+
+        patterns = (
+            r"queue_curated_admin_notification\(\s*[A-Z_]+,\s*\"([a-z_]+)\"",
+            r"queue_admin_(?:general|error)\(\s*\"([a-z_]+)\"",
+            r"failure_event_type=\"([a-z_]+)\"",
+            r"_tell_admins\(\s*\"([a-z_]+)\"",
+            r"_tell_leads\(\s*[a-z_.]+,\s*\"([a-z_]+)\"",
+            r"event_type = \"([a-z_]+)\"",
+        )
+        root = pathlib.Path(ns.__file__).parent
+        kinds = {kind for path in root.rglob("*.py") for pattern in patterns
+                 for kind in re.findall(pattern, path.read_text(encoding="utf-8"))}
+        assert {"verification_email_failed", "credit_payment_unmatched", "forum_sync_failed"} <= kinds
+        left = sorted(kind for kind in kinds if ns.permission_for_event(kind) == Permission.SYSTEM_UPDATE)
+        assert left == ["internal_server_error"]
+
     def test_each_person_gets_only_their_kinds(self, app, clock, monkeypatch):
         from aeronautics_members.permissions import Permission
 
