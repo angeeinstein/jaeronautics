@@ -568,9 +568,14 @@ _UNNAMED_GLOSSARY = re.compile(rf"{re.escape(GLOSSARY_NAME)}( [0-9a-f]{{16}})?")
 def _deepl_glossary(current, fresh=False):
     """DeepL's glossary id for the glossary as it is now: made anew when it changed.
 
-    The id is kept in a setting, but DeepL is also asked which glossaries it holds: one of this
-    portal's made for the same terms is used again, the others are deleted. So none is left over
-    when the setting was not saved -- DeepL takes only a few glossaries on a Free account."""
+    The id is kept in a setting, but DeepL is also asked which glossaries it holds: one made for
+    the same terms is used again -- this portal's, or another installation's with the same key (a
+    test server's and the live server's, the same glossary) -- and this portal's others are
+    deleted. So none is left over when the setting was not saved.
+
+    A Free account may hold very few glossaries, perhaps one (seen 2026-11-19: "Too many
+    glossaries" on the test server, the live server's glossary in the only place). When DeepL
+    takes no more, it translates without the glossary rather than not at all: None."""
     if not current["glossary"]:
         return None
     key, fingerprint = current["deepl_key"], _fingerprint(current["glossary"])
@@ -588,19 +593,29 @@ def _deepl_glossary(current, fresh=False):
         held = (_call(f"{base}/v2/glossaries", headers=headers, method="GET") or {}).get("glossaries") or []
         for glossary in held:
             name = str(glossary.get("name") or "")
+            same_terms = name.startswith(f"{GLOSSARY_NAME} ") and name.endswith(f" {fingerprint}")
+            if same_terms and glossary_id is None:
+                glossary_id = glossary.get("glossary_id")  # ours, or another installation's: the same
+                continue
             if not (name.startswith(f"{ours} ") or _UNNAMED_GLOSSARY.fullmatch(name)):
                 continue  # another installation's (the test server's, with the same key), or not this portal's
-            if name == wanted and glossary_id is None:
-                glossary_id = glossary.get("glossary_id")
-                continue
             try:
                 _call(f"{base}/v2/glossaries/{glossary.get('glossary_id')}", headers=headers, method="DELETE")
             except _ServiceError:
                 pass  # an old glossary left over at DeepL does no harm
         if glossary_id is None:
-            made = _call(f"{base}/v2/glossaries", headers=headers, data={
-                "name": wanted, "source_lang": "de", "target_lang": "en", "entries_format": "tsv",
-                "entries": "\n".join(f"{german}\t{english}" for german, english in current["glossary"])})
+            try:
+                made = _call(f"{base}/v2/glossaries", headers=headers, data={
+                    "name": wanted, "source_lang": "de", "target_lang": "en", "entries_format": "tsv",
+                    "entries": "\n".join(f"{german}\t{english}" for german, english in current["glossary"])})
+            except _ServiceError as exc:
+                if exc.code != 456 and "too many glossaries" not in str(exc).lower():
+                    raise
+                names = ", ".join(str(glossary.get("name")) for glossary in held) or "none"
+                current_app.logger.warning(
+                    "DeepL holds no more glossaries on this account (%s; it holds: %s): translating "
+                    "without the glossary.", exc, names)
+                return None
             glossary_id = (made or {}).get("glossary_id")
     except _ServiceError as exc:
         raise _ServiceError(f"the glossary: {exc}") from exc
@@ -706,6 +721,20 @@ def _with_glossary(text, glossary, as_html):
     return text
 
 
+_MARK = r'<span class="notranslate">[^<]*</span>'
+
+
+def _spaced_marks(text):
+    """Azure's answer with the spaces around the glossary's words put right. Azure moves the
+    whitespace next to a mark (seen on the test server, 2026-11-19): "memberspresent", "any
+    ordinary memberwho", "the team lead 's consent", "these team rules ." -- a word right after
+    or before a mark gets its space back, and punctuation or an apostrophe's s after one loses
+    the space before it."""
+    text = re.sub(rf"({_MARK})\s+(?=[.,;:!?)\]]|['’]s\b)", r"\1", text)
+    text = re.sub(rf"({_MARK})(?=\w)", r"\1 ", text)
+    return re.sub(rf"(?<=\w)({_MARK})", r" \1", text)
+
+
 def _azure(texts, as_html, current, patience=None):
     patience = patience or _Patience(False)
     headers = {"Ocp-Apim-Subscription-Key": current["azure_key"]}
@@ -720,7 +749,7 @@ def _azure(texts, as_html, current, patience=None):
     made = [((item.get("translations") or [{}])[0]).get("text", "") for item in (answer or [])]
     if len(made) != len(texts):
         raise _ServiceError("an answer of the wrong length")
-    return made
+    return [_spaced_marks(text) for text in made] if as_html else made
 
 
 # --- A language model ------------------------------------------------------------------------

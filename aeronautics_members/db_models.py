@@ -692,6 +692,9 @@ class NotificationEvent(db.Model):
     last_attempted_at = db.Column(db.DateTime, nullable=True)
     processed_at = db.Column(db.DateTime, nullable=True)
     delivery_error = db.Column(db.Text, nullable=True)
+    #: An admin email's addresses it has reached (each person's digest holds only their kinds):
+    #: sent once everybody it is for has it, so one failed digest is sent again to its own.
+    delivered_to = db.Column(db.JSON, nullable=True)
 
     batch = db.relationship("NotificationBatch", back_populates="events")
     target_user = db.relationship("User", foreign_keys=[target_user_id])

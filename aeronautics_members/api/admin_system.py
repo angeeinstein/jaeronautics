@@ -374,6 +374,9 @@ class UpdatesOut(Model):
     #: None when it could not be checked.
     latest: str | None
     latest_check_failed: bool
+    #: The branch followed no longer exists (merged and deleted): ``latest`` is then main's, which
+    #: the next update installs and follows from then on.
+    branch_gone: str | None
     #: The newest version is not the one installed (offered or not).
     newer_version: bool
     #: Its CI, while there is a newer version.
@@ -423,6 +426,7 @@ def _updates(force_remote_check=False):
                              branch=None if detached else local.get("branch"), rolled_back=detached,
                              committed_at=parse_time(local.get("committed_at")), subject=local.get("subject")),
         latest=state["remote_short_revision"], latest_check_failed=state["remote_check_failed"],
+        branch_gone=state["branch_gone"],
         newer_version=state["newer_version"], latest_check=_latest_check(state["remote_ci"]),
         update_available=state["update_available"], runner_installed=state["runner_installed"],
         in_progress=state["in_progress"], request_never_picked_up=state["request_never_picked_up"],

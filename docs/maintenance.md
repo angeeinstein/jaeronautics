@@ -889,9 +889,10 @@ The plan and what was decided: `docs/messages-plan.md`. Code:
 
 - **The contact form** (`/contact`, the footer's *Contact*) and *Message the
   leads* on a team's pages.
-  - Each message is emailed to everybody with `messages.receive` (admins and
-    super admins, not the treasurer), or to the team's leads in force (with
-    none: the admins). The sender is the Reply-To, so answering the email
+  - Each message is emailed to everybody who may answer it (`messages.answer`:
+    admins and super admins, not the treasurer), or to whoever reads the
+    team's messages there (`team.messages`: its leads; with nobody, the
+    admins). The sender is the Reply-To, so answering the email
     answers them.
   - Messages are kept on Admin › Messages or the team's Messages page, to be
     marked done.
@@ -1835,7 +1836,7 @@ templates (`docs/permissions-plan.md`):
 | `teams.money`, `credit.manage` — transfers, bank details, bookings | no | yes | yes | yes |
 | `accounts.view`, `accounts.billing`, `accounts.privacy` | no | no | yes | yes |
 | `approvals.review`, `forum.moderate`, `logs.view` | no | no | yes | yes |
-| `messages.answer`, `messages.receive` — contact messages, their emails | no | no | yes | yes |
+| `messages.answer` — contact messages, and their emails | no | no | yes | yes |
 | `notifications.manage` — test email, undelivered queue | no | no | yes | yes |
 | `settings.general`, `teams.manage`, `legal.texts`, `legal.publish` | no | no | yes | yes |
 | `roles.manage` — grant permissions, those one holds | no | no | yes | yes |
@@ -1969,10 +1970,12 @@ without being a route, and both were missed in the first pass:
 
 - **Who receives the admin digests.** `get_admin_recipient_emails()` selected
   `Role.slug == "admin"`, so an account holding super admin without the admin
-  row beside it silently stopped being told about errors and review tasks. It
-  now asks for `NOTIFICATIONS_RECEIVE`, which is deliberately separate from
-  `NOTIFICATIONS_MANAGE`: a future role may need to act on review tasks without
-  every error report reaching its holders' inboxes, or the reverse.
+  row beside it silently stopped being told about errors and review tasks. Each
+  kind now goes to whoever holds the permission of the page that shows the same
+  (`permission_for_event`: review tasks to `approvals.review`, a team payment
+  to `teams.money`, a server error or an unmapped kind to the super admins),
+  asked person by person; each person's digest holds only their kinds. There
+  is no permission for being emailed (2026-11-20).
 - **Where signing in lands you.** `get_member_portal_target()` asked the same
   literal, sending a super-admin-only account to the member page.
 
@@ -2283,8 +2286,8 @@ permission table.
 
 - No roles means `can()` is false for everything, so no route, tab or button
   opens.
-- `get_admin_recipient_emails()` selects on `NOTIFICATIONS_RECEIVE`, so archival
-  accounts are never mailed a digest.
+- `get_admin_recipient_emails()` selects holders of a permission, so archival
+  accounts (no roles, no permissions) are never mailed a digest.
 - `check_password` returns `False` when `password_hash` is `NULL`, so a
   passwordless row cannot be signed into directly.
 

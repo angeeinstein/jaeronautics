@@ -37,41 +37,13 @@ batch of 2026-11-19 (`claude/small-fixes`: the legal texts' English told the
 whole German text, Azure's free tier paced, which service made an English
 shown; the installer falling back to `main` from a branch that is gone;
 gunicorn without its control socket; a dead Stripe subscription cleared for
-good).
+good); then permissions per person (`docs/permissions-plan.md`, PR #86); and
+the batch of 2026-11-20 (`claude/email-permissions`: emails follow the
+permission whose page shows the same; the updates page and the night's update
+when the followed branch is gone; DeepL's glossary on a Free account and
+Azure's spaces around the glossary's words).
 
 ## Open
-
-### Azure: spaces lost around the glossary's words
-
-- **Added:** 2026-11-19
-- **What:** in Azure's English the words the glossary puts in place lose or
-  gain a space: "memberspresent", "any ordinary memberwho", "the team lead
-  's consent", "these team rules ." -- seen in the TDT rules on the test
-  server, where Azure translated part of the text.
-- **Why:** Azure gets the glossary's English marked not to be translated
-  (`<span class="notranslate">`, `services/translation.py`,
-  `_with_glossary`) and moves the whitespace next to such a mark.
-- **Where:** `_with_glossary` and what comes back from `_azure`.
-- **Ideas:** put the surrounding spaces inside the mark; or after the
-  answer, a space between a glossary word and a letter that follows it,
-  none before punctuation. Azure is the last fallback now (a language model
-  first), so not pressing.
-
-### DeepL: "Too many glossaries" on the test server
-
-- **Added:** 2026-11-19
-- **What:** the editor's English on the test server said "DeepL: the glossary:
-  a limit of the account is reached (Too many glossaries)" -- DeepL could not
-  make the test server's glossary, so DeepL did not translate there (Azure
-  stepped in). The test and live servers share one DeepL Free key; each keeps
-  and cleans up only its own glossaries (named with its address).
-- **Where:** `services/translation.py`, `_deepl_glossary`.
-- **To find out:** which glossaries the account holds (`GET /v2/glossaries`
-  with the key, or a line in the log listing their names) and how many a Free
-  account may have -- left over from before the cleanup (named with the live
-  server's address, which only the live server removes), or simply a limit
-  of one or two per account. Then: clean up what is left over, or a key per
-  server. Less pressing since a language model translates first.
 
 ### Privacy policy and membership terms drafts: brought up to date for the board
 
@@ -151,9 +123,10 @@ good).
   proposal in `docs/team-passive-members.md` is not needed for TDT.
 - **Waiting for:** the association's board.
 
-### Stripe's Python package: from 13 to 16
+### Stripe's Python package: from 13 to 16 (put off)
 
 - **Added:** 2026-11-02
+- **Put off:** 2026-11-20, left out of the batch by the maintainer ("the Stripe thing I don't want to touch right now").
 - **What:** move `stripe` from 13.0.1 (API version `2025-09-30.clover`) to
   16.x (`2026-09-30.endive`). Dependabot's #63 did only the version and was
   closed: CI passed because the tests fake Stripe with plain dicts, but on
@@ -193,9 +166,10 @@ good).
 - **Put off (2026-11-02):** "Let's keep Stripe for later" -- not with the
   batch of that day; its own branch when the maintainer asks.
 
-### Team leads answer their team's messages in the portal
+### Team leads answer their team's messages in the portal (put off)
 
 - **Added:** 2026-10-18
+- **Put off:** 2026-11-20, left out of the batch by the maintainer.
 - **What:** a feature, its own branch. Admins choose a mail account for a
   team (its shared mailbox); the team's leads in force answer a message on
   the team's Messages page; it goes out from that account; answers come back

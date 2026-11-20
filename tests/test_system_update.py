@@ -437,26 +437,19 @@ class TestTheRemoteCheckSurvivesARollback:
             'ROLLBACK_BRANCH="main"\n'
         )
         monkeypatch.setattr(system_update, "ROLLBACK_FILE", rollback_file)
-        monkeypatch.setattr(system_update, "_remote_cache", {"checked_at": None, "value": None})
-
+        monkeypatch.setattr(system_update, "_remote_cache", {"checked_at": None, "value": None, "gone": None})
         asked = []
-
-        def fake_git(args, timeout=None):
-            if args[:2] == ["rev-parse", "--abbrev-ref"]:
-                return "HEAD"          # detached, as after a rollback
-            asked.append(args)
-            return "b" * 40 + "\trefs/heads/main"
-
-        monkeypatch.setattr(system_update, "_run_git", fake_git)
+        monkeypatch.setattr(system_update, "_run_git", lambda args, timeout=None: "HEAD")  # detached
+        monkeypatch.setattr(system_update, "_remote_head",
+                            lambda branch: (asked.append(branch), ("b" * 40, False))[1])
         with app.test_request_context("/"):
             revision = system_update.get_remote_version(force=True)
 
-        assert revision == "b" * 40
-        assert any("refs/heads/main" in " ".join(a) for a in asked), asked
+        assert revision == "b" * 40 and asked == ["main"]
 
     def test_without_a_recorded_branch_it_still_gives_up_quietly(self, app, tmp_path, monkeypatch):
         monkeypatch.setattr(system_update, "ROLLBACK_FILE", tmp_path / "absent.conf")
-        monkeypatch.setattr(system_update, "_remote_cache", {"checked_at": None, "value": None})
+        monkeypatch.setattr(system_update, "_remote_cache", {"checked_at": None, "value": None, "gone": None})
         monkeypatch.setattr(
             system_update, "_run_git",
             lambda args, timeout=None: "HEAD" if args[:2] == ["rev-parse", "--abbrev-ref"] else "",
@@ -745,3 +738,55 @@ class TestAnUpdateDoesNotNeedTheUbuntuMirror:
 
     def test_apt_does_not_pipeline_requests(self):
         assert "Acquire::http::Pipeline-Depth=0" in self.INSTALLER.read_text()
+
+
+class TestABranchThatIsGone:
+    """The branch followed was merged and deleted (2026-11-20, the test server after PR #86): the
+    page said "Could not be checked right now" and the night's update stopped at the same check.
+    Like the installer, the next update follows main -- so main is what there is to compare with."""
+
+    @pytest.fixture
+    def follows(self, monkeypatch):
+        monkeypatch.setattr(system_update, "_remote_cache", {"checked_at": None, "value": None, "gone": None})
+        monkeypatch.setattr(system_update, "tracked_branch", lambda: "claude/permissions")
+        heads = {"main": ("m" * 40, False)}
+        monkeypatch.setattr(system_update, "_remote_head", lambda branch: heads.get(branch, (None, True)))
+        return heads
+
+    def test_main_is_compared_with_and_the_page_says_why(self, app, follows):
+        with app.test_request_context("/"):
+            assert system_update.get_remote_version(force=True) == "m" * 40
+            assert system_update.gone_branch() == "claude/permissions"
+
+    def test_a_check_that_fails_moves_nothing(self, app, follows):
+        follows["claude/permissions"] = (None, False)  # no answer: no network
+
+        with app.test_request_context("/"):
+            assert system_update.get_remote_version(force=True) is None
+            assert system_update.gone_branch() is None
+
+    def test_the_answer_of_git_tells_gone_from_unreachable(self, app, monkeypatch):
+        import subprocess
+
+        def run(returncode, stdout=""):
+            monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, returncode, stdout, ""))
+
+        with app.test_request_context("/"):
+            run(2)
+            assert system_update._remote_head("gone") == (None, True)
+            run(128)
+            assert system_update._remote_head("offline") == (None, False)
+            run(0, "c" * 40 + "\trefs/heads/main\n")
+            assert system_update._remote_head("main") == ("c" * 40, False)
+
+    def test_the_page_shows_it(self, client, admin_user, follows, monkeypatch):
+        monkeypatch.setattr(system_update, "get_local_version", lambda: {
+            "revision": "a" * 40, "short_revision": "aaaaaaaa", "branch": "claude/permissions",
+            "committed_at": None, "subject": None})
+        monkeypatch.setattr(system_update, "ci_state", lambda revision, force=False: {"state": "success"})
+        _login(client, admin_user.id)
+
+        page = client.get("/api/v1/admin/settings/updates?refresh=true").get_json()
+
+        assert page["branch_gone"] == "claude/permissions" and page["latest"] == "m" * 8
+        assert page["latest_check_failed"] is False and page["update_available"] is True

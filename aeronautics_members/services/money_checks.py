@@ -273,11 +273,12 @@ def recently_resolved(days=30):
 
 
 def recipients():
-    """The admins and the treasurers: whoever gets the admin emails or looks after the money."""
+    """Whoever may act on the money (the admins and the treasurers): a difference is theirs to
+    fix, not an auditor's, who only looks."""
     from ..permissions import Permission
     from .access import holder_emails
 
-    return holder_emails(Permission.NOTIFICATIONS_RECEIVE, Permission.TEAMS_MONEY)
+    return holder_emails(Permission.TEAMS_MONEY, include_disabled=False)
 
 
 def email_new(now=None):

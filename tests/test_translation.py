@@ -21,6 +21,7 @@ class FakeServices:
         self.calls = []
         self.failing = set()
         self.glossaries = {}  # what DeepL holds: id -> name
+        self.glossary_limit = None  # how many the account may hold (a Free account: few)
 
     def __call__(self, url, *, data=None, headers=None, method="POST", timeout=None):
         self.calls.append((url, data, headers, method))
@@ -33,6 +34,8 @@ class FakeServices:
         if url.endswith("/v2/glossaries") and method == "GET":
             return {"glossaries": [{"glossary_id": id_, "name": name} for id_, name in self.glossaries.items()]}
         if url.endswith("/v2/glossaries") and method == "POST":
+            if self.glossary_limit is not None and len(self.glossaries) >= self.glossary_limit:
+                raise translation._ServiceError("a limit of the account is reached (Too many glossaries)", code=456)
             made = f"g-{len(self.calls)}"
             self.glossaries[made] = data["name"]
             return {"glossary_id": made}
@@ -153,6 +156,29 @@ class TestTheGlossary:
         assert services.glossaries["g-test"] == theirs and len(services.glossaries) == 2
         [mine] = [name for name in services.glossaries.values() if name != theirs]
         assert mine.startswith(translation._glossary_prefix() + " ")
+
+    def test_the_same_terms_used_again_whoever_made_them(self, services):
+        # A test server and the live server with one key and the same glossary: one glossary at DeepL.
+        _set_up()
+        fingerprint = translation._fingerprint(translation.settings()["glossary"])
+        theirs = f"{translation.GLOSSARY_NAME} live.example.org {fingerprint}"
+        services.glossaries = {"g-live": theirs}
+
+        translation.translate(["<p>Eins.</p>"])
+
+        assert services.glossaries == {"g-live": theirs}
+        [sent] = [call for call in services.calls if call[0].endswith("/v2/translate")]
+        assert sent[1]["glossary_id"] == "g-live"
+
+    def test_no_room_for_another_deepl_translates_without(self, services):
+        # 2026-11-19 on the test server: "Too many glossaries", and Azure translated instead.
+        _set_up(azure="azure-key")
+        services.glossaries = {"g-live": f"{translation.GLOSSARY_NAME} live.example.org 0123456789abcdef"}
+        services.glossary_limit = 1
+
+        assert translation.translate(["<p>Eins.</p>"]) == ["[DeepL] <p>Eins.</p>"]
+        [sent] = [call for call in services.calls if call[0].endswith("/v2/translate")]
+        assert "glossary_id" not in sent[1] and len(services.glossaries) == 1
 
     def test_a_glossary_gone_at_deepl_made_anew(self, services):
         _set_up()
@@ -776,3 +802,21 @@ class TestALanguageModel:
         assert shown["llm_model"] == "a-model" and shown["llm_address"] == "http://localhost:11434/v1"
         body["llm_address"] = "file:///etc/passwd"
         assert send(client, "PUT", "/api/v1/admin/settings/translation", body).status_code == 400
+
+
+class TestAzureSpacesAroundTheGlossary:
+    """Azure moves the whitespace next to a word the glossary marked not to be translated
+    (the TDT rules on the test server, 2026-11-19)."""
+
+    @pytest.mark.parametrize("answer, wanted", [
+        ('the <span class="notranslate">members</span>present', "the members present"),
+        ('any ordinary<span class="notranslate">member</span>who', "any ordinary member who"),
+        ('the <span class="notranslate">team lead</span> \'s consent', "the team lead's consent"),
+        ('these <span class="notranslate">team rules</span> .', "these team rules."),
+        ('(<span class="notranslate">board</span>), fine', "(board), fine"),
+    ])
+    def test_put_right(self, answer, wanted):
+        import re
+
+        # The marks are unwrapped later (clean_html): their text stays where it is.
+        assert re.sub(r"<[^>]+>", "", translation._spaced_marks(answer)) == wanted

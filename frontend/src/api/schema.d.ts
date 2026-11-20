@@ -8046,7 +8046,7 @@ export interface components {
             /** Last Name */
             last_name: string | null;
             /** Permissions */
-            permissions: ("accounts.billing" | "accounts.privacy" | "accounts.view" | "admin.access" | "announcements.send" | "approvals.review" | "cards.manage" | "credit.manage" | "credit.view" | "devices.manage" | "forum.admin" | "forum.moderate" | "forum.moderator" | "legal.publish" | "legal.texts" | "logs.view" | "messages.answer" | "messages.receive" | "notifications.manage" | "notifications.receive" | "roles.manage" | "settings.credentials" | "settings.general" | "system.backup" | "system.update" | "teams.manage" | "teams.money" | "teams.money.view")[];
+            permissions: ("accounts.billing" | "accounts.privacy" | "accounts.view" | "admin.access" | "announcements.send" | "approvals.review" | "cards.manage" | "credit.manage" | "credit.view" | "devices.manage" | "forum.admin" | "forum.moderate" | "forum.moderator" | "legal.publish" | "legal.texts" | "logs.view" | "messages.answer" | "notifications.manage" | "roles.manage" | "settings.credentials" | "settings.general" | "system.backup" | "system.update" | "teams.manage" | "teams.money" | "teams.money.view")[];
             /** Picture Url */
             picture_url: string | null;
             /** Roles */
@@ -11076,6 +11076,8 @@ export interface components {
         /** UpdatesOut */
         UpdatesOut: {
             automatic: components["schemas"]["AutomaticUpdatesOut"];
+            /** Branch Gone */
+            branch_gone: string | null;
             /** In Progress */
             in_progress: boolean;
             installed: components["schemas"]["VersionOut"];

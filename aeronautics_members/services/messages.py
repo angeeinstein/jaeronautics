@@ -2,9 +2,9 @@
 message to one team's leads (docs/messages-plan.md).
 
 A message is kept, and emailed to whoever should read it: the contact form's
-to everybody who receives messages (``messages.receive``: the admins and super
-admins, not the treasurer), a team's to its leads in force -- or, with none,
-to the admins. The email carries the sender as Reply-To, so it is answered
+to everybody who may answer them (``messages.answer``: the admins and super
+admins, not the treasurer), a team's to whoever reads its messages there -- or,
+with nobody, to the admins. The email carries the sender as Reply-To, so it is answered
 from one's own mailbox, and the sender never sees a recipient's address until
 somebody answers.
 
@@ -93,7 +93,8 @@ def admin_recipients():
     """Everybody who receives the contact form's messages: verified, not erased, not switched off."""
     from .access import holder_emails
 
-    return holder_emails(Permission.MESSAGES_RECEIVE, include_disabled=False)
+    # Being emailed comes with being allowed to answer (2026-11-20): no separate permission.
+    return holder_emails(Permission.MESSAGES_ANSWER, include_disabled=False)
 
 
 def team_recipients(team):

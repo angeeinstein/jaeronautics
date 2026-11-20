@@ -512,7 +512,7 @@ class TestAddingARoleNeedsNoOtherChange:
 
         monkeypatch.setitem(
             ROLE_PERMISSIONS, "reporter",
-            frozenset({Permission.ADMIN_ACCESS, Permission.NOTIFICATIONS_RECEIVE}),
+            frozenset({Permission.ADMIN_ACCESS, Permission.APPROVALS_REVIEW}),
         )
         monkeypatch.setitem(
             ROLE_PERMISSIONS, "quiet",
@@ -525,7 +525,8 @@ class TestAddingARoleNeedsNoOtherChange:
             user.email_verified_at = datetime.now(timezone.utc)
         db.session.commit()
 
-        recipients = NotificationService(app).get_admin_recipient_emails()
+        # Review tasks go to whoever reviews (notification_service.permission_for_event).
+        recipients = NotificationService(app).get_admin_recipient_emails(Permission.APPROVALS_REVIEW)
 
         assert "gets@example.com" in recipients
         assert "silent@example.com" not in recipients
