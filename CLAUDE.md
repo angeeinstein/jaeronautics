@@ -136,6 +136,9 @@ words: it will not be there later.
   branch when it is ready to be tried or merged -- not after every commit;
   the checks run locally first. Changes only to `docs/` skip CI's tests by
   themselves (`docs/maintenance.md`, "Files tested once").
+- "Merge into main" always means through a pull request (2026-11-20:
+  "whenever I say merge into main, I mean with a pull request") -- never a
+  push or merge to `main` directly.
 - Every pull request Claude opens is watched until it is merged or closed
   (2026-11-19): CI failures and review comments -- Codex's above all -- are
   looked into and fixed on the same branch. After a round of fixes, Codex is
