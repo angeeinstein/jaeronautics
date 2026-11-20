@@ -449,24 +449,27 @@ class NotificationService:
             return {"deferred": True}
         pending_events = [event for event in pending_events if event.event_type in due_kinds]
 
-        # Each person gets the kinds whose permission they hold; people who get the same kinds
-        # share one email (as blind copies, as before).
+        # Each person gets the kinds whose permission they hold, and of those what has not reached
+        # them yet; people who get the same events share one email (as blind copies, as before).
         holders = {}
+        meant_for = {}
         groups = {}
         for event in pending_events:
             permission = permission_for_event(event.event_type)
             if permission not in holders:
                 holders[permission] = self.get_admin_recipient_emails(permission)
+            meant_for[event.id] = set(holders[permission])
+            reached = set(event.delivered_to or ())
             for email in holders[permission]:
-                groups.setdefault(email, []).append(event)
-        if not groups:
+                if email not in reached:
+                    groups.setdefault(email, []).append(event)
+        if not any(meant_for.values()):
             return {"deferred": True}
         by_events = {}
         for email, events in groups.items():
             by_events.setdefault(tuple(event.id for event in events), (events, []))[1].append(email)
 
         sent_batches = failed_batches = 0
-        sent_ids = set()
         error = None
         for events, recipients in by_events.values():
             recipients.sort()
@@ -482,26 +485,30 @@ class NotificationService:
             template_vars["resolved_count"] = resolved
             batch.subject = subject
             success, error = self._send_admin_digest_mail(recipients, subject, template_vars)
+            for event in events:
+                event.last_attempted_at = now
             if success:
                 batch.status = "sent"
                 batch.sent_at = now
                 sent_batches += 1
                 for event in events:
-                    if event.id in sent_ids:
-                        continue
-                    sent_ids.add(event.id)
+                    event.delivered_to = sorted(set(event.delivered_to or ()) | set(recipients))
                     event.batch = batch
-                    event.status = "sent"
-                    event.last_attempted_at = now
-                    event.processed_at = now
-                    event.delivery_error = None
             else:
                 failed_batches += 1
                 batch.error_text = sanitize_notification_error(error)
                 for event in events:
-                    if event.id not in sent_ids:
-                        event.last_attempted_at = now
-                        event.delivery_error = error
+                    event.delivery_error = error
+
+        # Sent once it has reached everybody it is for; until then it stays to be sent again to
+        # those it has not reached -- never twice to those it has.
+        sent_events = 0
+        for event in pending_events:
+            if meant_for[event.id] <= set(event.delivered_to or ()):
+                event.status = "sent"
+                event.processed_at = now
+                event.delivery_error = None
+                sent_events += 1
 
         if failed_batches:
             self._record_failure(state, channel, now, error)
@@ -512,10 +519,9 @@ class NotificationService:
         db.session.commit()
         result = {}
         if sent_batches:
-            result.update(sent_batches=sent_batches, sent_events=len(sent_ids))
+            result.update(sent_batches=sent_batches, sent_events=sent_events)
         if failed_batches:
-            result.update(failed_batches=failed_batches,
-                          failed_events=sum(1 for event in pending_events if event.id not in sent_ids))
+            result.update(failed_batches=failed_batches, failed_events=len(pending_events) - sent_events)
         return result
 
     def _set_aside_resolved(self, events, now):

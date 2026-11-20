@@ -197,3 +197,37 @@ class TestEachKindToWhoeverHandlesIt:
 
         assert sorted(sent) == [(["boss@example.org"], ["the forum", "the server"]),
                                 (["mod@example.org"], ["the forum"])]
+
+    def test_a_digest_that_failed_is_sent_again_to_its_own_only(self, app, clock, monkeypatch):
+        # Codex on PR #87: marked sent after the boss's digest went, the forum event never reached
+        # the moderator, whose digest had failed.
+        from aeronautics_members.db_models import NotificationEvent
+        from aeronautics_members.permissions import Permission
+
+        service = ns.NotificationService(app)
+        holders = {Permission.FORUM_MODERATE: ["boss@example.org", "mod@example.org"],
+                   Permission.SYSTEM_UPDATE: ["boss@example.org"]}
+        monkeypatch.setattr(service, "get_admin_recipient_emails", lambda permission: holders.get(permission, []))
+        sent, down = [], {"mod@example.org"}
+
+        def send(recipients, subject, template_vars):
+            if set(recipients) & down:
+                return False, "the mail server refused"
+            sent.append((recipients, sorted(event["summary"] for event in template_vars["events"])))
+            return True, None
+
+        monkeypatch.setattr(service, "_send_admin_digest_mail", send)
+        service.queue_admin_error("forum_sync_failed", "the forum")
+        service.queue_admin_error("internal_server_error", "the server")
+        db.session.commit()
+
+        _deliver(service)
+        forum = db.session.query(NotificationEvent).filter_by(event_type="forum_sync_failed").one()
+        assert sent == [(["boss@example.org"], ["the forum", "the server"])] and forum.status == "pending"
+
+        down.clear()
+        clock["now"] += timedelta(hours=6)
+        _deliver(service)
+
+        assert sent[1:] == [(["mod@example.org"], ["the forum"])]
+        assert forum.status == "sent" and forum.delivered_to == ["boss@example.org", "mod@example.org"]
