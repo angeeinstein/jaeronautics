@@ -293,18 +293,23 @@ def _card_data(user):
 
 
 def _team_data(user):
-    """Every team attempt, role, payment and lead's note about this person.
+    """Every team attempt, role, permission, payment and lead's note about this person.
 
     The notes are about the person, so they are theirs to see (Art. 15) --
     with the team and the date, not which lead wrote them, which is the
-    lead's own data. Erasing the account deletes them.
+    lead's own data. Erasing the account deletes them. The same goes for a
+    team permission given or taken away one by one: what and since when, not
+    who gave it.
     """
-    from ..db_models import Payment, TeamMembership, TeamNote, TeamRole
+    from ..db_models import Payment, TeamMemberPermission, TeamMembership, TeamNote, TeamRole
 
     memberships = db.session.execute(
         db.select(TeamMembership).filter_by(user_id=user.id).order_by(TeamMembership.id)
     ).scalars().all()
     roles = db.session.execute(db.select(TeamRole).filter_by(user_id=user.id)).scalars().all()
+    permissions = db.session.execute(
+        db.select(TeamMemberPermission).filter_by(user_id=user.id).order_by(TeamMemberPermission.id)
+    ).scalars().all()
     payments = db.session.execute(
         db.select(Payment).filter_by(user_id=user.id, purpose="team").order_by(Payment.id)
     ).scalars().all()
@@ -336,6 +341,12 @@ def _team_data(user):
         "roles": [
             {"team": team_role.team.name, "role": team_role.role, "granted_at": team_role.granted_at}
             for team_role in roles
+        ],
+        # Given (+) or taken away (-) beyond what the roles give, as the account's own are.
+        "permissions": [
+            {"team": row.team.name, "permission": ("+" if row.granted else "-") + row.permission,
+             "since": row.created_at}
+            for row in permissions
         ],
         "payments": [
             {

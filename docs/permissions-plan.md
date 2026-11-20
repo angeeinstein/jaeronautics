@@ -193,7 +193,10 @@ and fit the university's financial auditors.
   `effective_permissions`, each permission's area and label.
 - Tables `user_permissions` and `team_member_permissions` (migration
   `d8a3f1c6b2e4`): exceptions, added or taken away. Nothing to migrate: a
-  role held before means the same now.
+  role held before means the same now. Both are in the person's own data
+  export (`services/privacy.py`: the account's under `account`, a team's
+  under `teams.permissions`, 2026-11-20), so the privacy policy (§ 44) can
+  say "Rollen und Berechtigungen"; not who gave them.
 - `services/access.py`: the change and its refusals (`describe_role_change`,
   `covers`), who holds a permission (`holders`). `services/teams.py`: a
   member's team permissions (`own_team_permissions`,
@@ -208,6 +211,8 @@ and fit the university's financial auditors.
   answered with `messages.answer` (and emailed to the same people). Member
   accounts were already split (`accounts.view`, `.billing`, `.privacy`) and
   stay so.
-- **Left for the maintainer:** the privacy policy, § 38, names roles --
-  "persons the association has given the respective permission" covers both.
-  A legal text, changed in the portal (Admin › Legal texts).
+- **Left for the maintainer:** the privacy policy names fixed roles in
+  several places (§§ 18, 20, 22, 23, 25, 27, 29, 31, 38, 44) -- "persons the
+  association has given the respective permission" covers both. The German
+  replacements were handed over on 2026-11-20; a legal text, changed in the
+  portal (Admin › Legal texts).
