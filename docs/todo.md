@@ -416,6 +416,14 @@ What the maintainer did not want, and why -- a record, not a ban. Any of it
 may be suggested again, saying what has changed since. Only what the
 maintainer explicitly says must never change is marked so.
 
+- **Individual team permissions in a member's own data export** (2026-11-20).
+  The export lists a person's portal permissions and team roles, not the
+  team permissions given or taken away one by one
+  (`services/privacy.py`, `_team_data`; the table is
+  `team_member_permissions`). Not worth it: "most of the time there won't be
+  any specific permissions, but just roles". So the privacy policy (§ 44)
+  says "Teams, Rollen", not "Rollen und Berechtigungen".
+
 - **A warning on the *Access* page when there is only one super admin, or
   more than four** (2026-11-19, from how Microsoft and Google advise it).
   The maintainer is the only one for now and means to add more later, and
