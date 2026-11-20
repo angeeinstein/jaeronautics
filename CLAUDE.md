@@ -145,7 +145,10 @@ words: it will not be there later.
   asked to review again (a comment `@codex review`), until it finds nothing
   more ("Finding and fixing errors is always a good thing"). Each finding is
   judged first: a real bug is fixed; something built that way on purpose is
-  answered with why, not changed for. Quality comes before Actions minutes
+  answered with why, not changed for. A finding fixed is answered on its
+  thread (what was done, which commit, which test) and the thread marked
+  resolved -- security findings too (2026-11-20: "Please always mark the
+  codex comments that you fixed as resolved"). Quality comes before Actions minutes
   here (2026-11-19: the portal is in production with some 140 members; "I
   really prefer quality over saving a few cents in CI costs") -- the fixes of
   one round still go out in one push.
