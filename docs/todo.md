@@ -41,38 +41,6 @@ good).
 
 ## Open
 
-### Azure: spaces lost around the glossary's words
-
-- **Added:** 2026-11-19
-- **What:** in Azure's English the words the glossary puts in place lose or
-  gain a space: "memberspresent", "any ordinary memberwho", "the team lead
-  's consent", "these team rules ." -- seen in the TDT rules on the test
-  server, where Azure translated part of the text.
-- **Why:** Azure gets the glossary's English marked not to be translated
-  (`<span class="notranslate">`, `services/translation.py`,
-  `_with_glossary`) and moves the whitespace next to such a mark.
-- **Where:** `_with_glossary` and what comes back from `_azure`.
-- **Ideas:** put the surrounding spaces inside the mark; or after the
-  answer, a space between a glossary word and a letter that follows it,
-  none before punctuation. Azure is the last fallback now (a language model
-  first), so not pressing.
-
-### DeepL: "Too many glossaries" on the test server
-
-- **Added:** 2026-11-19
-- **What:** the editor's English on the test server said "DeepL: the glossary:
-  a limit of the account is reached (Too many glossaries)" -- DeepL could not
-  make the test server's glossary, so DeepL did not translate there (Azure
-  stepped in). The test and live servers share one DeepL Free key; each keeps
-  and cleans up only its own glossaries (named with its address).
-- **Where:** `services/translation.py`, `_deepl_glossary`.
-- **To find out:** which glossaries the account holds (`GET /v2/glossaries`
-  with the key, or a line in the log listing their names) and how many a Free
-  account may have -- left over from before the cleanup (named with the live
-  server's address, which only the live server removes), or simply a limit
-  of one or two per account. Then: clean up what is left over, or a key per
-  server. Less pressing since a language model translates first.
-
 ### Privacy policy and membership terms drafts: brought up to date for the board
 
 - **Added:** 2026-11-18

@@ -145,6 +145,20 @@ this text again myself or by others, this shouldn't fail the same way".
   DeepL first (better with context), Azure the fallback -- when DeepL's
   characters are used up, Azure (2 million a month) steps in by itself.
 
+## The glossary at DeepL, and Azure's spaces (2026-11-20)
+
+- **DeepL: one glossary may be all a Free account holds.** The test server
+  said "Too many glossaries": it shares the key with the live server, whose
+  glossary was in the only place. A glossary with the same terms is now used
+  again whoever made it (the name ends with the terms' fingerprint), and when
+  DeepL takes no more, it translates without the glossary instead of handing
+  over to the next service; the server's log names the glossaries the account
+  holds. A key per server would give each its own.
+- **Azure's spaces around the glossary's words** ("memberspresent", "the team
+  lead 's consent", "these team rules .") are put right in its answer
+  (`_spaced_marks`): a word next to a mark gets its space back, punctuation
+  or an apostrophe's s after one loses the space before it.
+
 ## Not built
 
 - Keeping text typed in the last seconds before an editor lost its lock
