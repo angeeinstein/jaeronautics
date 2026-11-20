@@ -117,11 +117,11 @@ easy to use. So please build it this way." Built in `permissions.py`
 - **A few marked *Sensitive*** (granting permissions, credentials,
   updates, backups, export and erasure), as Entra marks privileged roles --
   "just don't overdo this".
-- **Emails**: open -- the maintainer: "normally I would say emails don't tell
-  more than what the portal does". Then an email would follow the permission
-  that shows the same in the portal, and each person could switch it off,
-  instead of separate "receive" permissions. Until decided, the two stay as
-  rows of their own, *Emails*.
+- **Emails** (decided 2026-11-20): an email follows the permission that
+  shows the same in the portal -- "having this together with the viewing of
+  this information in the page itself makes more sense". The separate
+  "receive" permissions go. To build: `docs/todo.md`, "Emails follow the
+  permission that shows the same in the portal".
 
 ## How other platforms do it (researched 2026-11-19)
 
