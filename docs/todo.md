@@ -123,6 +123,20 @@ Azure's spaces around the glossary's words).
   proposal in `docs/team-passive-members.md` is not needed for TDT.
 - **Waiting for:** the association's board.
 
+### Attendance: members log remote work
+
+- **Added:** 2026-11-21
+- **What:** a feature, its own branch. Members add work done away from the
+  readers (from, to, what they did -- required), marked *Remote*, counted at
+  once; leads delete it or mark it not counted; only for the last days;
+  totals on site, remote and both; switched on per team.
+- **Where:** `docs/attendance-plan.md`, "Remote work" -- what was decided,
+  in full.
+- **Why:** "Lots of work in CAD for example isn't done in our lab."
+- **Open:** where members find it (proposed: the team's Overview and My
+  Account › Attendance); the exact number of days back (14 proposed); what a
+  member sees of an entry marked not counted.
+
 ### Stripe's Python package: from 13 to 16 (put off)
 
 - **Added:** 2026-11-02

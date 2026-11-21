@@ -107,3 +107,39 @@ team's members earn ECTS and must be there for a number of hours.
   `_changed`, `_deleted`, `attendance_switched`), with the stay before and
   after.
 - **The data export** has a person's stays; an erasure deletes them.
+
+## Remote work (agreed 2026-11-21, not built)
+
+"Lots of work in CAD for example isn't done in our lab." Members log work done
+away from the readers themselves; it is kept apart from the stays the readers
+record. The worry -- people logging hours they did not work -- is met with
+trust and visibility, not checks: "we're not a company, we're a student team
+and some level of trust is expected", and a check-in in the hangar does not
+prove work either.
+
+- **An entry, not a timer:** the member adds it afterwards -- the day, **from
+  and to** (not a number of hours), and **what they worked on**, one line,
+  **required** ("Wing rib CAD, revision 3"). No start/stop timer: forgotten
+  and left running, or started and walked away from. A screenshot of the work
+  was considered and left out: "not really necessary at the moment. This is
+  just a student association."
+- **Marked *Remote*** wherever stays are shown (the member's page, the team's
+  Attendance, the CSV), with its note.
+- **Three totals:** on site, remote, and both together.
+- **Counts at once.** No confirmation by a lead: "this would mean a lot of
+  extra work for the team leads". Whoever runs the team's attendance can
+  **delete** an entry or **mark it as not counted** ("if they think that this
+  was not actual work"), written to the log as corrections are.
+- **Only for the last days:** "a week or two maximum" -- proposed 14 days. Not
+  in the future; not overlapping the member's own stays.
+- **Not the correction request.** *Ask for a correction* (a stay the reader
+  recorded, not checked out, asked of the leads) stays as it is; logging
+  remote work is the member's own entry and is not asked for. The two must
+  read clearly apart.
+- **Per team** (and for the association), as attendance is: a switch
+  *Members may log remote work*, off by default.
+- **Open:** where members find it -- "This needs to be easily accessible,
+  otherwise people won't use it." Proposed 2026-11-21: a *Your hours* panel
+  on the team's own page (Overview) with *Log remote work*, and the same
+  button on My Account › Attendance in the team's panel; also: what *not
+  counted* shows the member, and whether the leads give a reason.
