@@ -133,9 +133,11 @@ Azure's spaces around the glossary's words).
 - **Where:** `docs/attendance-plan.md`, "Remote work" -- what was decided,
   in full.
 - **Why:** "Lots of work in CAD for example isn't done in our lab."
-- **Open:** where members find it (proposed: the team's Overview and My
-  Account › Attendance); the exact number of days back (14 proposed); what a
-  member sees of an entry marked not counted.
+- **Decided** (2026-11-22): everything it needs -- where it sits, 14 days
+  back, members change and delete their own, a lead's *Not counted* with a
+  reason the member sees, the privacy policy's sentence with the release.
+  Mockup: https://claude.ai/artifact/4wgbx2n2tR1CqRhaW8643y. Ready to build
+  when the maintainer says so.
 
 ### Stripe's Python package: from 13 to 16 (put off)
 

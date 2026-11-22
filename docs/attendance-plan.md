@@ -129,9 +129,16 @@ prove work either.
 - **Counts at once.** No confirmation by a lead: "this would mean a lot of
   extra work for the team leads". Whoever runs the team's attendance can
   **delete** an entry or **mark it as not counted** ("if they think that this
-  was not actual work"), written to the log as corrections are.
-- **Only for the last days:** "a week or two maximum" -- proposed 14 days. Not
-  in the future; not overlapping the member's own stays.
+  was not actual work"), written to the log as corrections are. A mark needs a
+  **reason** (decided 2026-11-22); the member sees the entry crossed out with
+  "Not counted by Lena: …"; the lead can take the mark back.
+- **The member's own entries** (decided 2026-11-22): they may **change or
+  delete** them while the day is within the allowed days and no lead has
+  marked them; each change written to the log.
+- **Only for the last days:** today and the **14 days** before (decided
+  2026-11-22; "a week or two maximum"). Not in the future; within one
+  attendance day (past midnight up to 03:15); not overlapping any of the
+  member's own time, for whichever team or the association.
 - **Not the correction request.** *Ask for a correction* (a stay the reader
   recorded, not checked out, asked of the leads) stays as it is; logging
   remote work is the member's own entry and is not asked for. The two must
@@ -169,8 +176,23 @@ prove work either.
   work." Its layout stands; the prominence is toned down when it is built (above).
   Also in it, not decided yet: a member may change or delete their own remote
   entry while it is in the last 14 days and not marked.
-- **Open:** where members find it -- "This needs to be easily accessible,
-  otherwise people won't use it." Proposed 2026-11-21: a *Your hours* panel
-  on the team's own page (Overview) with *Log remote work*, and the same
-  button on My Account › Attendance in the team's panel; also: what *not
-  counted* shows the member, and whether the leads give a reason.
+- **Where members find it** (decided 2026-11-22, the mockup's last version):
+  a slim line at the top of the team's own page -- this month's time with the
+  team, the split in small text, *Add remote work* (a grey button), *Your
+  time ›* -- and on My Account › Attendance, *Add remote work* in each
+  panel's head. "This needs to be easily accessible, otherwise people won't
+  use it."
+- **The leads' side** (the team's Attendance page, Admin › Attendance for the
+  association), following what is there: the switch *Members may log remote
+  work* beside the attendance switch; per person on site, remote and
+  together for the period; a person's list with both kinds, the remote ones
+  with their note, *Not counted* (reason required) and *Delete*; the CSV gets
+  a column for the kind and one for the note. *Who is here now* is the
+  readers' only. The leads are not emailed about entries (quiet).
+- **Kept as stays are:** in the member's data export, deleted with an
+  erasure, kept until then.
+- **Privacy policy** (decided 2026-11-22): § 20, the attendance paragraph,
+  gains a sentence on remote entries (day, times, the note, a mark with its
+  reason and who set it); written in German with the feature, published by the
+  maintainer when it goes live -- perhaps with the membership terms, one
+  email for both.
