@@ -139,6 +139,15 @@ prove work either.
 - **Per team** (and for the association), as attendance is: a switch
   *Members may log remote work*, off by default -- optional, "just as the
   normal attendance is optional".
+- **For whom it counts** (2026-11-22, "if we wanted to do this in the
+  future for other teams ... there would need to be a distinction for who
+  this attendance counts"): an entry belongs to one owner, as a stay does --
+  a team, or the association. A team page's button adds to that team; on My
+  Account each owner's panel has its own; the form says so at the top
+  (*For Rocket*, *For Joanneum Aeronautics*). Opened without one (nowhere so
+  far), it would be a choice of the owners where the member may add remote
+  work. Overlap is checked across all of a member's time, whoever it is for:
+  a person is in one place at a time.
 - **Quiet, not a timesheet** (2026-11-22): "don't make it too prominent,
   because those teams are student teams, and it's more about working together
   and doing some cool things together, rather than this being some tedious
