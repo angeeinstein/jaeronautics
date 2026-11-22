@@ -50,11 +50,22 @@
 
   .out {
     grid-area: out;
+    display: flex !important;
+    gap: 6px;
+    align-items: flex-start;
   }
 
+  /* "08:12 – 11:37", the two times on one line, each with its reader under it. */
   .out::before {
-    content: '– ';
+    content: '–';
     color: var(--ja-muted);
+    font-size: var(--mantine-font-size-sm);
+    line-height: var(--mantine-line-height-sm);
+  }
+
+  /* No end yet: the dash alone says so. */
+  .out > p:only-child {
+    display: none;
   }
 
   .time {

@@ -42,7 +42,7 @@ export function YourTime({ slug, member }: { slug: string; member: boolean }) {
             {formatMinutes(all)}
           </Text>
           {owner.remote || away ? (
-            <Text size="xs" c="dimmed" className="ja-figures">
+            <Text size="xs" c="dimmed">
               {formatMinutes(all - away)} at the readers · {formatMinutes(away)} remote
             </Text>
           ) : null}

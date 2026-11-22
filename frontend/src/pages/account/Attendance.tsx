@@ -140,7 +140,7 @@ function MonthTime({ stays, label, remote }: { stays: Stay[]; label: string; rem
         {label}
       </Text>
       {remote || away ? (
-        <Text size="xs" c="dimmed" className="ja-figures">
+        <Text size="xs" c="dimmed">
           {formatMinutes(all - away)} at the readers · {formatMinutes(away)} remote
         </Text>
       ) : null}
