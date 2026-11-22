@@ -49,6 +49,8 @@ class InForce(Model):
     page_url: str
     #: Made on first request: open it with ``?prepare=1`` first.
     pdf_url: str
+    #: Its German Markdown file, front matter included: to change it elsewhere and upload a new draft.
+    markdown_url: str = ""
     #: Uploaded in the portal (rather than a file in legal/): its id.
     record_id: int | None = None
     #: May still be corrected: uploaded here, published under 24 hours ago, accepted by nobody.
@@ -168,6 +170,11 @@ def _english(record):
             "english_note": note}
 
 
+def _markdown_url(slug, team, version):
+    which = {"record": version.record_id} if version.record_id else {"version": version.version.isoformat()}
+    return url_for("admin.admin_legal_version_markdown", document=slug, team=team, **which)
+
+
 def _correcting(version):
     """``record_id``, ``correctable`` and the English of a version in force."""
     if version.record_id is None:
@@ -185,7 +192,8 @@ def admin_legal():
         InForce(title=version.title, team_name=None, version=version.version, revision=version.revision,
                 effective_from=version.effective_from, validity=legal.validity(version),
                 page_url=url_for("public.legal_text", slug=text.slug),
-                pdf_url=url_for("public.legal_text_pdf", slug=text.slug), **_correcting(version))
+                pdf_url=url_for("public.legal_text_pdf", slug=text.slug),
+                markdown_url=_markdown_url(text.slug, None, version), **_correcting(version))
         for text, version in legal.available()
     ]
     without_rules = []
@@ -199,7 +207,8 @@ def admin_legal():
             title=version.title, team_name=team.name, version=version.version, revision=version.revision,
             effective_from=version.effective_from, validity=legal.validity(version),
             page_url=url_for("teams.team_rules_text", slug=team.slug),
-            pdf_url=url_for("teams.team_rules_pdf", slug=team.slug), **_correcting(version)))
+            pdf_url=url_for("teams.team_rules_pdf", slug=team.slug),
+            markdown_url=_markdown_url(legal.TEAM_RULES, team.slug, version), **_correcting(version)))
 
     waiting = []
     for slug, team in [(text.slug, None) for text in legal.LEGAL_TEXTS] + [

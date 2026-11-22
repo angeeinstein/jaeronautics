@@ -53,9 +53,10 @@ phone).
 
 - **Privacy policy published** (2026-11-20, in force that day, the members
   emailed), with the permission edits of PR #86/#87. What is left here: the
-  membership terms. A sentence on remote work in attendance (§ 20) waits in
-  `docs/attendance-plan.md` for the next version -- perhaps with the
-  membership terms, one email for both.
+  membership terms. The next version, with remote work in attendance (§ 20),
+  is a draft in `legal/privacy-policy/de/2026-11-22.md` (the version in force
+  and one paragraph): published once remote work is switched on on the live
+  server -- perhaps with the membership terms, one email for both.
 - **Added:** 2026-11-18
 - **Built** (`claude/legal-drafts-review`, merged as #83); what is left is
   publishing. The drafts were checked against the portal and are drafts in

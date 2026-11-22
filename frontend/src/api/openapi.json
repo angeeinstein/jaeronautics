@@ -9796,6 +9796,11 @@
             "title": "English Shown",
             "type": "boolean"
           },
+          "markdown_url": {
+            "default": "",
+            "title": "Markdown Url",
+            "type": "string"
+          },
           "page_url": {
             "title": "Page Url",
             "type": "string"

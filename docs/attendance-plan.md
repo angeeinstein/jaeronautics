@@ -233,8 +233,10 @@ prove work either.
   remote* per person, on a person's remote work *Not counted* (a reason) or
   *Count again*, and *Delete* -- no *Change*. The stay list
   (`StayTable.tsx`): blocks on a phone, the newest 15 and *Show all*.
-- **Privacy policy:** § 20, at the end of the attendance paragraph, in German
-  (handed to the maintainer, published with the release):
+- **Privacy policy:** § 20, at the end of the attendance paragraph, in German;
+  the whole next version, the one in force with this paragraph, is a draft in
+  `legal/privacy-policy/de/2026-11-22.md`, published by the maintainer once
+  remote work is switched on:
 
   > Wo ein Team (oder der Verein) es erlaubt, kann ein Mitglied auch Arbeit
   > eintragen, die es außerhalb der Lesegeräte geleistet hat (Remote-Arbeit),

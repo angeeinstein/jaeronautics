@@ -7528,6 +7528,11 @@ export interface components {
              * @default false
              */
             english_shown?: boolean;
+            /**
+             * Markdown Url
+             * @default
+             */
+            markdown_url?: string;
             /** Page Url */
             page_url: string;
             /** Pdf Url */
