@@ -137,7 +137,20 @@ prove work either.
   remote work is the member's own entry and is not asked for. The two must
   read clearly apart.
 - **Per team** (and for the association), as attendance is: a switch
-  *Members may log remote work*, off by default.
+  *Members may log remote work*, off by default -- optional, "just as the
+  normal attendance is optional".
+- **Quiet, not a timesheet** (2026-11-22): "don't make it too prominent,
+  because those teams are student teams, and it's more about working together
+  and doing some cool things together, rather than this being some tedious
+  work ... this shouldn't look too much like some company where you are
+  forced to work and work your hours." So: no big figures or a loud main
+  button on the team's page, friendly wording, no reminders or targets.
+- **Mockup** (2026-11-21): https://claude.ai/artifact/4wgbx2n2tR1CqRhaW8643y --
+  the team page's *Your hours* panel, My Account › Attendance with both kinds
+  in one list, the *Log remote work* form. "In general I like it. This could
+  work." Its layout stands; the prominence is toned down when it is built (above).
+  Also in it, not decided yet: a member may change or delete their own remote
+  entry while it is in the last 14 days and not marked.
 - **Open:** where members find it -- "This needs to be easily accessible,
   otherwise people won't use it." Proposed 2026-11-21: a *Your hours* panel
   on the team's own page (Overview) with *Log remote work*, and the same
