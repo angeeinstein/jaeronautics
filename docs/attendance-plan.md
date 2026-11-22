@@ -148,6 +148,15 @@ prove work either.
   far), it would be a choice of the owners where the member may add remote
   work. Overlap is checked across all of a member's time, whoever it is for:
   a person is in one place at a time.
+- **Long lists and phones** (2026-11-22: "if the attendance list in my
+  account ever gets rather long, that this still works and that it also works
+  well on mobile"): My Account shows one month at a time, newest first, and a
+  long month its latest entries (about 15) with *Show all* for the rest.
+  Today's stay list is a table that scrolls sideways under 640 px
+  (`components/attendance/StayTable.tsx`); on a phone each entry becomes a
+  small block instead -- the day and the time counted, the times, where or
+  what, the buttons -- so nothing scrolls sideways. The team's Attendance
+  page gets the same.
 - **Quiet, not a timesheet** (2026-11-22): "don't make it too prominent,
   because those teams are student teams, and it's more about working together
   and doing some cool things together, rather than this being some tedious
