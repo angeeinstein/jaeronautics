@@ -1,0 +1,96 @@
+/* On a phone each stay is a small block instead of a table row, so nothing scrolls sideways
+   (docs/attendance-plan.md, "Long lists and phones"): the day and the time counted, the times,
+   where or what, then the buttons. */
+@media (max-width: 40em) {
+  .table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .table,
+  .table tbody {
+    display: block;
+  }
+
+  .table tbody tr {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-areas:
+      'day day time'
+      'in out out'
+      'note note note'
+      'actions actions actions';
+    gap: 2px 12px;
+    padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+    border-bottom: 1px solid var(--ja-border);
+  }
+
+  .table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .table tbody td {
+    display: block;
+    padding: 0;
+    border: none;
+  }
+
+  .day {
+    grid-area: day;
+    font-weight: 600;
+  }
+
+  .in {
+    grid-area: in;
+  }
+
+  .out {
+    grid-area: out;
+  }
+
+  .out::before {
+    content: '– ';
+    color: var(--ja-muted);
+  }
+
+  .time {
+    grid-area: time;
+    text-align: right;
+  }
+
+  .note {
+    grid-area: note;
+    padding-top: 4px !important;
+  }
+
+  .note:empty,
+  .actions:empty {
+    display: none !important;
+  }
+
+  .actions {
+    grid-area: actions;
+    padding-top: var(--mantine-spacing-xs) !important;
+  }
+
+  .actions > div {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
+/* Wider: a table, scrolling inside its panel if the panel is narrower still. */
+@media (min-width: 40.0625em) {
+  .table {
+    min-width: 36rem;
+  }
+}
+
+.crossed {
+  text-decoration: line-through;
+  color: var(--ja-muted);
+}

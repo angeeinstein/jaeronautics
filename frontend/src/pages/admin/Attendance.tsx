@@ -26,6 +26,21 @@ export const associationAttendance: AttendanceApi = {
   remove: (stayId) =>
     call(api.DELETE('/api/v1/admin/attendance/stays/{stay_id}', { params: { path: { stay_id: stayId } } })),
   setEnabled: (enabled) => call(api.PUT('/api/v1/admin/attendance/switch', { body: { enabled } })),
+  setRemoteEnabled: (enabled) =>
+    call(api.PUT('/api/v1/admin/attendance/remote-switch', { body: { enabled } })),
+  notCounted: (stayId, reason) =>
+    call(
+      api.PUT('/api/v1/admin/attendance/stays/{stay_id}/not-counted', {
+        params: { path: { stay_id: stayId } },
+        body: { reason },
+      }),
+    ),
+  countAgain: (stayId) =>
+    call(
+      api.DELETE('/api/v1/admin/attendance/stays/{stay_id}/not-counted', {
+        params: { path: { stay_id: stayId } },
+      }),
+    ),
   csvHref: (start, end) => `/api/v1/admin/attendance.csv?${new URLSearchParams({ start, end }).toString()}`,
 };
 
@@ -34,7 +49,7 @@ export function Attendance() {
     <>
       <PageHeader
         title="Attendance"
-        description="Time at the association's readers, in full minutes."
+        description="Time at the association's readers, and remote work where it is on, in full minutes."
         crumbs={[{ label: 'Admin', to: '/admin' }, { label: 'Attendance' }]}
       />
       <AttendanceBoard api={associationAttendance} where="the association" />

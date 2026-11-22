@@ -108,7 +108,7 @@ team's members earn ECTS and must be there for a number of hours.
   after.
 - **The data export** has a person's stays; an erasure deletes them.
 
-## Remote work (agreed 2026-11-21, not built)
+## Remote work (agreed 2026-11-21, built 2026-11-22)
 
 "Lots of work in CAD for example isn't done in our lab." Members log work done
 away from the readers themselves; it is kept apart from the stays the readers
@@ -196,3 +196,53 @@ prove work either.
   reason and who set it); written in German with the feature, published by the
   maintainer when it goes live -- perhaps with the membership terms, one
   email for both.
+
+### Remote work as built (2026-11-22, `claude/remote-work`)
+
+- **Stored:** a stay with `remote` set, its `note` (what was done, up to 200
+  characters), and the mark -- `not_counted_at`, `not_counted_by_user_id`,
+  `not_counted_reason` (migration `b6d2f8a4c1e9`). Always with its end, so the
+  night's closing and *Here now* leave it out by themselves. The switch:
+  `teams.remote_work_enabled`; the association's, the setting
+  `attendance_remote_enabled`. Remote work is on only while attendance is.
+- **Rules** (`services/attendance.py`): `add_remote`, `change_remote`,
+  `delete_remote` (the member's own; `own_remote` and `may_change_own` say
+  whether it may still be changed), `mark_not_counted` (remote only, a reason
+  required), `count_again`; `counted` is what a stay counts -- nothing once
+  marked. `remote_days` gives today and the 14 days before
+  (`REMOTE_DAYS_BACK`). From and to are clock times on an attendance day: a
+  time before 03:15 is the night after it, and 03:15 may end it. The overlap
+  is checked against all of the member's time, whoever it is for -- not a stay
+  closed as not checked out, nor an entry marked as not counted. Each step is
+  in the log (`attendance_remote_added`, `_changed`, `_deleted`,
+  `attendance_marked_not_counted`, `attendance_counted_again`,
+  `attendance_remote_switched`).
+- **API** (`api/attendance.py`): `POST /account/attendance/<owner>/remote`
+  (`association` or a team's slug), `PUT`/`DELETE
+  /account/attendance/remote/<id>`; for the team and the association,
+  `.../remote-switch` and `PUT`/`DELETE .../stays/<id>/not-counted`. A stay
+  carries `remote`, `note`, the mark, and on My Account `may_change`; hours
+  per person carry `remote_minutes` and `not_counted`; the CSV has *From*,
+  *To*, *Minutes counted*, *Kind* (at the readers / remote), *What*, *Note*.
+- **Pages:** the team's own page, a slim line for its active members while
+  attendance is on (`pages/teams/YourTime.tsx`); My Account › Attendance, *Add
+  remote work* in each panel's head, the month's time with the remote part in
+  small print, *Change* and *Delete* on one's own; the form
+  (`components/attendance/RemoteWorkForm.tsx`) titled *Add remote work for
+  Rocket*. The leads' board (`AttendanceBoard.tsx`): the second switch, *Of it
+  remote* per person, on a person's remote work *Not counted* (a reason) or
+  *Count again*, and *Delete* -- no *Change*. The stay list
+  (`StayTable.tsx`): blocks on a phone, the newest 15 and *Show all*.
+- **Privacy policy:** § 20, at the end of the attendance paragraph, in German
+  (handed to the maintainer, published with the release):
+
+  > Wo ein Team (oder der Verein) es erlaubt, kann ein Mitglied auch Arbeit
+  > eintragen, die es außerhalb der Lesegeräte geleistet hat (Remote-Arbeit),
+  > für den aktuellen Tag und bis zu 14 Tage zurück. Dazu speichert das Portal
+  > den Tag, Beginn und Ende sowie eine kurze Angabe des Mitglieds, woran es
+  > gearbeitet hat. Wer die Anwesenheit für das Team führt, sieht diese
+  > Einträge mit der Angabe und kann einen Eintrag als nicht gezählt
+  > markieren; dabei werden die markierende Person, der Zeitpunkt und der Grund
+  > gespeichert, die das Mitglied sieht. Im Übrigen gilt für diese Einträge
+  > dasselbe wie für die Aufenthalte.
+

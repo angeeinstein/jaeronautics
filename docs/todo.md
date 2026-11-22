@@ -41,12 +41,21 @@ good); then permissions per person (`docs/permissions-plan.md`, PR #86); and
 the batch of 2026-11-20 (`claude/email-permissions`: emails follow the
 permission whose page shows the same; the updates page and the night's update
 when the followed branch is gone; DeepL's glossary on a Free account and
-Azure's spaces around the glossary's words).
+Azure's spaces around the glossary's words); then a member's team permissions
+in their data export (PR #88); and the batch of 2026-11-22
+(`claude/remote-work`: members add remote work in attendance,
+`docs/attendance-plan.md`, "Remote work"; the attendance list as blocks on a
+phone).
 
 ## Open
 
 ### Privacy policy and membership terms drafts: brought up to date for the board
 
+- **Privacy policy published** (2026-11-20, in force that day, the members
+  emailed), with the permission edits of PR #86/#87. What is left here: the
+  membership terms. A sentence on remote work in attendance (§ 20) waits in
+  `docs/attendance-plan.md` for the next version -- perhaps with the
+  membership terms, one email for both.
 - **Added:** 2026-11-18
 - **Built** (`claude/legal-drafts-review`, merged as #83); what is left is
   publishing. The drafts were checked against the portal and are drafts in
@@ -122,22 +131,6 @@ Azure's spaces around the glossary's words).
 - **Also settled by it:** the new rules drop the passive status, so the open
   proposal in `docs/team-passive-members.md` is not needed for TDT.
 - **Waiting for:** the association's board.
-
-### Attendance: members log remote work
-
-- **Added:** 2026-11-21
-- **What:** a feature, its own branch. Members add work done away from the
-  readers (from, to, what they did -- required), marked *Remote*, counted at
-  once; leads delete it or mark it not counted; only for the last days;
-  totals on site, remote and both; switched on per team.
-- **Where:** `docs/attendance-plan.md`, "Remote work" -- what was decided,
-  in full.
-- **Why:** "Lots of work in CAD for example isn't done in our lab."
-- **Decided** (2026-11-22): everything it needs -- where it sits, 14 days
-  back, members change and delete their own, a lead's *Not counted* with a
-  reason the member sees, the privacy policy's sentence with the release.
-  Mockup: https://claude.ai/artifact/4wgbx2n2tR1CqRhaW8643y. Ready to build
-  when the maintainer says so.
 
 ### Stripe's Python package: from 13 to 16 (put off)
 
@@ -239,7 +232,9 @@ Azure's spaces around the glossary's words).
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
 - **Added:** 2026-10-08
-- **Where:** `legal/privacy-policy/{de,en}/2026-10-08.md`, `status: "draft"`.
+- **Where:** `legal/membership-terms/de/2026-10-08.md`, `status: "draft"`.
+  The privacy policy's draft is done: its newer version was published on
+  2026-11-20, and the file was deleted (2026-11-22).
 - **Why:** the portal shows profile pictures since that batch (to the person,
   their teams' members and leads, and admins; the old forum's picture for
   reconnected members); the policy said so only for the forum. The draft
@@ -286,7 +281,7 @@ Azure's spaces around the glossary's words).
 - **Once approved:** since legal texts are kept in the portal
   (`docs/legal-texts-in-portal-plan.md`), upload each German file with its
   English one on Admin › Legal texts and publish it there, with the approval;
-  then delete the four draft files from `legal/` in the next batch.
+  then delete the remaining draft file from `legal/` in the next batch.
 
 ## Ideas for later (not scheduled)
 

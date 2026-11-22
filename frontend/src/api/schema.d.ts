@@ -38,6 +38,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/account/attendance/remote/{stay_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** One's own remote work changed, while it may be: in the last days, not marked. */
+        put: operations["account_remote_change"];
+        post?: never;
+        /** One's own remote work deleted, while it may be. */
+        delete: operations["account_remote_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/attendance/{owner}/remote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remote work added for a team (its slug) or the association (``association``): it counts at once. */
+        post: operations["account_remote_add"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/account/billing": {
         parameters: {
             query?: never;
@@ -722,6 +757,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/attendance/remote-switch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Remote work on or off for the association. */
+        put: operations["association_attendance_remote_switch"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/attendance/stays": {
         parameters: {
             query?: never;
@@ -752,6 +804,24 @@ export interface paths {
         post?: never;
         /** A stay deleted. */
         delete: operations["association_attendance_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/attendance/stays/{stay_id}/not-counted": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** A remote entry marked as not counting, with why. */
+        put: operations["association_attendance_not_counted"];
+        post?: never;
+        /** The mark taken back: it counts again. */
+        delete: operations["association_attendance_count_again"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3395,6 +3465,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{slug}/manage/attendance/remote-switch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Remote work on or off for the team's members; what they added stays. */
+        put: operations["team_attendance_remote_switch"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{slug}/manage/attendance/stays": {
         parameters: {
             query?: never;
@@ -3425,6 +3512,24 @@ export interface paths {
         post?: never;
         /** A stay deleted. */
         delete: operations["team_attendance_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/attendance/stays/{stay_id}/not-counted": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** A remote entry marked as not counting, with why. */
+        put: operations["team_attendance_not_counted"];
+        post?: never;
+        /** The mark taken back: it counts again. */
+        delete: operations["team_attendance_count_again"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4269,6 +4374,16 @@ export interface components {
         AccountAttendanceOut: {
             /** Owners */
             owners: components["schemas"]["OwnerStaysOut"][];
+            /**
+             * Remote From
+             * Format: date
+             */
+            remote_from: string;
+            /**
+             * Today
+             * Format: date
+             */
+            today: string;
         };
         /** AccountListOut */
         AccountListOut: {
@@ -4703,6 +4818,11 @@ export interface components {
             people: components["schemas"]["AttendancePersonOut"][];
             /** Present */
             present: components["schemas"]["PresentOut"][];
+            /**
+             * Remote Enabled
+             * @default false
+             */
+            remote_enabled?: boolean;
             /** Rows */
             rows: components["schemas"]["HoursRowOut"][];
             /**
@@ -7307,6 +7427,16 @@ export interface components {
             name: string;
             /** Not Checked Out */
             not_checked_out: number;
+            /**
+             * Not Counted
+             * @default 0
+             */
+            not_counted?: number;
+            /**
+             * Remote Minutes
+             * @default 0
+             */
+            remote_minutes?: number;
             /** Stays */
             stays: number;
             /** User Id */
@@ -8486,6 +8616,11 @@ export interface components {
             /** Supported Until */
             supported_until: string | null;
         };
+        /** NotCountedIn */
+        NotCountedIn: {
+            /** Reason */
+            reason: string;
+        };
         /** NoteIn */
         NoteIn: {
             /**
@@ -8733,6 +8868,11 @@ export interface components {
             name: string;
             /** Owner */
             owner: string;
+            /**
+             * Remote
+             * @default false
+             */
+            remote?: boolean;
             /** Stays */
             stays: components["schemas"]["StayOut"][];
         };
@@ -9268,6 +9408,26 @@ export interface components {
             message: string | null;
             /** Url */
             url: string | null;
+        };
+        /** RemoteIn */
+        RemoteIn: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /**
+             * End
+             * Format: time
+             */
+            end: string;
+            /** Note */
+            note: string;
+            /**
+             * Start
+             * Format: time
+             */
+            start: string;
         };
         /** RemoveIn */
         RemoveIn: {
@@ -10007,10 +10167,40 @@ export interface components {
             id: number;
             /** In Place */
             in_place: string | null;
+            /**
+             * May Change
+             * @default false
+             */
+            may_change?: boolean;
             /** Minutes */
             minutes: number | null;
+            /**
+             * Not Counted At
+             * @default null
+             */
+            not_counted_at?: string | null;
+            /**
+             * Not Counted By
+             * @default null
+             */
+            not_counted_by?: string | null;
+            /**
+             * Not Counted Reason
+             * @default null
+             */
+            not_counted_reason?: string | null;
+            /**
+             * Note
+             * @default null
+             */
+            note?: string | null;
             /** Out Place */
             out_place: string | null;
+            /**
+             * Remote
+             * @default false
+             */
+            remote?: boolean;
             /** Started At */
             started_at: string;
             /**
@@ -11244,6 +11434,177 @@ export interface operations {
             };
             /** @description Not signed in. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    account_remote_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stay_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoteIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StayOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    account_remote_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stay_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    account_remote_add: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                owner: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoteIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StayOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13527,6 +13888,66 @@ export interface operations {
             };
         };
     };
+    association_attendance_remote_switch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SwitchIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SwitchOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     association_attendance_add: {
         parameters: {
             query?: never;
@@ -13675,6 +14096,135 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    association_attendance_not_counted: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stay_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotCountedIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StayOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    association_attendance_count_again: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stay_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StayOut"];
+                };
             };
             /** @description Not signed in. */
             401: {
@@ -23419,6 +23969,68 @@ export interface operations {
             };
         };
     };
+    team_attendance_remote_switch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SwitchIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SwitchOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     team_attendance_add: {
         parameters: {
             query?: never;
@@ -23562,6 +24174,119 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_attendance_not_counted: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                stay_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotCountedIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StayOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_attendance_count_again: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                stay_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StayOut"];
+                };
             };
             /** @description Not signed in. */
             401: {

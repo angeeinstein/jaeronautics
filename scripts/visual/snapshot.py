@@ -635,9 +635,12 @@ def seed(app, app_module, subscriptions):
     # two readers; Anna's stays this month -- one not checked out, one
     # corrected by hand -- and Carla checked in now. One stay of Anna's at the
     # association's reader, kept while the association's attendance is off.
+    # Remote work on for the Rocket Team: Anna's from two evenings ago, and
+    # one of Carla's marked as not counted (docs/attendance-plan.md, "Remote work").
     from aeronautics_members.db_models import AttendanceStay
 
     rocket.attendance_enabled = True
+    rocket.remote_work_enabled = True
     hangar, _key = devices_service.add(admin_user, name="Hangar door", type="attendance", owner=rocket,
                                        place="Hangar")
     workshop, _key = devices_service.add(admin_user, name="Workshop", type="attendance", owner=rocket,
@@ -674,6 +677,19 @@ def seed(app, app_module, subscriptions):
     db.session.add(AttendanceStay(user_id=carla.id, team_id=rocket.id, started_at=since, in_device_id=workshop.id,
                                   created_at=since))
     stay(active.user, None, 9, 2, 15, at=clubroom, out=clubroom)
+
+    def remote(user, days, hours, note, marked=None):
+        # 19:00 local (summer or winter alike: 17:00 or 18:00 UTC is evening either way).
+        started = (morning - timedelta(days=days)).replace(hour=17, minute=0, second=0)
+        record = AttendanceStay(user_id=user.id, team_id=rocket.id, remote=True, note=note, started_at=started,
+                                ended_at=started + timedelta(hours=hours), created_at=started)
+        if marked:
+            record.not_counted_at, record.not_counted_by_user_id = now - timedelta(hours=3), active.user.id
+            record.not_counted_reason = marked
+        db.session.add(record)
+
+    remote(active.user, 2, 2.5, "Wing rib CAD, revision 3")
+    remote(carla, 3, 2, "Landing gear mount, FEA setup", marked="Logged twice, see the day before")
     db.session.commit()
 
     reset_token = build_password_reset_token(new.user)
@@ -721,6 +737,8 @@ def seed(app, app_module, subscriptions):
                       {"name": "account--attendance", "path": "/account/attendance"},
                       {"name": "account--attendance-ask", "path": "/account/attendance",
                        "click": "button:has-text('Ask for a correction')"},
+                      {"name": "account--attendance-remote", "path": "/account/attendance",
+                       "click": "button:has-text('Add remote work')"},
                       # Saving the profile: the success message with its tick.
                       {"name": "account--saved", "path": "/account/profile",
                        "open": "section[aria-label='Contact details'] button:has-text('Edit')",

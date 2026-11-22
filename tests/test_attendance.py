@@ -358,8 +358,8 @@ class TestPages:
         person = client.get(f"{url}/people/{anna.id}").get_json()
         assert [stay["state"] for stay in person["stays"]] == ["done"]
         csv_text = client.get(f"{url}.csv").get_data(as_text=True)
-        assert csv_text.splitlines()[0] == "Name,Date,Checked in,Checked out,Minutes,Note"
-        assert "Anna Berger" in csv_text and "Corrected" in csv_text
+        assert csv_text.splitlines()[0] == "Name,Date,From,To,Minutes counted,Kind,What,Note"
+        assert "Anna Berger" in csv_text and "At the readers" in csv_text and "Corrected" in csv_text
 
         assert send(client, "PUT", f"{url}/switch", {"enabled": False}).get_json() == {"enabled": False}
         assert team.attendance_enabled is False

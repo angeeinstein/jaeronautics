@@ -68,4 +68,40 @@ test.describe('attendance', () => {
     await expect(person.getByRole('row').last()).toContainText('23:40');
     await expect(person.getByRole('row').last()).toContainText('Corrected by Anna');
   });
+
+  test('a member adds remote work from the team page, sees it, and deletes it', async ({ page }) => {
+    await signIn(page, 'active@example.org');
+    await page.goto('/teams/rocket-team');
+    await page.getByRole('button', { name: 'Add remote work' }).click();
+
+    const form = page.getByRole('dialog', { name: 'Add remote work for Rocket Team' });
+    // Yesterday, the form's own choice; 20:05 to 21:10, clear of the seeded stays.
+    const type = async (label: string, value: string) => {
+      const field = form.getByLabel(label);
+      await expect(async () => {
+        await field.clear();
+        await field.pressSequentially(value, { delay: 50 });
+        await expect(field).toHaveValue(value, { timeout: 1000 });
+      }).toPass({ timeout: 10_000 });
+    };
+    await type('From, hours', '20');
+    await type('From, minutes', '05');
+    await type('To, hours', '21');
+    await type('To, minutes', '10');
+    await form.getByRole('textbox', { name: /What did you do/ }).fill('Battery holder CAD');
+    await form.getByRole('button', { name: 'Add' }).click();
+    await expect(page.getByText('Added 1 h 5 min.')).toBeVisible();
+
+    await page.goto('/account/attendance');
+    const row = page
+      .getByRole('region', { name: 'Rocket Team' })
+      .getByRole('row')
+      .filter({ hasText: 'Battery holder CAD' });
+    await expect(row).toContainText('Remote');
+    await expect(row).toContainText('1 h 5 min');
+    await row.getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('button', { name: 'Yes, delete' }).click();
+    await expect(page.getByText('Deleted.')).toBeVisible();
+    await expect(row).toHaveCount(0);
+  });
 });
