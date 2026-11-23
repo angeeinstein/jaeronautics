@@ -94,6 +94,18 @@ class TestAdding:
             _add(anna, remote_on, day=TODAY - timedelta(days=2), start=time(22, 0), end=time(4, 0))
         assert "03:15" in _fields(wrong)["end"]
 
+    def test_not_a_time_the_clocks_skip(self, app, anna, remote_on, monkeypatch):
+        # Codex on PR #89: the night of 27/28.03.2027, 02:00 to 03:00 does not exist in Vienna;
+        # 02:30 to 03:15 was taken, stored reversed, and counted nothing.
+        spring = datetime(2027, 3, 28, 10, 0, tzinfo=UTC)
+        monkeypatch.setattr(attendance, "get_now_utc", lambda: spring)
+        with pytest.raises(ValidationError) as skipped:
+            _add(anna, remote_on, day=date(2027, 3, 27), start=time(2, 30), end=time(3, 15))
+        assert "does not exist" in _fields(skipped)["start"]
+        # Across the change it counts what really passed: 01:30 to 03:15 is 45 minutes.
+        across = _add(anna, remote_on, day=date(2027, 3, 27), start=time(1, 30), end=time(3, 15))
+        assert attendance.minutes(across) == 45
+
     def test_what_they_did_is_required(self, app, anna, remote_on, clock):
         with pytest.raises(ValidationError) as missing:
             _add(anna, remote_on, note="   ")
@@ -240,6 +252,17 @@ class TestTheLeads:
         db.session.commit()
         attendance.count_again(lead, first)
         assert first.not_counted_at is None
+
+    def test_a_stay_entered_over_remote_work_marked_not_counted(self, app, anna, remote_on, rocket, clock):
+        # Codex on PR #89: the lead's own correction was refused over an entry that no longer counts.
+        _team, lead = rocket
+        wrong = _add(anna, remote_on, start=time(18, 0), end=time(20, 0))
+        attendance.mark_not_counted(lead, wrong, "Was in the hangar, not at home")
+        db.session.commit()
+
+        stay = attendance.add_stay(lead, remote_on, anna, started_at=datetime(2026, 10, 19, 16, 0, tzinfo=UTC),
+                                   ended_at=datetime(2026, 10, 19, 18, 0, tzinfo=UTC), now=NOW)
+        assert attendance.minutes(stay) == 120
 
     def test_only_remote_work_is_marked(self, app, anna, rocket, doors, clock):
         (hangar, _key), _workshop = doors

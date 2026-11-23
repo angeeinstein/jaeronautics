@@ -278,6 +278,8 @@ def _checked_times(stay_user, owner, started, ended, *, now, other_than=None):
         raise ValidationError(message, code="attendance_times_future", details={"fields": {"ended_at": message}})
     query = db.select(AttendanceStay).where(
         AttendanceStay.user_id == stay_user.id,
+        # Remote work marked as not counting is no time of theirs: a stay may be entered over it.
+        AttendanceStay.not_counted_at.is_(None),
         AttendanceStay.started_at < _stored(ended),
         db.or_(AttendanceStay.ended_at.is_(None), AttendanceStay.ended_at > _stored(started)),
         db.or_(AttendanceStay.ended_at.is_not(None), AttendanceStay.closed_at.is_(None)),
@@ -411,14 +413,24 @@ def _remote_times(day, start, end):
     and 03:15 itself may end the day."""
     if day is None or start is None or end is None:
         raise ValidationError("Give the day, from and to.", code="attendance_times_missing")
-    started = datetime.combine(day + timedelta(days=1) if start < DAY_DIVIDE else day, start,
-                               tzinfo=MEMBERSHIP_TIMEZONE)
-    ended = datetime.combine(day + timedelta(days=1) if end <= DAY_DIVIDE else day, end,
-                             tzinfo=MEMBERSHIP_TIMEZONE)
-    if ended <= started:
+    started = _wall_time(day + timedelta(days=1) if start < DAY_DIVIDE else day, start, "start")
+    ended = _wall_time(day + timedelta(days=1) if end <= DAY_DIVIDE else day, end, "end")
+    # Compared as instants, not as clock times: the night the clocks change, they differ.
+    if ended.astimezone(timezone.utc) <= started.astimezone(timezone.utc):
         _field_error("end", "It ends before it starts. Work past midnight can end up to 03:15.",
                      "attendance_times_order")
     return started, ended
+
+
+def _wall_time(day, clock, field):
+    """A local clock time on a day, refused when that night skips it (the spring change: 02:00 to
+    03:00 does not exist in Vienna); one shown twice in autumn is its first."""
+    moment = datetime.combine(day, clock, tzinfo=MEMBERSHIP_TIMEZONE)
+    there = moment.astimezone(timezone.utc).astimezone(MEMBERSHIP_TIMEZONE)
+    if (there.date(), there.time().replace(tzinfo=None)) != (day, clock):
+        _field_error(field, f"{clock:%H:%M} does not exist that night: the clocks go forward.",
+                     "attendance_time_skipped")
+    return moment
 
 
 def _checked_remote(user, owner, *, day, start, end, note, now, other_than=None):
