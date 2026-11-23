@@ -405,7 +405,9 @@ def _snapshot(team):
 #: Short names the addresses use themselves: /admin/teams/new is the form for a
 #: new team, so a team called "new" could never be opened; the same for
 #: /api/v1/admin/money/overview and .../settings beside a team's /api/v1/admin/money/<slug>.
-RESERVED_SLUGS = frozenset({"new", "overview", "settings"})
+#: "association" stands for the association wherever an owner is a team's slug or it
+#: (attendance, devices, fees, sales), so no team may be called that.
+RESERVED_SLUGS = frozenset({"new", "overview", "settings", "association"})
 
 
 def create_team(actor, *, slug, **fields):

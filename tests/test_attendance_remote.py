@@ -264,6 +264,26 @@ class TestTheLeads:
                                    ended_at=datetime(2026, 10, 19, 18, 0, tzinfo=UTC), now=NOW)
         assert attendance.minutes(stay) == 120
 
+    def test_no_stay_for_another_owner_over_counted_remote_work(self, app, anna, remote_on, rocket, clock):
+        # Codex on PR #89: remote work for the association, then a stay for Rocket entered over it,
+        # counted both; the other way round it was refused.
+        _team, lead = rocket
+        attendance.set_enabled(None, None, True)
+        attendance.set_remote_enabled(None, None, True)
+        db.session.commit()
+        _add(anna, None, start=time(18, 0), end=time(20, 0), note="Open day texts")
+
+        with pytest.raises(ValidationError) as clash:
+            attendance.add_stay(lead, remote_on, anna, started_at=datetime(2026, 10, 19, 17, 0, tzinfo=UTC),
+                                ended_at=datetime(2026, 10, 19, 18, 0, tzinfo=UTC), now=NOW)
+        assert "remote work for Joanneum Aeronautics" in _fields(clash)["started_at"]
+        # Beside it is fine, and a stay changed onto it is refused the same way.
+        stay = attendance.add_stay(lead, remote_on, anna, started_at=datetime(2026, 10, 19, 14, 0, tzinfo=UTC),
+                                   ended_at=datetime(2026, 10, 19, 16, 0, tzinfo=UTC), now=NOW)
+        with pytest.raises(ValidationError):
+            attendance.change_stay(lead, stay, started_at=datetime(2026, 10, 19, 14, 0, tzinfo=UTC),
+                                   ended_at=datetime(2026, 10, 19, 16, 30, tzinfo=UTC), now=NOW)
+
     def test_only_remote_work_is_marked(self, app, anna, rocket, doors, clock):
         (hangar, _key), _workshop = doors
         _team, lead = rocket

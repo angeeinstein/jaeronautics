@@ -181,8 +181,12 @@ def may_check_in(user, owner):
     return owner is None or active_team_membership(user, owner) is not None
 
 
+def _owner_condition(owner):
+    return AttendanceStay.team_id.is_(None) if owner is None else AttendanceStay.team_id == owner.id
+
+
 def _owner_filter(query, owner):
-    return query.where(AttendanceStay.team_id.is_(None) if owner is None else AttendanceStay.team_id == owner.id)
+    return query.where(_owner_condition(owner))
 
 
 # --- Checking in and out -----------------------------------------------------------------
@@ -286,7 +290,13 @@ def _checked_times(stay_user, owner, started, ended, *, now, other_than=None):
     )
     if other_than is not None:
         query = query.where(AttendanceStay.id != other_than.id)
-    clash = db.session.execute(locked(_owner_filter(query, owner))).scalars().first()
+    # Stays for different owners may overlap (time at the readers counts for each team it was
+    # for); remote work counts for one owner only, so nothing else may lie over it.
+    query = query.where(db.or_(_owner_condition(owner), AttendanceStay.remote.is_(True)))
+    clash = db.session.execute(locked(query)).scalars().first()
+    if clash is not None and clash.remote:
+        message = f"It overlaps {_described(clash, owner)} on {local(clash.started_at):%d.%m.%Y}."
+        raise ValidationError(message, code="attendance_overlap", details={"fields": {"started_at": message}})
     if clash is not None:
         message = f"It overlaps the stay from {local(clash.started_at):%d.%m.%Y %H:%M}."
         raise ValidationError(message, code="attendance_overlap", details={"fields": {"started_at": message}})

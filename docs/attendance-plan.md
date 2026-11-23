@@ -213,7 +213,12 @@ prove work either.
   (`REMOTE_DAYS_BACK`). From and to are clock times on an attendance day: a
   time before 03:15 is the night after it, and 03:15 may end it. The overlap
   is checked against all of the member's time, whoever it is for -- not a stay
-  closed as not checked out, nor an entry marked as not counted. Each step is
+  closed as not checked out, nor an entry marked as not counted. The same
+  holds the other way: a stay a lead adds or changes may not lie over counted
+  remote work for anyone (stays for different owners may still overlap each
+  other). A clock time the spring change skips (02:00 to 03:00) is refused.
+  No team may be called `association`, which names the association wherever
+  an owner is a team's slug or it. Each step is
   in the log (`attendance_remote_added`, `_changed`, `_deleted`,
   `attendance_marked_not_counted`, `attendance_counted_again`,
   `attendance_remote_switched`).
