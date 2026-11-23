@@ -192,6 +192,24 @@ class TestTheLeads:
         assert db.session.query(AuditLog).filter(AuditLog.event_type.in_(
             ["attendance_marked_not_counted", "attendance_counted_again"])).count() == 2
 
+    def test_not_counted_again_over_the_entry_that_replaced_it(self, app, anna, remote_on, rocket, clock):
+        # Codex on PR #89: marked, then entered again by the member; Count again on the first
+        # would have counted the same time twice.
+        _team, lead = rocket
+        first = _add(anna, remote_on)
+        attendance.mark_not_counted(lead, first, "Wrong times, please add it again")
+        db.session.commit()
+        replacement = _add(anna, remote_on, note="Wing rib CAD, the right times")
+
+        with pytest.raises(ValidationError, match="counted twice"):
+            attendance.count_again(lead, first)
+        assert first.not_counted_at is not None
+
+        attendance.delete_remote(anna, attendance.own_remote(anna, replacement.id))
+        db.session.commit()
+        attendance.count_again(lead, first)
+        assert first.not_counted_at is None
+
     def test_only_remote_work_is_marked(self, app, anna, rocket, doors, clock):
         (hangar, _key), _workshop = doors
         _team, lead = rocket

@@ -357,9 +357,16 @@ def mark_not_counted(actor, stay, reason, now=None):
 
 
 def count_again(actor, stay):
-    """A mark taken back: the entry counts again."""
+    """A mark taken back: the entry counts again -- unless its time has been entered again
+    meanwhile (the member added the right one after the mark), which would count it twice."""
     if stay.not_counted_at is None:
         return stay
+    _one_at_a_time(stay.user)
+    clash = _overlapping(stay.user, _aware(stay.started_at), _aware(stay.ended_at), other_than=stay)
+    if clash is not None:
+        raise ValidationError(
+            f"It overlaps {_described(clash, stay.team)}: delete or mark that one first, so the time is not "
+            "counted twice.", code="attendance_overlap")
     before = _snapshot(stay)
     stay.not_counted_at = stay.not_counted_by_user_id = stay.not_counted_reason = None
     log_audit_event("attendance", "attendance_counted_again", actor_user=actor, target_user=stay.user,
@@ -411,8 +418,16 @@ def _checked_remote(user, owner, *, day, start, end, note, now, other_than=None)
         _field_error("note", "Add a few words on what you did.", "attendance_note_missing")
     if len(note) > NOTE_MAX:
         _field_error("note", f"At most {NOTE_MAX} characters.", "attendance_note_long")
-    # One person is in one place at a time: all their time counts, whoever it is for -- not a stay
-    # closed as not checked out, nor an entry marked as not counting.
+    clash = _overlapping(user, started, ended, other_than=other_than)
+    if clash is not None:
+        _field_error("start", f"It overlaps {_described(clash, owner, 'your')}.", "attendance_overlap")
+    return _stored(started), _stored(ended), note
+
+
+def _overlapping(user, started, ended, *, other_than=None):
+    """The person's first time that counts between ``started`` and ``ended``, whoever it is for
+    (one person is in one place at a time) -- not a stay closed as not checked out, nor an entry
+    marked as not counting. Read as committed (after ``_one_at_a_time``)."""
     query = db.select(AttendanceStay).where(
         AttendanceStay.user_id == user.id,
         AttendanceStay.not_counted_at.is_(None),
@@ -422,15 +437,16 @@ def _checked_remote(user, owner, *, day, start, end, note, now, other_than=None)
     )
     if other_than is not None:
         query = query.where(AttendanceStay.id != other_than.id)
-    clash = db.session.execute(locked(query.order_by(AttendanceStay.started_at))).scalars().first()
-    if clash is not None:
-        what = "your remote work" if clash.remote else (
-            f"your time at {place_of(clash.in_device)}" if clash.in_device is not None else "your stay")
-        whose = "" if clash.team_id == (owner.id if owner is not None else None) else f" for {owner_name(clash.team)}"
-        until = f"{local(clash.ended_at):%H:%M}" if clash.ended_at is not None else "now"
-        _field_error("start", f"It overlaps {what}{whose}, {local(clash.started_at):%H:%M} to {until}.",
-                     "attendance_overlap")
-    return _stored(started), _stored(ended), note
+    return db.session.execute(locked(query.order_by(AttendanceStay.started_at))).scalars().first()
+
+
+def _described(clash, owner, whose_word="the"):
+    """"your remote work for Rocket, 18:00 to 20:30": what a new or restored entry runs into."""
+    what = f"{whose_word} remote work" if clash.remote else (
+        f"{whose_word} time at {place_of(clash.in_device)}" if clash.in_device is not None else f"{whose_word} stay")
+    whose = "" if clash.team_id == (owner.id if owner is not None else None) else f" for {owner_name(clash.team)}"
+    until = f"{local(clash.ended_at):%H:%M}" if clash.ended_at is not None else "now"
+    return f"{what}{whose}, {local(clash.started_at):%H:%M} to {until}"
 
 
 def add_remote(user, owner, *, day, start, end, note, now=None):
