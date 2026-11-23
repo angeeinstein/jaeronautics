@@ -153,6 +153,37 @@ class TestTheirOwn:
         db.session.commit()
         assert db.session.query(AttendanceStay).count() == 0
 
+    def test_a_mark_committed_while_the_member_waited_is_seen(self, app, anna, remote_on, rocket, clock,
+                                                              monkeypatch):
+        # Codex on PR #89: the member's change passed its check before the lead's mark committed.
+        # Now the entry is read and checked only once the member's lock is held.
+        _team, lead = rocket
+        stay = _add(anna, remote_on)
+        waited = attendance._one_at_a_time
+
+        def lead_marks_meanwhile(user):
+            waited(user)
+            db.session.execute(db.update(AttendanceStay).where(AttendanceStay.id == stay.id).values(
+                not_counted_at=NOW.replace(tzinfo=None), not_counted_reason="Not project work"))
+
+        monkeypatch.setattr(attendance, "_one_at_a_time", lead_marks_meanwhile)
+        with pytest.raises(ValidationError, match="no longer"):
+            attendance.own_remote(anna, stay.id)
+
+    def test_a_mark_on_an_entry_deleted_meanwhile_is_refused(self, app, anna, remote_on, rocket, clock,
+                                                             monkeypatch):
+        _team, lead = rocket
+        stay = _add(anna, remote_on)
+        waited = attendance._one_at_a_time
+
+        def member_deletes_meanwhile(user):
+            waited(user)
+            db.session.execute(db.delete(AttendanceStay).where(AttendanceStay.id == stay.id))
+
+        monkeypatch.setattr(attendance, "_one_at_a_time", member_deletes_meanwhile)
+        with pytest.raises(NotFoundError):
+            attendance.mark_not_counted(lead, stay, "Not project work")
+
     def test_not_somebody_elses_and_not_a_readers(self, app, anna, remote_on, doors, clock):
         (hangar, _key), _workshop = doors
         stay = _add(anna, remote_on)

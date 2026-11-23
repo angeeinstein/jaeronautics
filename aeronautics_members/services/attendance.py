@@ -335,8 +335,22 @@ def stay_of(owner, stay_id):
     return stay
 
 
+def _fresh(stay):
+    """``stay`` read again as committed now and locked, after ``_one_at_a_time`` of its person: a
+    member's change and a lead's mark of the same entry wait for each other, and the second sees
+    what the first did. NotFoundError when it was deleted meanwhile."""
+    found = db.session.execute(
+        locked(db.select(AttendanceStay).where(AttendanceStay.id == stay.id))
+        .execution_options(populate_existing=True)).scalar_one_or_none()
+    if found is None:
+        raise NotFoundError("No such entry.", code="attendance_stay_unknown")
+    return found
+
+
 def mark_not_counted(actor, stay, reason, now=None):
     """A remote entry marked as not counting, with why: the member sees it, and who marked it."""
+    _one_at_a_time(stay.user)
+    stay = _fresh(stay)
     if not stay.remote:
         raise ValidationError("Only remote work is marked; correct or delete a stay at a reader.",
                               code="attendance_not_remote")
@@ -359,9 +373,10 @@ def mark_not_counted(actor, stay, reason, now=None):
 def count_again(actor, stay):
     """A mark taken back: the entry counts again -- unless its time has been entered again
     meanwhile (the member added the right one after the mark), which would count it twice."""
+    _one_at_a_time(stay.user)
+    stay = _fresh(stay)
     if stay.not_counted_at is None:
         return stay
-    _one_at_a_time(stay.user)
     clash = _overlapping(stay.user, _aware(stay.started_at), _aware(stay.ended_at), other_than=stay)
     if clash is not None:
         raise ValidationError(
@@ -475,8 +490,12 @@ def may_change_own(user, stay, now=None):
 
 
 def own_remote(user, stay_id, now=None):
-    """The member's own remote entry, while they may still change it."""
-    stay = db.session.get(AttendanceStay, stay_id)
+    """The member's own remote entry, while they may still change it: read and checked under their
+    lock, so a lead's mark committed meanwhile is seen (the change and delete after it keep the lock)."""
+    _one_at_a_time(user)
+    stay = db.session.execute(
+        locked(db.select(AttendanceStay).where(AttendanceStay.id == stay_id))
+        .execution_options(populate_existing=True)).scalar_one_or_none()
     if stay is None or stay.user_id != user.id or not stay.remote:
         raise NotFoundError("No such entry.", code="attendance_stay_unknown")
     if not may_change_own(user, stay, now):
