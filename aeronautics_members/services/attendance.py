@@ -320,8 +320,12 @@ def add_stay(actor, owner, user, *, started_at, ended_at, now=None):
 
 def change_stay(actor, stay, *, started_at, ended_at, now=None):
     """When a stay started and ended, set by hand -- a check-out forgotten, a
-    wrong tap. A stay closed as not checked out then counts again."""
+    wrong tap. A stay closed as not checked out then counts again. Remote work is
+    the member's own word: a lead marks it as not counted or deletes it, never changes it."""
     now = now or get_now_utc()
+    if stay.remote:
+        raise ValidationError("Remote work is changed by the member. Mark it as not counted, or delete it.",
+                              code="attendance_remote_not_changed")
     _one_at_a_time(stay.user)
     before = _snapshot(stay)
     stay.started_at, stay.ended_at = _checked_times(stay.user, stay.team, started_at, ended_at, now=now,

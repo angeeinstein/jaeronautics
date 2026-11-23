@@ -284,6 +284,18 @@ class TestTheLeads:
             attendance.change_stay(lead, stay, started_at=datetime(2026, 10, 19, 14, 0, tzinfo=UTC),
                                    ended_at=datetime(2026, 10, 19, 16, 30, tzinfo=UTC), now=NOW)
 
+    def test_a_lead_does_not_change_remote_work(self, app, anna, remote_on, rocket, clock):
+        # Codex on PR #89: the page shows no Change for remote work, but the address took it -- and
+        # moved over the member's time elsewhere, both counted. Marking or deleting is what a lead does.
+        _team, lead = rocket
+        entry = _add(anna, remote_on, start=time(18, 0), end=time(20, 0))
+        with pytest.raises(ValidationError) as refused:
+            attendance.change_stay(lead, entry, started_at=datetime(2026, 10, 19, 10, 0, tzinfo=UTC),
+                                   ended_at=datetime(2026, 10, 19, 12, 0, tzinfo=UTC), now=NOW)
+        assert refused.value.code == "attendance_remote_not_changed"
+        db.session.refresh(entry)
+        assert entry.corrected_at is None and attendance.minutes(entry) == 120
+
     def test_only_remote_work_is_marked(self, app, anna, rocket, doors, clock):
         (hangar, _key), _workshop = doors
         _team, lead = rocket
