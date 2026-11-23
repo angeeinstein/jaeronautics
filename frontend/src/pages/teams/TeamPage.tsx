@@ -2,7 +2,8 @@
  * A team's overview, for its members and whoever runs it, in the team's own
  * frame: its cover; what needs doing (for whoever runs it), one's own
  * membership with what to do about it -- leaving set apart, quietly -- and
- * who is in the team, each by their picture. Anybody else is sent to what the
+ * who is in the team, each by their picture. While the team records
+ * attendance, a slim line with one's own time this month (YourTime). Anybody else is sent to what the
  * team is about. Asked again every minute, so somebody who joins appears.
  * Data: GET /api/v1/teams/<slug>.
  */
@@ -21,6 +22,7 @@ import { RulesLine } from './Rules';
 import { MessageLeads } from './MessageLeads';
 import { MembershipBlock, type Team, teamQuery, useTeam } from './shared';
 import { TeamHero } from './TeamHero';
+import { YourTime } from './YourTime';
 import classes from './Teams.module.css';
 
 type Person = NonNullable<Team['members']>[number];
@@ -115,6 +117,7 @@ export function TeamPage() {
     <Stack gap="lg">
       <Breadcrumbs crumbs={[{ label: data.labels.plural, to: '/teams' }, { label: data.name }]} />
       <TeamHero team={data} compact />
+      <YourTime slug={slug} member={data.membership.status === 'active'} />
       <SimpleGrid cols={{ base: 1, md: attention ? 2 : 1 }} spacing="lg">
         <Attention team={data} />
         <Panel icon={IconId} title="Your membership">

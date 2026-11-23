@@ -5,6 +5,11 @@
  * changed, deleted; each in the log, the member sees who), a CSV of the period,
  * and the switch. Off, the readers refuse check-ins and the stays are kept.
  *
+ * Remote work (docs/attendance-plan.md, "Remote work"): a second switch lets
+ * members add work done away from the readers; it counts at once. Hours show
+ * how much was remote; a person's remote work shows what they did, and is
+ * marked as not counted -- with a reason the member sees -- or deleted.
+ *
  * The team's page (pages/teams/manage/Attendance.tsx) and the admins' (pages/
  * admin/Attendance.tsx) draw the same board on their own API: ``AttendanceApi``.
  */
@@ -18,6 +23,7 @@ import {
   Switch,
   Table,
   Text,
+  Textarea,
   UnstyledButton,
 } from '@mantine/core';
 import { TimePicker } from '@mantine/dates';
@@ -26,9 +32,11 @@ import {
   IconClockHour4,
   IconDoorEnter,
   IconDownload,
+  IconBan,
   IconPencil,
   IconPlus,
   IconPower,
+  IconRotate,
 } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -37,6 +45,7 @@ import { ApiError, type Schemas } from '../../api/client';
 import {
   attendanceDay,
   formatDate,
+  formatDayOf,
   formatMinutes,
   formatTime,
   fromVienna,
@@ -65,6 +74,10 @@ export interface AttendanceApi {
   change: (stayId: number, body: Schemas['StayChangeIn']) => Promise<Stay>;
   remove: (stayId: number) => Promise<unknown>;
   setEnabled: (enabled: boolean) => Promise<Schemas['SwitchOut']>;
+  setRemoteEnabled: (enabled: boolean) => Promise<Schemas['SwitchOut']>;
+  /** A remote entry marked as not counting, with why; and the mark taken back. */
+  notCounted: (stayId: number, reason: string) => Promise<Stay>;
+  countAgain: (stayId: number) => Promise<Stay>;
   csvHref: (start: string, end: string) => string;
 }
 
@@ -257,6 +270,60 @@ function StayDialog({
   );
 }
 
+// --- Remote work marked as not counted ----------------------------------------------------
+
+function NotCountedForm({ api, stay, onDone }: { api: AttendanceApi; stay: Stay; onDone: () => void }) {
+  const client = useQueryClient();
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | undefined>();
+  const mark = useMutation({
+    mutationFn: () => api.notCounted(stay.id, reason),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: api.key });
+      notifyDone('Marked as not counted.');
+      onDone();
+    },
+    onError: (failure) => {
+      if (failure instanceof ApiError && failure.fields.reason) setError(failure.fields.reason);
+      else notifyFailed(failure);
+    },
+  });
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        setError(undefined);
+        mark.mutate();
+      }}
+    >
+      <Stack gap="md">
+        <Text size="sm">
+          {formatDayOf(stay.started_at)}, {formatTime(stay.started_at)} –{' '}
+          {stay.ended_at ? formatTime(stay.ended_at) : ''}
+          {stay.note ? `: ${stay.note}` : ''}
+        </Text>
+        <Textarea
+          label="Why does it not count?"
+          required
+          autosize
+          minRows={2}
+          maxLength={200}
+          description="The member sees it, with your name. You can take the mark back."
+          value={reason}
+          onChange={(event) => {
+            setReason(event.currentTarget.value);
+          }}
+          error={error}
+          data-autofocus
+        />
+        <Button type="submit" loading={mark.isPending} disabled={!reason.trim()}>
+          Mark as not counted
+        </Button>
+      </Stack>
+    </form>
+  );
+}
+
 // --- A person's stays ---------------------------------------------------------------------
 
 function PersonStays({
@@ -272,6 +339,7 @@ function PersonStays({
 }) {
   const client = useQueryClient();
   const [changing, setChanging] = useState<Stay | null>(null);
+  const [marking, setMarking] = useState<Stay | null>(null);
   const [adding, setAdding] = useState(false);
   const stays = useQuery({
     queryKey: [...api.key, 'person', row.user_id, period.start, period.end],
@@ -282,6 +350,14 @@ function PersonStays({
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: api.key });
       notifyDone('Stay deleted.');
+    },
+    onError: notifyFailed,
+  });
+  const again = useMutation({
+    mutationFn: (stay: Stay) => api.countAgain(stay.id),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: api.key });
+      notifyDone('It counts again.');
     },
     onError: notifyFailed,
   });
@@ -312,16 +388,41 @@ function PersonStays({
           label={`Stays of ${row.name}`}
           actions={(stay) => (
             <>
-              <Button
-                size="xs"
-                variant="default"
-                leftSection={<IconPencil size={14} aria-hidden />}
-                onClick={() => {
-                  setChanging(stay);
-                }}
-              >
-                Change
-              </Button>
+              {!stay.remote ? (
+                <Button
+                  size="xs"
+                  variant="default"
+                  leftSection={<IconPencil size={14} aria-hidden />}
+                  onClick={() => {
+                    setChanging(stay);
+                  }}
+                >
+                  Change
+                </Button>
+              ) : stay.not_counted_at ? (
+                <Button
+                  size="xs"
+                  variant="default"
+                  leftSection={<IconRotate size={14} aria-hidden />}
+                  loading={again.isPending && again.variables.id === stay.id}
+                  onClick={() => {
+                    again.mutate(stay);
+                  }}
+                >
+                  Count again
+                </Button>
+              ) : (
+                <Button
+                  size="xs"
+                  variant="default"
+                  leftSection={<IconBan size={14} aria-hidden />}
+                  onClick={() => {
+                    setMarking(stay);
+                  }}
+                >
+                  Not counted
+                </Button>
+              )}
               <ConfirmButton
                 size="xs"
                 confirmLabel="Yes, delete"
@@ -348,6 +449,23 @@ function PersonStays({
         stay={changing ?? undefined}
         people={people}
       />
+      <Modal
+        opened={marking !== null}
+        onClose={() => {
+          setMarking(null);
+        }}
+        title={`Remote work of ${row.name}`}
+      >
+        {marking ? (
+          <NotCountedForm
+            api={api}
+            stay={marking}
+            onDone={() => {
+              setMarking(null);
+            }}
+          />
+        ) : null}
+      </Modal>
       <StayDialog
         title={`Add a stay for ${row.name}`}
         opened={adding}
@@ -364,7 +482,7 @@ function PersonStays({
 
 // --- The board ------------------------------------------------------------------------------
 
-function HoursTable({ rows, onOpen }: { rows: Row[]; onOpen: (row: Row) => void }) {
+function HoursTable({ rows, onOpen, remote }: { rows: Row[]; onOpen: (row: Row) => void; remote: boolean }) {
   return (
     <Table.ScrollContainer minWidth={480} type="native">
       <Table verticalSpacing="sm" highlightOnHover aria-label="Hours per person">
@@ -374,6 +492,11 @@ function HoursTable({ rows, onOpen }: { rows: Row[]; onOpen: (row: Row) => void 
             <Table.Th scope="col" ta="right">
               Time
             </Table.Th>
+            {remote ? (
+              <Table.Th scope="col" ta="right">
+                Of it remote
+              </Table.Th>
+            ) : null}
             <Table.Th scope="col" ta="right">
               Stays
             </Table.Th>
@@ -404,6 +527,11 @@ function HoursTable({ rows, onOpen }: { rows: Row[]; onOpen: (row: Row) => void 
               <Table.Td ta="right" className="ja-figures" style={{ whiteSpace: 'nowrap' }}>
                 {formatMinutes(row.minutes)}
               </Table.Td>
+              {remote ? (
+                <Table.Td ta="right" className="ja-figures" style={{ whiteSpace: 'nowrap' }}>
+                  {row.remote_minutes ? formatMinutes(row.remote_minutes) : '–'}
+                </Table.Td>
+              ) : null}
               <Table.Td ta="right" className="ja-figures">
                 {row.stays}
               </Table.Td>
@@ -442,8 +570,27 @@ function HereNow({ present }: { present: Overview['present'] }) {
   );
 }
 
-function SwitchPanel({ api, enabled, where }: { api: AttendanceApi; enabled: boolean; where: string }) {
+function SwitchPanel({
+  api,
+  enabled,
+  remoteEnabled,
+  where,
+}: {
+  api: AttendanceApi;
+  enabled: boolean;
+  remoteEnabled: boolean;
+  where: string;
+}) {
   const client = useQueryClient();
+  const remote = useMutation({
+    mutationFn: (on: boolean) => api.setRemoteEnabled(on),
+    onSuccess: (data) => {
+      void client.invalidateQueries({ queryKey: api.key });
+      void client.invalidateQueries({ queryKey: ['account', 'attendance'] });
+      notifyDone(data.enabled ? 'Members can add remote work.' : 'Remote work is off.');
+    },
+    onError: notifyFailed,
+  });
   const change = useMutation({
     mutationFn: (on: boolean) => api.setEnabled(on),
     onSuccess: (data) => {
@@ -471,6 +618,24 @@ function SwitchPanel({ api, enabled, where }: { api: AttendanceApi; enabled: boo
             ? `Members of ${where} check in and out at its attendance readers.`
             : `Off: the readers refuse check-ins. Stays already recorded are kept.`}
         </Text>
+        {enabled ? (
+          <>
+            <Switch
+              mt="sm"
+              label="Members may add remote work"
+              checked={remoteEnabled}
+              disabled={remote.isPending}
+              onChange={(event) => {
+                remote.mutate(event.currentTarget.checked);
+              }}
+            />
+            <Text size="sm" c="dimmed">
+              {remoteEnabled
+                ? 'Work done away from the readers, added by the members themselves for the last 14 days, with what they did. It counts at once; you can mark an entry as not counted.'
+                : 'Off: members only have their time at the readers. Remote work already added is kept.'}
+            </Text>
+          </>
+        ) : null}
       </Stack>
     </Panel>
   );
@@ -489,8 +654,12 @@ export function AttendanceBoard({ api, where }: { api: AttendanceApi; where: str
   if (overview.isPending) return <LoadingState />;
   if (overview.isError) return <ErrorState error={overview.error} onRetry={() => void overview.refetch()} />;
   const { enabled, rows, present, people } = overview.data;
+  const remoteEnabled = overview.data.remote_enabled ?? false;
   const recorded = rows.some((row) => row.stays > 0);
-  const switchPanel = <SwitchPanel api={api} enabled={enabled} where={where} />;
+  const remote = remoteEnabled || rows.some((row) => (row.remote_minutes ?? 0) > 0);
+  const total = rows.reduce((sum, row) => sum + row.minutes, 0);
+  const totalRemote = rows.reduce((sum, row) => sum + (row.remote_minutes ?? 0), 0);
+  const switchPanel = <SwitchPanel api={api} enabled={enabled} remoteEnabled={remoteEnabled} where={where} />;
   return (
     <Stack gap="lg">
       {enabled ? null : switchPanel}
@@ -527,14 +696,18 @@ export function AttendanceBoard({ api, where }: { api: AttendanceApi; where: str
           <Stack gap="sm" p="md" pb={rows.length ? 0 : 'md'}>
             <PeriodPicker period={period} onChange={setPeriod} />
             <Text size="sm" c="dimmed">
-              <span className="ja-figures">
-                {formatMinutes(rows.reduce((sum, row) => sum + row.minutes, 0))}
-              </span>{' '}
-              altogether, in full minutes. A stay not checked out counts nothing until it is corrected.
+              <span className="ja-figures">{formatMinutes(total)}</span> altogether
+              {remote ? (
+                <>
+                  , <span className="ja-figures">{formatMinutes(totalRemote)}</span> of it remote
+                </>
+              ) : null}
+              , in full minutes. A stay not checked out counts nothing until it is corrected
+              {remote ? ', nor does remote work marked as not counted' : ''}.
             </Text>
             {rows.length ? null : <EmptyState>Nobody here yet.</EmptyState>}
           </Stack>
-          {rows.length ? <HoursTable rows={rows} onOpen={setPerson} /> : null}
+          {rows.length ? <HoursTable rows={rows} onOpen={setPerson} remote={remote} /> : null}
         </Panel>
       ) : null}
       {enabled ? switchPanel : null}

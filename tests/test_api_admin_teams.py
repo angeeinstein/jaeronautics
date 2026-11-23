@@ -99,6 +99,16 @@ def test_the_short_name_new_is_taken_by_the_pages(client):
     assert response.status_code == 400 and response.get_json()["error"]["code"] == "team_slug_reserved"
 
 
+def test_the_short_name_association_stands_for_the_association(client):
+    """Owners are a team's slug or "association" (attendance, devices, fees): a team called that
+    would be taken for the association (Codex on PR #89)."""
+    signed_in(client, _staff("boss@example.org", "admin"))
+
+    response = send(client, "POST", API, {"name": "Association"})
+
+    assert response.status_code == 400 and response.get_json()["error"]["code"] == "team_slug_reserved"
+
+
 def test_creating_with_a_fee(client, fake_stripe):  # noqa: F811
     signed_in(client, _staff("boss@example.org", "admin"))
 

@@ -906,6 +906,8 @@ class Team(db.Model):
     #: Its readers record who is there (services/attendance.py): switched on by
     #: its leads or an admin; off, its readers refuse check-ins.
     attendance_enabled = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    #: Its members may add remote work while attendance is on (docs/attendance-plan.md).
+    remote_work_enabled = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     access_list_recipients = db.Column(db.Text, nullable=True)
     access_list_dates = db.Column(db.String(255), nullable=True)
     access_list_auto_send = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
@@ -1312,12 +1314,21 @@ class AttendanceStay(db.Model):
     corrected_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     corrected_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    #: Remote work: added by the member, away from the readers, with what they did
+    #: (docs/attendance-plan.md, "Remote work"). Always has its end.
+    remote = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    note = db.Column(db.String(200), nullable=True)
+    #: Marked by whoever runs the owner's attendance as not counting: who, when, why.
+    not_counted_at = db.Column(db.DateTime, nullable=True)
+    not_counted_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    not_counted_reason = db.Column(db.String(200), nullable=True)
 
     user = db.relationship("User", foreign_keys=[user_id])
     team = db.relationship("Team")
     in_device = db.relationship("Device", foreign_keys=[in_device_id])
     out_device = db.relationship("Device", foreign_keys=[out_device_id])
     corrected_by = db.relationship("User", foreign_keys=[corrected_by_user_id])
+    not_counted_by = db.relationship("User", foreign_keys=[not_counted_by_user_id])
 
 
 class ContactMessage(db.Model):

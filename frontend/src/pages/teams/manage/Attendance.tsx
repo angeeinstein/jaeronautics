@@ -28,6 +28,19 @@ function teamApi(slug: string): AttendanceApi {
     remove: (stayId) =>
       call(api.DELETE(`${base}/stays/{stay_id}`, { params: { path: { ...path, stay_id: stayId } } })),
     setEnabled: (enabled) => call(api.PUT(`${base}/switch`, { params: { path }, body: { enabled } })),
+    setRemoteEnabled: (enabled) =>
+      call(api.PUT(`${base}/remote-switch`, { params: { path }, body: { enabled } })),
+    notCounted: (stayId, reason) =>
+      call(
+        api.PUT(`${base}/stays/{stay_id}/not-counted`, {
+          params: { path: { ...path, stay_id: stayId } },
+          body: { reason },
+        }),
+      ),
+    countAgain: (stayId) =>
+      call(
+        api.DELETE(`${base}/stays/{stay_id}/not-counted`, { params: { path: { ...path, stay_id: stayId } } }),
+      ),
     csvHref: (start, end) =>
       `/api/v1/teams/${encodeURIComponent(slug)}/manage/attendance.csv?${new URLSearchParams({ start, end }).toString()}`,
   };
@@ -38,7 +51,10 @@ export function Attendance() {
   const manage = useManage().data;
   return (
     <>
-      <ManageHeader title="Attendance" description="Time at the team's readers, in full minutes." />
+      <ManageHeader
+        title="Attendance"
+        description="Time at the team's readers, and remote work where it is on, in full minutes."
+      />
       <AttendanceBoard api={teamApi(slug)} where={manage?.name ?? 'the team'} />
     </>
   );

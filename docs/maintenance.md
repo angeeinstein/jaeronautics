@@ -698,8 +698,11 @@ front matter included -- the file an upload takes back -- and *Replace with a
 file* reads an uploaded German file into the editor (checked as an upload is),
 keeping the state before under *History*; undo takes it back. Every
 row under *Not in force yet* (and on a team's Rules page) has its *Markdown*
-too, a file in `legal/` as it is. So a draft kept in the portal can be handed
-to someone -- or an AI agent -- who cannot reach the server, and taken back.
+too, a file in `legal/` as it is, and so has every row under *In force*
+(`/admin/legal/version.md`, added 2026-11-22: "if, for example, I want to give
+you ... a current text to make some modifications on this"). So a text kept in
+the portal can be handed to someone -- or an AI agent -- who cannot reach the
+server, and taken back as a new draft.
 
 Starting, copying in, uploading, publishing, correcting and deleting are in
 the log (category *legal*); a save is not. *Download a template* gives a Markdown file with every front matter

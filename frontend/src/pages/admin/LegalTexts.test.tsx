@@ -27,6 +27,7 @@ function legal(overrides: Partial<LegalOut> = {}): LegalOut {
         validity: 'Gültig ab 17.03.2019',
         page_url: '/legal/statutes',
         pdf_url: '/legal/statutes/pdf',
+        markdown_url: '/admin/legal/version.md?document=statutes&version=2019-03-17',
       },
     ],
     teams_without_rules: ['Glider Team'],
@@ -85,6 +86,18 @@ describe('what there is', () => {
     show({ [API]: { body: legal({ problems: ['stray.md: not where a version goes'] }) } });
 
     expect(await screen.findByText('stray.md: not where a version goes')).toBeInTheDocument();
+  });
+});
+
+describe('a text in force as Markdown', () => {
+  it('is downloaded from its own link, to change elsewhere', async () => {
+    show();
+    const inForce = await screen.findByRole('region', { name: 'In force' });
+
+    expect(within(inForce).getByRole('link', { name: 'Markdown' })).toHaveAttribute(
+      'href',
+      '/admin/legal/version.md?document=statutes&version=2019-03-17',
+    );
   });
 });
 

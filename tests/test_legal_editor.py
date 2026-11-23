@@ -376,6 +376,21 @@ class TestAsAFile:
         again = legal_uploads.upload_draft(boss, (german.data, "x.md"))
         assert again.body.strip() == "§ 1 Name." and again.approved_by == "Vorstand"
 
+    def test_the_version_in_force_too_from_its_link(self, client, boss):  # noqa: F811
+        record = legal_uploads.upload_draft(boss, _file(body="§ 1 In Kraft."))
+        db.session.commit()
+        legal_uploads.publish(boss, record.id, effective_from=get_membership_today(), tell=False)
+        db.session.commit()
+        _login(client, boss.id)
+
+        [shown] = [text for text in client.get("/api/v1/admin/legal").get_json()["in_force"]
+                   if text.get("record_id") == record.id]
+        assert shown["markdown_url"] == f"/admin/legal/version.md?document=statutes&record={record.id}"
+        german = client.get(shown["markdown_url"])
+
+        assert german.status_code == 200 and german.mimetype == "text/markdown"
+        assert "§ 1 In Kraft." in german.get_data(as_text=True)
+
     def test_a_file_in_legal_as_it_is(self, client, boss, texts):  # noqa: F811
         day = get_membership_today().isoformat()
         texts("privacy-policy", day, "§ 1 Datei.", status="draft", title="Datenschutz")

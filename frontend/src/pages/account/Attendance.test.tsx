@@ -65,7 +65,7 @@ describe('my attendance', () => {
     });
     renderPage(<Attendance />);
 
-    const table = await screen.findByRole('table', { name: 'Stays at Rocket Team' });
+    const table = await screen.findByRole('table', { name: 'Your time with Rocket Team' });
     expect(table).toHaveTextContent('09:15');
     expect(table).toHaveTextContent('Hangar door');
     expect(table).toHaveTextContent('2 h 25 min');
@@ -103,5 +103,75 @@ describe('my attendance', () => {
     expect(target.searchParams.get('topic')).toBe('other');
     expect(target.searchParams.get('subject')).toBe('Attendance on 13.10.2026');
     expect(screen.getByText(/Kept for you/)).toBeInTheDocument();
+  });
+
+  it('remote work: what was done, the split, and the member changes their own', async () => {
+    const remote = stay({
+      id: 4,
+      // 18:00 to 20:30 in Vienna.
+      started_at: '2026-10-14T16:00:00Z',
+      ended_at: '2026-10-14T18:30:00Z',
+      minutes: 150,
+      in_place: null,
+      out_place: null,
+      remote: true,
+      note: 'Wing rib CAD, revision 3',
+      may_change: true,
+    });
+    mockFetch({
+      ...base,
+      '/api/v1/account/attendance': {
+        body: {
+          owners: [owner({ remote: true, stays: [remote, stay()] })],
+          remote_from: '2026-10-06',
+          today: '2026-10-20',
+        },
+      },
+    });
+    renderPage(<Attendance />);
+
+    const table = await screen.findByRole('table', { name: 'Your time with Rocket Team' });
+    expect(table).toHaveTextContent('Remote');
+    expect(table).toHaveTextContent('Wing rib CAD, revision 3');
+    const panel = screen.getByRole('region', { name: 'Rocket Team' });
+    expect(panel).toHaveTextContent('4 h 55 min');
+    expect(panel).toHaveTextContent('2 h 25 min at the readers · 2 h 30 min remote');
+    expect(within(table).getByRole('button', { name: 'Change' })).toBeInTheDocument();
+
+    await userEvent.click(within(panel).getByRole('button', { name: 'Add remote work' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add remote work for Rocket Team' });
+    expect(within(dialog).getByRole('textbox', { name: /What did you do/ })).toBeInTheDocument();
+  });
+
+  it('remote work marked as not counted: crossed out, by whom and why, no longer changed', async () => {
+    const marked = stay({
+      id: 5,
+      minutes: 120,
+      in_place: null,
+      out_place: null,
+      remote: true,
+      note: 'Landing gear FEA',
+      not_counted_at: '2026-10-15T08:00:00Z',
+      not_counted_by: 'Lena Lead',
+      not_counted_reason: 'Logged twice',
+      may_change: false,
+    });
+    mockFetch({
+      ...base,
+      '/api/v1/account/attendance': {
+        body: {
+          owners: [owner({ remote: true, stays: [marked] })],
+          remote_from: '2026-10-06',
+          today: '2026-10-20',
+        },
+      },
+    });
+    renderPage(<Attendance />);
+
+    const table = await screen.findByRole('table', { name: 'Your time with Rocket Team' });
+    expect(table).toHaveTextContent('Not counted');
+    expect(table).toHaveTextContent('by Lena Lead: Logged twice');
+    expect(within(table).queryByRole('button', { name: 'Change' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Rocket Team' })).toHaveTextContent('0 min');
   });
 });

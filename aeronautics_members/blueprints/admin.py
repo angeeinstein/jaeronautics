@@ -289,6 +289,15 @@ def admin_legal_editor(record_id):
     return app_shell()
 
 
+@admin_bp.route("/admin/legal/version.md", methods=["GET"])
+@login_required
+@requires(Permission.LEGAL_TEXTS)
+def admin_legal_version_markdown():
+    """A version in force as its German Markdown file (the *Markdown* link under *In force*):
+    to change it elsewhere and upload it as a new draft. Found as one waiting is."""
+    return admin_legal_waiting_markdown()
+
+
 @admin_bp.route("/admin/legal/waiting.md", methods=["GET"])
 @login_required
 @requires(Permission.LEGAL_TEXTS)

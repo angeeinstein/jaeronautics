@@ -21,6 +21,13 @@ from 11:15).
   stays, and whenever that person checks in or out) and counts nothing until
   somebody of the team sets when it ended (:func:`change_stay`). Corrections keep who made them; each is in
   the audit log with what it was before.
+- **Remote work** (docs/attendance-plan.md, "Remote work"): where an owner allows it
+  (:func:`remote_enabled`), a member adds work done away from the readers themselves -- the day, from, to,
+  and what they did -- as a stay marked ``remote`` (:func:`add_remote`). It counts at once. Only for today
+  and the :data:`REMOTE_DAYS_BACK` days before, within one attendance day, never overlapping any of their
+  own time, whoever it is for. They change or delete their own while it is in those days and not marked;
+  whoever runs the owner's attendance marks one as not counting, with a reason (:func:`mark_not_counted`),
+  or deletes it.
 """
 
 from datetime import datetime, time, timedelta, timezone
@@ -37,6 +44,11 @@ from .settings import get_settings_map, set_setting_value
 SLUG = "attendance"
 #: The association's switch; a team's is ``Team.attendance_enabled``.
 SETTING = "attendance_enabled"
+#: The association's switch for remote work; a team's is ``Team.remote_work_enabled``.
+REMOTE_SETTING = "attendance_remote_enabled"
+#: Remote work is added for today or one of the days before it, at most this many.
+REMOTE_DAYS_BACK = 14
+NOTE_MAX = 200
 
 ATTENDANCE_OFF = "attendance_off"
 NOT_A_MEMBER = "not_a_member"
@@ -89,10 +101,17 @@ def day_of(moment):
 
 
 def minutes(stay):
-    """What a stay counts, in full minutes; None while open or not checked out."""
+    """How long a stay was, in full minutes; None while open or not checked out."""
     if stay.ended_at is None:
         return None
     return max(0, int((_minute(stay.ended_at) - _minute(stay.started_at)).total_seconds() // 60))
+
+
+def counted(stay):
+    """What a stay counts: its minutes, or none once marked as not counting."""
+    if stay.not_counted_at is not None:
+        return 0
+    return minutes(stay) or 0
 
 
 def state(stay):
@@ -128,6 +147,29 @@ def set_enabled(actor, owner, on):
                     metadata={"team_id": owner.id if owner is not None else None, "enabled": bool(on)})
 
 
+def remote_enabled(owner):
+    """Whether members add remote work for ``owner``: only while its attendance is on too."""
+    if not enabled(owner):
+        return False
+    if owner is not None:
+        return bool(owner.remote_work_enabled)
+    return get_settings_map([REMOTE_SETTING]).get(REMOTE_SETTING) == "True"
+
+
+def set_remote_enabled(actor, owner, on):
+    """Remote work on or off for an owner. Entries already added stay either way."""
+    current = bool(owner.remote_work_enabled) if owner is not None else (
+        get_settings_map([REMOTE_SETTING]).get(REMOTE_SETTING) == "True")
+    if current == bool(on):
+        return
+    if owner is not None:
+        owner.remote_work_enabled = bool(on)
+    else:
+        set_setting_value(REMOTE_SETTING, "True" if on else None)
+    log_audit_event("attendance", "attendance_remote_switched", actor_user=actor,
+                    metadata={"team_id": owner.id if owner is not None else None, "enabled": bool(on)})
+
+
 def may_check_in(user, owner):
     """Whether ``user`` may check in at ``owner``'s readers: a team's active
     members at a team's, any active member at the association's. The one rule;
@@ -139,8 +181,12 @@ def may_check_in(user, owner):
     return owner is None or active_team_membership(user, owner) is not None
 
 
+def _owner_condition(owner):
+    return AttendanceStay.team_id.is_(None) if owner is None else AttendanceStay.team_id == owner.id
+
+
 def _owner_filter(query, owner):
-    return query.where(AttendanceStay.team_id.is_(None) if owner is None else AttendanceStay.team_id == owner.id)
+    return query.where(_owner_condition(owner))
 
 
 # --- Checking in and out -----------------------------------------------------------------
@@ -218,7 +264,10 @@ def check_out(device, user, now=None):
 
 
 def _snapshot(stay):
-    return {"started_at": stay.started_at, "ended_at": stay.ended_at, "closed_at": stay.closed_at}
+    snapshot = {"started_at": stay.started_at, "ended_at": stay.ended_at, "closed_at": stay.closed_at}
+    if stay.remote:
+        snapshot.update(remote=True, note=stay.note, not_counted_reason=stay.not_counted_reason)
+    return snapshot
 
 
 def _checked_times(stay_user, owner, started, ended, *, now, other_than=None):
@@ -233,13 +282,21 @@ def _checked_times(stay_user, owner, started, ended, *, now, other_than=None):
         raise ValidationError(message, code="attendance_times_future", details={"fields": {"ended_at": message}})
     query = db.select(AttendanceStay).where(
         AttendanceStay.user_id == stay_user.id,
+        # Remote work marked as not counting is no time of theirs: a stay may be entered over it.
+        AttendanceStay.not_counted_at.is_(None),
         AttendanceStay.started_at < _stored(ended),
         db.or_(AttendanceStay.ended_at.is_(None), AttendanceStay.ended_at > _stored(started)),
         db.or_(AttendanceStay.ended_at.is_not(None), AttendanceStay.closed_at.is_(None)),
     )
     if other_than is not None:
         query = query.where(AttendanceStay.id != other_than.id)
-    clash = db.session.execute(locked(_owner_filter(query, owner))).scalars().first()
+    # Stays for different owners may overlap (time at the readers counts for each team it was
+    # for); remote work counts for one owner only, so nothing else may lie over it.
+    query = query.where(db.or_(_owner_condition(owner), AttendanceStay.remote.is_(True)))
+    clash = db.session.execute(locked(query)).scalars().first()
+    if clash is not None and clash.remote:
+        message = f"It overlaps {_described(clash, owner)} on {local(clash.started_at):%d.%m.%Y}."
+        raise ValidationError(message, code="attendance_overlap", details={"fields": {"started_at": message}})
     if clash is not None:
         message = f"It overlaps the stay from {local(clash.started_at):%d.%m.%Y %H:%M}."
         raise ValidationError(message, code="attendance_overlap", details={"fields": {"started_at": message}})
@@ -263,8 +320,12 @@ def add_stay(actor, owner, user, *, started_at, ended_at, now=None):
 
 def change_stay(actor, stay, *, started_at, ended_at, now=None):
     """When a stay started and ended, set by hand -- a check-out forgotten, a
-    wrong tap. A stay closed as not checked out then counts again."""
+    wrong tap. A stay closed as not checked out then counts again. Remote work is
+    the member's own word: a lead marks it as not counted or deletes it, never changes it."""
     now = now or get_now_utc()
+    if stay.remote:
+        raise ValidationError("Remote work is changed by the member. Mark it as not counted, or delete it.",
+                              code="attendance_remote_not_changed")
     _one_at_a_time(stay.user)
     before = _snapshot(stay)
     stay.started_at, stay.ended_at = _checked_times(stay.user, stay.team, started_at, ended_at, now=now,
@@ -288,6 +349,202 @@ def stay_of(owner, stay_id):
     if stay is None or stay.team_id != (owner.id if owner is not None else None):
         raise NotFoundError("No such stay.", code="attendance_stay_unknown")
     return stay
+
+
+def _fresh(stay):
+    """``stay`` read again as committed now and locked, after ``_one_at_a_time`` of its person: a
+    member's change and a lead's mark of the same entry wait for each other, and the second sees
+    what the first did. NotFoundError when it was deleted meanwhile."""
+    found = db.session.execute(
+        locked(db.select(AttendanceStay).where(AttendanceStay.id == stay.id))
+        .execution_options(populate_existing=True)).scalar_one_or_none()
+    if found is None:
+        raise NotFoundError("No such entry.", code="attendance_stay_unknown")
+    return found
+
+
+def mark_not_counted(actor, stay, reason, now=None):
+    """A remote entry marked as not counting, with why: the member sees it, and who marked it."""
+    _one_at_a_time(stay.user)
+    stay = _fresh(stay)
+    if not stay.remote:
+        raise ValidationError("Only remote work is marked; correct or delete a stay at a reader.",
+                              code="attendance_not_remote")
+    reason = (reason or "").strip()
+    if not reason:
+        message = "Say why it does not count."
+        raise ValidationError(message, code="attendance_reason_missing", details={"fields": {"reason": message}})
+    if len(reason) > NOTE_MAX:
+        message = f"At most {NOTE_MAX} characters."
+        raise ValidationError(message, code="attendance_reason_long", details={"fields": {"reason": message}})
+    before = _snapshot(stay)
+    stay.not_counted_at = _stored(now or get_now_utc())
+    stay.not_counted_by_user_id = actor.id if actor is not None else None
+    stay.not_counted_reason = reason
+    log_audit_event("attendance", "attendance_marked_not_counted", actor_user=actor, target_user=stay.user,
+                    before=before, after=_snapshot(stay), metadata={"stay_id": stay.id, "team_id": stay.team_id})
+    return stay
+
+
+def count_again(actor, stay):
+    """A mark taken back: the entry counts again -- unless its time has been entered again
+    meanwhile (the member added the right one after the mark), which would count it twice."""
+    _one_at_a_time(stay.user)
+    stay = _fresh(stay)
+    if stay.not_counted_at is None:
+        return stay
+    clash = _overlapping(stay.user, _aware(stay.started_at), _aware(stay.ended_at), other_than=stay)
+    if clash is not None:
+        raise ValidationError(
+            f"It overlaps {_described(clash, stay.team)}: delete or mark that one first, so the time is not "
+            "counted twice.", code="attendance_overlap")
+    before = _snapshot(stay)
+    stay.not_counted_at = stay.not_counted_by_user_id = stay.not_counted_reason = None
+    log_audit_event("attendance", "attendance_counted_again", actor_user=actor, target_user=stay.user,
+                    before=before, after=_snapshot(stay), metadata={"stay_id": stay.id, "team_id": stay.team_id})
+    return stay
+
+
+# --- Remote work, added by the member ------------------------------------------------------------
+
+
+def remote_days(now=None):
+    """The attendance days remote work may be added for: (the first, today)."""
+    today = day_of(now or get_now_utc())
+    return today - timedelta(days=REMOTE_DAYS_BACK), today
+
+
+def may_add_remote(user, owner):
+    return remote_enabled(owner) and may_check_in(user, owner)
+
+
+def _field_error(field, message, code):
+    raise ValidationError(message, code=code, details={"fields": {field: message}})
+
+
+def _remote_times(day, start, end):
+    """From and to on an attendance day, as stored: a time before 03:15 is the night after it,
+    and 03:15 itself may end the day."""
+    if day is None or start is None or end is None:
+        raise ValidationError("Give the day, from and to.", code="attendance_times_missing")
+    started = _wall_time(day + timedelta(days=1) if start < DAY_DIVIDE else day, start, "start")
+    ended = _wall_time(day + timedelta(days=1) if end <= DAY_DIVIDE else day, end, "end")
+    # Compared as instants, not as clock times: the night the clocks change, they differ.
+    if ended.astimezone(timezone.utc) <= started.astimezone(timezone.utc):
+        _field_error("end", "It ends before it starts. Work past midnight can end up to 03:15.",
+                     "attendance_times_order")
+    return started, ended
+
+
+def _wall_time(day, clock, field):
+    """A local clock time on a day, refused when that night skips it (the spring change: 02:00 to
+    03:00 does not exist in Vienna); one shown twice in autumn is its first."""
+    moment = datetime.combine(day, clock, tzinfo=MEMBERSHIP_TIMEZONE)
+    there = moment.astimezone(timezone.utc).astimezone(MEMBERSHIP_TIMEZONE)
+    if (there.date(), there.time().replace(tzinfo=None)) != (day, clock):
+        _field_error(field, f"{clock:%H:%M} does not exist that night: the clocks go forward.",
+                     "attendance_time_skipped")
+    return moment
+
+
+def _checked_remote(user, owner, *, day, start, end, note, now, other_than=None):
+    first, today = remote_days(now)
+    if day is None or not first <= day <= today:
+        _field_error("day", f"Today or one of the {REMOTE_DAYS_BACK} days before.", "attendance_remote_day")
+    started, ended = _remote_times(day, start, end)
+    if ended > _aware(now) + timedelta(minutes=1):
+        _field_error("end", "That is still to come. Add it once it is done.", "attendance_times_future")
+    note = (note or "").strip()
+    if not note:
+        _field_error("note", "Add a few words on what you did.", "attendance_note_missing")
+    if len(note) > NOTE_MAX:
+        _field_error("note", f"At most {NOTE_MAX} characters.", "attendance_note_long")
+    clash = _overlapping(user, started, ended, other_than=other_than)
+    if clash is not None:
+        _field_error("start", f"It overlaps {_described(clash, owner, 'your')}.", "attendance_overlap")
+    return _stored(started), _stored(ended), note
+
+
+def _overlapping(user, started, ended, *, other_than=None):
+    """The person's first time that counts between ``started`` and ``ended``, whoever it is for
+    (one person is in one place at a time) -- not a stay closed as not checked out, nor an entry
+    marked as not counting. Read as committed (after ``_one_at_a_time``)."""
+    query = db.select(AttendanceStay).where(
+        AttendanceStay.user_id == user.id,
+        AttendanceStay.not_counted_at.is_(None),
+        AttendanceStay.started_at < _stored(ended),
+        db.or_(AttendanceStay.ended_at.is_(None), AttendanceStay.ended_at > _stored(started)),
+        db.or_(AttendanceStay.ended_at.is_not(None), AttendanceStay.closed_at.is_(None)),
+    )
+    if other_than is not None:
+        query = query.where(AttendanceStay.id != other_than.id)
+    return db.session.execute(locked(query.order_by(AttendanceStay.started_at))).scalars().first()
+
+
+def _described(clash, owner, whose_word="the"):
+    """"your remote work for Rocket, 18:00 to 20:30": what a new or restored entry runs into."""
+    what = f"{whose_word} remote work" if clash.remote else (
+        f"{whose_word} time at {place_of(clash.in_device)}" if clash.in_device is not None else f"{whose_word} stay")
+    whose = "" if clash.team_id == (owner.id if owner is not None else None) else f" for {owner_name(clash.team)}"
+    until = f"{local(clash.ended_at):%H:%M}" if clash.ended_at is not None else "now"
+    return f"{what}{whose}, {local(clash.started_at):%H:%M} to {until}"
+
+
+def add_remote(user, owner, *, day, start, end, note, now=None):
+    """Remote work added by the member for ``owner``: it counts at once."""
+    now = now or get_now_utc()
+    if not may_add_remote(user, owner):
+        raise ValidationError(f"Remote work is not added for {owner_name(owner)}.", code="attendance_remote_off")
+    _one_at_a_time(user)
+    started, ended, note = _checked_remote(user, owner, day=day, start=start, end=end, note=note, now=now)
+    stay = AttendanceStay(user_id=user.id, team_id=owner.id if owner is not None else None, remote=True,
+                          started_at=started, ended_at=ended, note=note)
+    db.session.add(stay)
+    db.session.flush()
+    log_audit_event("attendance", "attendance_remote_added", actor_user=user, target_user=user,
+                    after=_snapshot(stay), metadata={"stay_id": stay.id, "team_id": stay.team_id})
+    return stay
+
+
+def may_change_own(user, stay, now=None):
+    """Whether the member may still change or delete their own remote entry: theirs, remote, not
+    marked, its day still among the days remote work is added for, and remote work still on there."""
+    if user is None or stay.user_id != user.id or not stay.remote or stay.not_counted_at is not None:
+        return False
+    first, _today = remote_days(now)
+    return day_of(stay.started_at) >= first and may_add_remote(user, stay.team)
+
+
+def own_remote(user, stay_id, now=None):
+    """The member's own remote entry, while they may still change it: read and checked under their
+    lock, so a lead's mark committed meanwhile is seen (the change and delete after it keep the lock)."""
+    _one_at_a_time(user)
+    stay = db.session.execute(
+        locked(db.select(AttendanceStay).where(AttendanceStay.id == stay_id))
+        .execution_options(populate_existing=True)).scalar_one_or_none()
+    if stay is None or stay.user_id != user.id or not stay.remote:
+        raise NotFoundError("No such entry.", code="attendance_stay_unknown")
+    if not may_change_own(user, stay, now):
+        raise ValidationError("This entry can no longer be changed.", code="attendance_remote_locked")
+    return stay
+
+
+def change_remote(user, stay, *, day, start, end, note, now=None):
+    now = now or get_now_utc()
+    _one_at_a_time(user)
+    before = _snapshot(stay)
+    stay.started_at, stay.ended_at, stay.note = _checked_remote(
+        user, stay.team, day=day, start=start, end=end, note=note, now=now, other_than=stay)
+    log_audit_event("attendance", "attendance_remote_changed", actor_user=user, target_user=user,
+                    before=before, after=_snapshot(stay), metadata={"stay_id": stay.id, "team_id": stay.team_id})
+    return stay
+
+
+def delete_remote(user, stay):
+    _one_at_a_time(user)
+    log_audit_event("attendance", "attendance_remote_deleted", actor_user=user, target_user=user,
+                    before=_snapshot(stay), metadata={"stay_id": stay.id, "team_id": stay.team_id})
+    db.session.delete(stay)
 
 
 # --- What is shown -------------------------------------------------------------------------
@@ -335,15 +592,23 @@ def eligible(owner):
 
 
 def hours(owner, start, end):
-    """Per person between two attendance days: minutes counted, stays, how many
-    not checked out -- every member of a team, with a stay or not, and anyone
-    else with a stay in that time (a former member). Sorted by name."""
-    rows = {user.id: {"user": user, "minutes": 0, "stays": 0, "not_checked_out": 0} for user in members_of(owner)}
+    """Per person between two attendance days: minutes counted -- all of them, and of those the
+    remote work's -- stays, how many not checked out, how many remote entries marked as not
+    counting: every member of a team, with a stay or not, and anyone else with a stay in that time
+    (a former member). Sorted by name."""
+    def blank(user):
+        return {"user": user, "minutes": 0, "remote_minutes": 0, "stays": 0, "not_checked_out": 0,
+                "not_counted": 0}
+
+    rows = {user.id: blank(user) for user in members_of(owner)}
     for stay in stays(owner, start=start, end=end):
-        row = rows.setdefault(stay.user_id, {"user": stay.user, "minutes": 0, "stays": 0, "not_checked_out": 0})
+        row = rows.setdefault(stay.user_id, blank(stay.user))
         row["stays"] += 1
-        row["minutes"] += minutes(stay) or 0
+        row["minutes"] += counted(stay)
+        if stay.remote:
+            row["remote_minutes"] += counted(stay)
         row["not_checked_out"] += state(stay) == NOT_CHECKED_OUT
+        row["not_counted"] += stay.not_counted_at is not None
     return sorted(rows.values(), key=lambda row: person_name(row["user"]).lower())
 
 
@@ -424,16 +689,22 @@ def export_for(user):
     return [
         {"for": owner_name(stay.team), "checked_in": stay.started_at, "checked_out": stay.ended_at,
          "minutes": minutes(stay), "not_checked_out": state(stay) == NOT_CHECKED_OUT,
-         "corrected_at": stay.corrected_at}
+         "corrected_at": stay.corrected_at,
+         **({"remote": True, "what": stay.note, "not_counted_at": stay.not_counted_at,
+             "not_counted_reason": stay.not_counted_reason} if stay.remote else {})}
         for stay in rows
     ]
 
 
 def forget_for_erasure(user):
-    """An erased account's stays deleted; corrections they made keep no name. Returns how many."""
+    """An erased account's stays deleted; corrections and marks they made keep no name. Returns how many."""
     db.session.execute(
         db.update(AttendanceStay).where(AttendanceStay.corrected_by_user_id == user.id)
         .values(corrected_by_user_id=None)
+    )
+    db.session.execute(
+        db.update(AttendanceStay).where(AttendanceStay.not_counted_by_user_id == user.id)
+        .values(not_counted_by_user_id=None)
     )
     return db.session.query(AttendanceStay).filter(AttendanceStay.user_id == user.id).delete(
         synchronize_session=False)

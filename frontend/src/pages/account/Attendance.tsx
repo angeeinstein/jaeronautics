@@ -7,16 +7,25 @@
  * readers. Shown in the side menu while attendance is on for somebody; once
  * it is not, still reached from *Privacy and data* while they have stays.
  *
+ * Where a team (or the association) allows it, the member adds remote work in
+ * its panel (*Add remote work*), and changes or deletes their own while it is
+ * in the last days and nobody has marked it as not counting. The month's time
+ * says how much of it was remote, quietly (docs/attendance-plan.md, "Remote
+ * work").
+ *
  * Data: GET /api/v1/account/attendance (aeronautics_members/api/attendance.py).
  */
 import { Button, Group, Select, Stack, Text } from '@mantine/core';
-import { IconClockHour4, IconMessage } from '@tabler/icons-react';
-import { useQuery } from '@tanstack/react-query';
+import { IconClockHour4, IconMessage, IconPencil, IconPlus } from '@tabler/icons-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { api, call, type Schemas } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
-import { type Stay, StayTable, totalMinutes } from '../../components/attendance/StayTable';
+import { ACCOUNT_ATTENDANCE_KEY, RemoteWorkDialog } from '../../components/attendance/RemoteWorkForm';
+import { remoteMinutes, type Stay, StayTable, totalMinutes } from '../../components/attendance/StayTable';
+import { ConfirmButton } from '../../components/ConfirmButton';
+import { notifyDone, notifyFailed } from '../../lib/notify';
 import { PageHeader } from '../../components/PageHeader';
 import { Panel } from '../../components/Panel';
 import { EmptyState, ErrorState, LoadingState } from '../../components/States';
@@ -26,7 +35,7 @@ import { MessageLeads } from '../teams/MessageLeads';
 
 type Owner = Schemas['OwnerStaysOut'];
 
-const attendanceKey = ['account', 'attendance'] as const;
+const attendanceKey = ACCOUNT_ATTENDANCE_KEY;
 
 const monthName = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
@@ -78,14 +87,96 @@ function AskForCorrection({ owner, stay }: { owner: Owner; stay: Stay }) {
   );
 }
 
-function OwnerPanel({ owner }: { owner: Owner }) {
+/** Change or delete one's own remote work, while it may be. */
+function OwnRemote({ stay, onChange }: { stay: Stay; onChange: (stay: Stay) => void }) {
+  const client = useQueryClient();
+  const remove = useMutation({
+    mutationFn: () =>
+      call(
+        api.DELETE('/api/v1/account/attendance/remote/{stay_id}', { params: { path: { stay_id: stay.id } } }),
+      ),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: attendanceKey });
+      notifyDone('Deleted.');
+    },
+    onError: notifyFailed,
+  });
+  return (
+    <>
+      <Button
+        size="xs"
+        variant="default"
+        leftSection={<IconPencil size={14} aria-hidden />}
+        onClick={() => {
+          onChange(stay);
+        }}
+      >
+        Change
+      </Button>
+      <ConfirmButton
+        size="xs"
+        confirmLabel="Yes, delete"
+        loading={remove.isPending}
+        onConfirm={() => {
+          remove.mutate();
+        }}
+      >
+        Delete
+      </ConfirmButton>
+    </>
+  );
+}
+
+/** The month's time, and how much of it was remote -- quietly, where remote work is added or was. */
+function MonthTime({ stays, label, remote }: { stays: Stay[]; label: string; remote: boolean }) {
+  const away = remoteMinutes(stays);
+  const all = totalMinutes(stays);
+  return (
+    <Stack gap={0} align="flex-end">
+      <Text className="ja-figures" fw={600} size="lg">
+        {formatMinutes(all)}
+      </Text>
+      <Text size="xs" c="dimmed">
+        {label}
+      </Text>
+      {remote || away ? (
+        <Text size="xs" c="dimmed">
+          {formatMinutes(all - away)} at the readers · {formatMinutes(away)} remote
+        </Text>
+      ) : null}
+    </Stack>
+  );
+}
+
+function OwnerPanel({ owner, remoteFrom, today }: { owner: Owner; remoteFrom: string; today: string }) {
   const months = [...new Set([thisMonth(), ...owner.stays.map(monthOf)])].sort().reverse();
   const [month, setMonth] = useState(
     months.find((item) => owner.stays.some((s) => monthOf(s) === item)) ?? thisMonth(),
   );
+  const [adding, setAdding] = useState(false);
+  const [changing, setChanging] = useState<Stay | null>(null);
   const shown = owner.stays.filter((stay) => monthOf(stay) === month);
+  const remoteHere = owner.remote === true || owner.stays.some((stay) => stay.remote);
   return (
-    <Panel icon={IconClockHour4} title={owner.name} flush>
+    <Panel
+      icon={IconClockHour4}
+      title={owner.name}
+      flush
+      actions={
+        owner.remote ? (
+          <Button
+            size="xs"
+            variant="default"
+            leftSection={<IconPlus size={14} aria-hidden />}
+            onClick={() => {
+              setAdding(true);
+            }}
+          >
+            Add remote work
+          </Button>
+        ) : undefined
+      }
+    >
       <Stack gap="sm" p="md" pb={shown.length ? 0 : 'md'}>
         {owner.current ? null : (
           <Text size="sm" c="dimmed">
@@ -104,15 +195,8 @@ function OwnerPanel({ owner }: { owner: Owner }) {
               if (value) setMonth(value);
             }}
           />
-          <Group gap="lg">
-            <Stack gap={0} align="flex-end">
-              <Text className="ja-figures" fw={600} size="lg">
-                {formatMinutes(totalMinutes(shown))}
-              </Text>
-              <Text size="xs" c="dimmed">
-                {monthLabel(month)}
-              </Text>
-            </Stack>
+          <Group gap="lg" align="flex-start">
+            <MonthTime stays={shown} label={monthLabel(month)} remote={remoteHere} />
             <Stack gap={0} align="flex-end">
               <Text className="ja-figures" fw={600} size="lg">
                 {formatMinutes(totalMinutes(owner.stays))}
@@ -127,13 +211,30 @@ function OwnerPanel({ owner }: { owner: Owner }) {
       </Stack>
       {shown.length ? (
         <StayTable
+          key={month}
           stays={shown}
-          label={`Stays at ${owner.name}`}
+          label={`Your time with ${owner.name}`}
           actions={(stay) =>
-            stay.state === 'not_checked_out' ? <AskForCorrection owner={owner} stay={stay} /> : null
+            stay.state === 'not_checked_out' ? (
+              <AskForCorrection owner={owner} stay={stay} />
+            ) : stay.may_change ? (
+              <OwnRemote stay={stay} onChange={setChanging} />
+            ) : null
           }
         />
       ) : null}
+      <RemoteWorkDialog
+        opened={adding || changing !== null}
+        onClose={() => {
+          setAdding(false);
+          setChanging(null);
+        }}
+        owner={owner.owner}
+        ownerName={owner.name}
+        remoteFrom={remoteFrom}
+        today={today}
+        stay={changing ?? undefined}
+      />
     </Panel>
   );
 }
@@ -145,11 +246,18 @@ export function Attendance() {
   });
   // A check-in or check-out at a reader shows without reloading.
   useLiveRefresh(attendanceKey, EVERY_30_SECONDS);
+  const remote = attendance.data?.owners.some(
+    (owner) => owner.remote === true || owner.stays.some((s) => s.remote),
+  );
   return (
     <>
       <PageHeader
         title="Attendance"
-        description="Your time at the readers, counted in full minutes."
+        description={
+          remote
+            ? 'Your time at the readers and the remote work you added, counted in full minutes.'
+            : 'Your time at the readers, counted in full minutes.'
+        }
         crumbs={[{ label: 'My Account', to: '/account' }, { label: 'Attendance' }]}
       />
       {attendance.isPending ? (
@@ -162,10 +270,16 @@ export function Attendance() {
           {[...attendance.data.owners]
             .sort((a, b) => Number(b.current) - Number(a.current))
             .map((owner) => (
-              <OwnerPanel key={owner.owner} owner={owner} />
+              <OwnerPanel
+                key={owner.owner}
+                owner={owner}
+                remoteFrom={attendance.data.remote_from}
+                today={attendance.data.today}
+              />
             ))}
           <Text size="sm" c="dimmed">
             A stay not checked out counts nothing until it is corrected.
+            {remote ? ' Remote work counts right away; the team can mark an entry as not counted.' : ''}
           </Text>
         </Stack>
       ) : (

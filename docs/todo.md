@@ -41,12 +41,22 @@ good); then permissions per person (`docs/permissions-plan.md`, PR #86); and
 the batch of 2026-11-20 (`claude/email-permissions`: emails follow the
 permission whose page shows the same; the updates page and the night's update
 when the followed branch is gone; DeepL's glossary on a Free account and
-Azure's spaces around the glossary's words).
+Azure's spaces around the glossary's words); then a member's team permissions
+in their data export (PR #88); and the batch of 2026-11-22
+(`claude/remote-work`: members add remote work in attendance,
+`docs/attendance-plan.md`, "Remote work"; the attendance list as blocks on a
+phone).
 
 ## Open
 
 ### Privacy policy and membership terms drafts: brought up to date for the board
 
+- **Privacy policy published** (2026-11-20, in force that day, the members
+  emailed), with the permission edits of PR #86/#87. What is left here: the
+  membership terms. The next version, with remote work in attendance (§ 20),
+  is a draft in `legal/privacy-policy/de/2026-11-22.md` (the version in force
+  and one paragraph): published once remote work is switched on on the live
+  server -- perhaps with the membership terms, one email for both.
 - **Added:** 2026-11-18
 - **Built** (`claude/legal-drafts-review`, merged as #83); what is left is
   publishing. The drafts were checked against the portal and are drafts in
@@ -223,7 +233,9 @@ Azure's spaces around the glossary's words).
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
 - **Added:** 2026-10-08
-- **Where:** `legal/privacy-policy/{de,en}/2026-10-08.md`, `status: "draft"`.
+- **Where:** `legal/membership-terms/de/2026-10-08.md`, `status: "draft"`.
+  The privacy policy's draft is done: its newer version was published on
+  2026-11-20, and the file was deleted (2026-11-22).
 - **Why:** the portal shows profile pictures since that batch (to the person,
   their teams' members and leads, and admins; the old forum's picture for
   reconnected members); the policy said so only for the forum. The draft
@@ -270,7 +282,7 @@ Azure's spaces around the glossary's words).
 - **Once approved:** since legal texts are kept in the portal
   (`docs/legal-texts-in-portal-plan.md`), upload each German file with its
   English one on Admin › Legal texts and publish it there, with the approval;
-  then delete the four draft files from `legal/` in the next batch.
+  then delete the remaining draft file from `legal/` in the next batch.
 
 ## Ideas for later (not scheduled)
 

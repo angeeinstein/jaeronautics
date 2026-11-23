@@ -396,6 +396,11 @@ function InForce({ data }: { data: LegalOut }) {
                   }}
                 />
               ) : null}
+              {text.markdown_url ? (
+                <Anchor href={text.markdown_url} download size="sm">
+                  Markdown
+                </Anchor>
+              ) : null}
               <PdfLink href={text.pdf_url}>PDF</PdfLink>
             </Group>
           </li>

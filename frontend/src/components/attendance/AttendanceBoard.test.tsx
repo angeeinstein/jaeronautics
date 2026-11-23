@@ -139,6 +139,73 @@ describe('running attendance', () => {
   });
 });
 
+describe('remote work, for whoever runs attendance', () => {
+  const remote: Schemas['StayOut'] = {
+    id: 6,
+    started_at: '2026-10-14T16:00:00Z',
+    ended_at: '2026-10-14T18:30:00Z',
+    minutes: 150,
+    state: 'done',
+    in_place: null,
+    out_place: null,
+    corrected_by: null,
+    corrected_at: null,
+    remote: true,
+    note: 'Wing rib CAD',
+  };
+
+  it('the switch, how much was remote, and an entry marked as not counted with a reason', async () => {
+    const { calls } = mockFetch({
+      ...base,
+      '/api/v1/admin/attendance': {
+        body: overview({
+          remote_enabled: true,
+          rows: [
+            {
+              user_id: 7,
+              name: 'Anna Active',
+              minutes: 205,
+              remote_minutes: 150,
+              stays: 3,
+              not_checked_out: 0,
+            },
+          ],
+        }),
+      },
+      '/api/v1/admin/attendance/people/7': { body: { user_id: 7, name: 'Anna Active', stays: [remote] } },
+      'PUT /api/v1/admin/attendance/stays/6/not-counted': {
+        body: { ...remote, not_counted_at: '2026-10-15T08:00:00Z', not_counted_reason: 'Logged twice' },
+      },
+    });
+    renderPage(<Attendance />);
+
+    expect(await screen.findByRole('switch', { name: 'Members may add remote work' })).toBeChecked();
+    const hours = screen.getByRole('table', { name: 'Hours per person' });
+    expect(within(hours).getByRole('row', { name: /Anna Active/ })).toHaveTextContent('2 h 30 min');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Anna Active' }));
+    const person = await screen.findByRole('dialog', { name: 'Anna Active' });
+    expect(await within(person).findByText('Wing rib CAD')).toBeInTheDocument();
+    // Remote work is not changed by the leads, only marked or deleted.
+    expect(within(person).queryByRole('button', { name: 'Change' })).not.toBeInTheDocument();
+    await userEvent.click(within(person).getByRole('button', { name: 'Not counted' }));
+    const form = await screen.findByRole('dialog', { name: 'Remote work of Anna Active' });
+    const mark = within(form).getByRole('button', { name: 'Mark as not counted' });
+    expect(mark).toBeDisabled();
+    await userEvent.type(
+      within(form).getByRole('textbox', { name: /Why does it not count/ }),
+      'Logged twice',
+    );
+    await userEvent.click(mark);
+
+    await waitFor(() => {
+      expect(calls.some((call) => call.method === 'PUT')).toBe(true);
+    });
+    const sent = calls.filter((call) => call.method === 'PUT').at(-1);
+    expect(await sent?.clone().json()).toEqual({ reason: 'Logged twice' });
+  });
+});
+
 describe('periods', () => {
   it('this month and the last up to their ends; semesters from October and from March', () => {
     expect(periodOf('month', '2026-10-15')).toEqual({ start: '2026-10-01', end: '2026-10-15' });
