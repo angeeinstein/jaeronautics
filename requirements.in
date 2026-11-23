@@ -10,8 +10,8 @@ PyMySQL==1.2.4
 Flask-Babel==4.0.0
 stripe==13.2.1
 Flask-WTF==1.3.0
-email-validator==2.3.0
-gunicorn==27.0.0
+email-validator==2.4.0
+gunicorn==27.0.1
 Flask-Login==0.6.3
 Flask-Limiter==4.1.1
 # The JSON API's requests and answers (aeronautics_members/api/), and its OpenAPI description.
@@ -30,4 +30,4 @@ PyYAML==6.0.3
 weasyprint==70.0
 # The legal texts' English by a language model at Anthropic (services/translation.py) --
 # the one translation service with a package of its own: its official SDK.
-anthropic==2.6.0
+anthropic==2.8.0
