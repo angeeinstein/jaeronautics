@@ -57,6 +57,27 @@ phone).
   is a draft in `legal/privacy-policy/de/2026-11-22.md` (the version in force
   and one paragraph): published once remote work is switched on on the live
   server -- perhaps with the membership terms, one email for both.
+- **New (2026-11-24): the membership terms are rewritten elsewhere.** The
+  maintainer drafts new statutes and rules of procedure with the board in a
+  separate chat; the membership terms are formulated there too, from
+  `docs/membership-terms-input.md`: a draft that says how the portal
+  actually works, checked against the code on 2026-11-24 (part A, German),
+  and what is a setting, what is fixed and what is open (part B). "Almost
+  all things here in the portal have been decided after some thoughts went
+  into this" -- the portal's behaviour is the input; only what the board
+  does not like comes back here as a change to the portal. The finished
+  text replaces `legal/membership-terms/de/2026-10-08.md` (its date is just
+  the old draft's). Decided with it:
+  - Stripe's fees on team fees: **the teams pay** (the setting stays as it
+    is); the terms leave it open as a setting, so switching it does not
+    contradict them.
+  - The fee is right: **EUR 15 a calendar year**. Higher fees for some
+    categories (alumni, staff) may come; that would be a portal change.
+  - **Open:** giving a declined renewal payment the same 21 days' grace as
+    one still on its way (team fees already continue while Stripe retries).
+    The maintainer thinks it "could make sense"; not decided, not built.
+    Also the audit's M16 (team memberships end the night a renewal is
+    declined).
 - **Added:** 2026-11-18
 - **Built** (`claude/legal-drafts-review`, merged as #83); what is left is
   publishing. The drafts were checked against the portal and are drafts in
